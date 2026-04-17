@@ -1,0 +1,3161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spice Auction — Admin</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+  *{box-sizing:border-box;margin:0;padding:0}
+
+  :root{
+    --bg:#f0f2f5;--bg2:#fff;--text:#1a1a2e;--text2:#555;--text3:#999;
+    --border:#e2e5ea;--border2:#d0d4db;
+    --green:#0d7c5f;--green2:#0a6a50;--green-light:#e8faf3;
+    --red:#dc3545;--orange:#d4870b;--blue:#2563eb;--purple:#7c3aed;--pink:#ec4899;--teal:#0d9488;
+    --input-bg:#fff;--card-bg:#fff;
+    --stat-bg:linear-gradient(135deg,#0d7c5f,#0a9d6e);
+    --shadow:0 2px 8px rgba(0,0,0,.06);--shadow-lg:0 8px 24px rgba(0,0,0,.1);
+    --tab-bg:#eef0f3;--hover:#f5f7fa;--thead:#f0fdf4;--row-even:#fafbfc;--row-hover:#e8faf3;
+    --sidebar-bg:linear-gradient(180deg,#f8fafb 0%,#f0f4f8 100%);--sidebar-text:#64748b;--sidebar-active:#0d7c5f;
+    --sidebar-hover:rgba(13,124,95,.05);--sidebar-width:230px;
+    --radius:10px;--radius-lg:14px;
+    --input-h:34px;--input-r:7px;--input-border:#ccd0d5;--input-focus:#0d7c5f;
+  }
+  [data-theme="dark"]{
+    --bg:#0f1117;--bg2:#1a1b23;--text:#e8e8e6;--text2:#aaa;--text3:#666;
+    --border:#2a2b33;--border2:#3a3b44;
+    --green:#1dab82;--green2:#18946f;--green-light:#0d2818;
+    --input-bg:#22232b;--card-bg:#1a1b23;
+    --stat-bg:linear-gradient(135deg,#0d5c48,#094a3a);
+    --shadow:0 2px 8px rgba(0,0,0,.3);--shadow-lg:0 8px 24px rgba(0,0,0,.4);
+    --tab-bg:#22232b;--hover:#252630;--thead:#1a2e25;--row-even:#1e1f27;--row-hover:#1a2a20;
+    --sidebar-bg:linear-gradient(180deg,#111318 0%,#1a1b23 100%);
+    --input-border:#3a3b44;--input-focus:#1dab82;
+  }
+  body{font-family:'Plus Jakarta Sans',-apple-system,sans-serif;background:var(--bg);color:var(--text);letter-spacing:-.01em;overflow-x:hidden}
+  .hidden{display:none!important}
+
+  /* ═══ GLOBAL FORM ELEMENTS ═══ */
+  input[type="text"],input[type="password"],input[type="number"],input[type="date"],input[type="time"],input[type="file"],select,textarea{
+    height:var(--input-h);border-radius:var(--input-r);border:1px solid var(--input-border);
+    padding:0 10px;font-size:12px;font-family:inherit;background:var(--input-bg);color:var(--text);
+    outline:none;transition:border .2s,box-shadow .2s;width:100%;
+    box-shadow:inset 0 1px 2px rgba(0,0,0,.04);
+  }
+  input:focus,select:focus,textarea:focus{border-color:var(--input-focus);box-shadow:inset 0 1px 2px rgba(0,0,0,.04),0 0 0 2.5px rgba(13,124,95,.1)}
+  select{cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center;padding-right:26px}
+  input[type="file"]{padding:6px 10px;height:auto;font-size:11px;box-shadow:none}
+  label{font-size:10px;font-weight:700;color:var(--text2);letter-spacing:.5px;text-transform:uppercase;display:block;margin-bottom:4px;margin-top:10px}
+
+  /* ═══ SIDEBAR ═══ */
+  .admin-layout{display:flex;min-height:100vh;overflow-x:hidden}
+  .sidebar{width:var(--sidebar-width);background:var(--sidebar-bg);color:var(--sidebar-text);display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:40;transition:transform .25s cubic-bezier(.4,0,.2,1);border-right:1px solid var(--border)}
+  .sidebar-brand{padding:20px 20px 18px;font-size:16px;font-weight:800;color:var(--sidebar-active);letter-spacing:-.03em;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:10px}
+  .sidebar-brand img{height:32px;width:32px;border-radius:8px;object-fit:cover;box-shadow:0 2px 8px rgba(0,0,0,.1)}
+  .sidebar-nav{flex:1;padding:14px 10px;overflow-y:auto}
+  .nav-item{display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:10px;font-size:13px;font-weight:600;color:var(--sidebar-text);cursor:pointer;transition:all .15s;margin-bottom:3px;user-select:none}
+  .nav-item:hover{background:var(--sidebar-hover);color:var(--sidebar-active)}
+  .nav-item.active{background:linear-gradient(135deg,var(--green),var(--green2));color:#fff;box-shadow:0 2px 8px rgba(13,124,95,.2);border-radius:10px}
+  .nav-item .nav-icon{font-size:18px;width:26px;text-align:center;flex-shrink:0}
+  .nav-divider{height:1px;background:var(--border);margin:10px 14px}
+  .sidebar-footer{padding:10px;border-top:1px solid var(--border)}
+  .sidebar-footer .dm-toggle{color:var(--sidebar-text);font-size:12px;padding:9px 14px}
+  .sidebar-footer .dm-toggle:hover{color:var(--blue);background:rgba(37,99,235,.06)}
+  .sidebar-footer .logout-item{color:var(--sidebar-text);font-size:12px;padding:9px 14px}
+  .sidebar-footer .logout-item:hover{color:var(--red);background:rgba(220,53,69,.06)}
+
+  /* ═══ MAIN AREA ═══ */
+  .main-wrap{flex:1;margin-left:var(--sidebar-width);min-height:100vh;display:flex;flex-direction:column;overflow-x:hidden}
+  .topbar{display:flex;align-items:center;justify-content:space-between;padding:12px 28px;background:var(--bg2);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:30;box-shadow:0 1px 4px rgba(0,0,0,.03)}
+  .topbar h1{font-size:20px;font-weight:800;color:var(--text);letter-spacing:-.04em}
+  .topbar-right{display:flex;align-items:center;gap:14px}
+  .topbar-right .server-info{font-size:11px;color:var(--text3)}
+  .topbar-right .server-info code{background:var(--tab-bg);padding:3px 10px;border-radius:6px;font-size:11px;font-weight:600}
+  .topbar-right .user-badge-header{font-size:12px;background:linear-gradient(135deg,var(--green-light),#d1fae5);color:var(--green);padding:6px 14px;border-radius:20px;font-weight:700;border:1px solid rgba(13,124,95,.15)}
+  .topbar-right .btn-dm{background:var(--bg);border:1.5px solid var(--border);border-radius:8px;padding:6px 10px;font-size:15px;cursor:pointer;transition:all .15s;touch-action:manipulation}
+  .topbar-right .btn-dm:hover{background:var(--hover);border-color:var(--green)}
+  .content-area{flex:1;padding:24px 28px;overflow-y:auto;overflow-x:hidden}
+
+  /* ═══ LOGIN ═══ */
+  .login-wrap{display:flex;align-items:center;justify-content:center;min-height:100vh;background:linear-gradient(135deg,#e8faf3 0%,#f0f2f5 50%,#ede9fe 100%)}
+  .login-card{background:var(--card-bg);border-radius:20px;border:1px solid var(--border);padding:40px;width:100%;max-width:400px;box-shadow:var(--shadow-lg)}
+  .login-card .login-logo-img{height:64px;width:64px;object-fit:cover;display:block;margin:0 auto 14px;border-radius:14px;box-shadow:0 4px 12px rgba(13,124,95,.2);border:2px solid var(--green)}
+  .login-card h1{font-size:22px;font-weight:800;margin-bottom:4px;display:flex;align-items:center;justify-content:center;gap:8px;color:var(--green);letter-spacing:-.03em}
+  .login-card h1 .dot{width:10px;height:10px;border-radius:50%;background:var(--green);animation:pulse 2s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+  .login-card .subtitle{font-size:13px;color:var(--text3);margin-bottom:28px;text-align:center}
+  .login-card label{margin-top:18px}
+  .login-card input{height:44px;font-size:14px;border-radius:8px;box-shadow:inset 0 1px 3px rgba(0,0,0,.06)}
+  .login-card .btn-login{width:100%;height:44px;border-radius:8px;border:none;background:var(--stat-bg);color:#fff;font-size:15px;font-weight:700;cursor:pointer;margin-top:24px;font-family:inherit;box-shadow:0 4px 12px rgba(13,124,95,.3);transition:transform .1s}
+  .login-card .btn-login:active{transform:scale(.97)}
+  .login-card .error-msg{color:var(--red);font-size:13px;margin-top:12px;text-align:center;font-weight:600}
+
+  /* ═══ STATS ═══ */
+  .stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px}
+  .stat-card{background:var(--stat-bg);border-radius:var(--radius-lg);padding:16px;text-align:center;box-shadow:0 4px 12px rgba(13,124,95,.15)}
+  .stat-card .label{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:rgba(255,255,255,.65);font-weight:700}
+  .stat-card .value{font-size:20px;font-weight:800;margin-top:4px;color:#fff;letter-spacing:-.02em}
+  .stat-card .value.muted{font-size:15px;opacity:.85}
+
+  /* ═══ CONTROLS ═══ */
+  .controls{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+  .controls select{width:auto;min-width:160px}
+  .controls input{width:auto}
+
+  /* ═══ BUTTONS ═══ */
+  .btn-xlsx{background:linear-gradient(135deg,var(--green),var(--green2));color:#fff;border:none;font-family:inherit;font-size:11px;height:34px;border-radius:7px;padding:0 12px;cursor:pointer;font-weight:700;box-shadow:0 2px 6px rgba(13,124,95,.2);transition:transform .1s}
+  .btn-xlsx:hover{transform:translateY(-1px)}
+  .btn-dbf{background:linear-gradient(135deg,var(--orange),#b87308);color:#fff;border:none;font-family:inherit;font-size:12px;height:34px;border-radius:7px;padding:0 14px;cursor:pointer;font-weight:700;box-shadow:0 2px 6px rgba(239,108,0,.2);transition:transform .1s}
+  .btn-dbf:hover{transform:translateY(-1px)}
+  .btn-upload{background:linear-gradient(135deg,var(--blue),#1565c0);color:#fff;border:none;font-family:inherit;font-size:13px;height:34px;border-radius:7px;padding:0 16px;cursor:pointer;font-weight:700;box-shadow:0 2px 6px rgba(30,136,229,.2)}
+  .btn-upload:disabled{opacity:.4;box-shadow:none}
+  .btn-refresh{background:linear-gradient(135deg,#64748b,#475569);color:#fff;border:none;font-family:inherit;font-size:12px;height:34px;border-radius:7px;padding:0 14px;cursor:pointer;font-weight:700}
+  .btn-add-user{background:linear-gradient(135deg,var(--green),var(--green2));color:#fff;border:none;border-radius:8px;height:36px;padding:0 16px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;box-shadow:0 2px 6px rgba(13,124,95,.2);transition:all .15s}
+  .btn-add-user:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(13,124,95,.25)}
+  .btn-add-user:active{transform:scale(.97)}
+
+  /* ═══ LOT ACTION BAR ═══ */
+  .lot-actions-bar{display:flex;gap:6px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+  .ico-act{width:36px;height:36px;border-radius:8px;border:1.5px solid var(--border);background:var(--card-bg);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s;padding:0}
+  .ico-act:hover{transform:translateY(-1px);box-shadow:var(--shadow)}
+  .ico-act:active{transform:scale(.9)}
+  .ico-act svg{width:16px;height:16px}
+  .ico-act.pr{color:#2563eb;border-color:#2563eb}
+  .ico-act.pr:hover{background:#eff6ff}
+  .ico-act.dl{color:var(--red);border-color:var(--red);background:linear-gradient(135deg,var(--red),#b91c1c);color:#fff}
+  .ico-act.dl:hover{box-shadow:0 2px 8px rgba(220,53,69,.3)}
+  .ico-act.dl-out{color:var(--red);border-color:var(--red)}
+  .ico-act.dl-out:hover{background:#fef2f2}
+  .ico-act.rf{color:var(--green);border-color:var(--green)}
+  .ico-act.rf:hover{background:var(--green-light)}
+  .btn-sm{font-family:inherit;font-size:12px;height:32px;border-radius:8px;padding:0 12px;cursor:pointer;font-weight:700;border:none;transition:all .15s}
+  .btn-del-sel{background:linear-gradient(135deg,var(--red),#b91c1c);color:#fff;box-shadow:0 2px 6px rgba(229,57,53,.2)}
+  .btn-del-all{background:#fff;color:var(--red);border:1.5px solid var(--red)!important}
+  .btn-del-all:hover{background:#fef2f2}
+  .btn-print-sel{background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;box-shadow:0 2px 6px rgba(37,99,235,.25)}
+  .sel-count{font-size:12px;font-weight:700;color:var(--green);background:var(--green-light);padding:4px 10px;border-radius:6px}
+  .lot-cb{cursor:pointer;width:16px;height:16px;accent-color:var(--green)}
+
+  /* ═══ TABLE ═══ */
+  .table-wrap{background:var(--card-bg);border-radius:var(--radius-lg);border:1px solid var(--border);overflow:hidden;box-shadow:var(--shadow)}
+  table{width:100%;border-collapse:collapse;font-size:13px;min-width:800px}
+  thead th{background:var(--thead);padding:10px 12px;text-align:center;font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--green);border-bottom:2px solid rgba(13,124,95,.15);position:sticky;top:0;z-index:1}
+  tbody td{padding:9px 12px;border-bottom:1px solid var(--border);text-align:center;font-size:12px}
+  tbody tr:nth-child(even){background:var(--row-even)}
+  tbody tr:nth-child(odd){background:var(--card-bg)}
+  tbody tr:hover{background:var(--row-hover)}
+  td input[type=checkbox]{cursor:pointer;width:16px;height:16px;accent-color:var(--green)}
+  .lot-no{font-weight:800;color:var(--text);font-size:13px}
+  .user-badge{font-size:10px;background:linear-gradient(135deg,#fef3c7,#fde68a);color:var(--orange);padding:3px 10px;border-radius:12px;font-weight:700}
+  .empty-state{text-align:center;padding:48px 20px;color:var(--text3)}
+  .empty-state .icon{font-size:36px;margin-bottom:12px;opacity:.5}
+  .lots-table-scroll{max-height:520px;overflow-y:auto}
+  .auto-refresh{font-size:12px;color:var(--text3);margin-top:10px;text-align:center}
+  .ico-btn{background:var(--card-bg);border:1.5px solid var(--border);border-radius:8px;width:30px;height:30px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:0;transition:all .15s}
+  .ico-btn:hover{transform:translateY(-1px);box-shadow:0 2px 6px rgba(0,0,0,.08)}
+  .ico-btn:active{transform:scale(.9)}
+  .ico-btn svg{width:14px;height:14px}
+  .ico-btn.pr{color:#2563eb;border-color:#2563eb}
+  .ico-btn.pr:hover{background:#eff6ff}
+  .ico-btn.ed{color:var(--green);border-color:var(--green)}
+  .ico-btn.ed:hover{background:var(--green-light)}
+  .ico-btn.dl{color:var(--red);border-color:var(--red)}
+  .ico-btn.dl:hover{background:#fef2f2}
+  .btn-edit-lot,.btn-del-lot{background:var(--card-bg);border:1.5px solid var(--border);border-radius:8px;width:30px;height:30px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:0;transition:all .15s}
+  .btn-edit-lot:hover{border-color:var(--green);background:var(--green-light)}
+  .btn-del-lot:hover{border-color:var(--red);background:#fef2f2}
+
+  /* ═══ PAGINATION ═══ */
+  .pagination{display:flex;align-items:center;justify-content:center;gap:4px;margin-top:12px;flex-wrap:wrap}
+  .pg-btn{width:34px;height:34px;border-radius:8px;border:1.5px solid var(--border);background:var(--card-bg);color:var(--text);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;transition:all .15s}
+  .pg-btn:hover{background:var(--hover);border-color:var(--green)}
+  .pg-btn.active{background:linear-gradient(135deg,var(--green),var(--green2));color:#fff;border-color:var(--green);box-shadow:0 2px 6px rgba(13,124,95,.2)}
+  .pg-btn:disabled{opacity:.3;cursor:not-allowed}
+  .pg-info{font-size:12px;color:var(--text2);margin:0 8px;font-weight:600}
+
+  /* ═══ CARDS ═══ */
+  .settings-grid{}
+  .settings-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+  .settings-card{background:var(--card-bg);border-radius:var(--radius-lg);border:1px solid var(--border);padding:20px;box-shadow:var(--shadow);transition:box-shadow .2s}
+  .settings-card:hover{box-shadow:var(--shadow-lg)}
+  .settings-card h3{font-size:14px;font-weight:800;margin-bottom:14px;color:var(--green);border-bottom:2px solid var(--green-light);padding-bottom:10px;letter-spacing:-.02em}
+  .upload-section{display:flex;align-items:center;gap:12px;margin-bottom:20px;padding:16px;background:var(--card-bg);border-radius:var(--radius-lg);border:1px solid var(--border);flex-wrap:wrap;box-shadow:var(--shadow)}
+  .upload-section .upload-label{font-size:13px;font-weight:700}
+  .upload-section .upload-info{font-size:12px;color:var(--text3)}
+  .upload-status{font-size:13px}
+  .upload-status.success{color:var(--green);font-weight:700}
+  .upload-status.error{color:var(--red);font-weight:700}
+
+  /* ═══ TRADES ═══ */
+  .trade-item{background:var(--card-bg);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px 20px;margin-bottom:12px;box-shadow:var(--shadow);transition:all .2s}
+  .trade-item:hover{box-shadow:var(--shadow-lg);border-color:rgba(13,124,95,.2)}
+  .trade-hdr{display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap}
+  .trade-title{font-size:16px;font-weight:800;color:var(--text);letter-spacing:-.02em}
+  .trade-meta{font-size:12px;color:var(--text2);margin-top:4px}
+  .t-btn{background:var(--card-bg);border:1.5px solid var(--border);border-radius:8px;width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-size:15px;transition:all .15s;flex-shrink:0}
+  .t-btn svg{width:16px;height:16px}
+  .t-btn:hover{transform:translateY(-1px);box-shadow:0 2px 6px rgba(0,0,0,.08)}
+  .tb-save{color:var(--green)}.tb-save:hover{border-color:var(--green);background:var(--green-light)}
+  .tb-del{color:var(--red)}.tb-del:hover{border-color:var(--red);background:#fef2f2}
+  .tb-clear{color:var(--orange)}.tb-clear:hover{border-color:var(--orange);background:#fff7ed}
+
+  /* ═══ USERS ═══ */
+  .user-list-table{min-width:600px}
+  .grid-2col{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .btn-delete{background:#fff;border:1.5px solid var(--red);color:var(--red);border-radius:8px;padding:5px 14px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .15s}
+  .btn-delete:hover{background:#fef2f2;transform:translateY(-1px)}
+  .btn-reset-pw{background:var(--card-bg);border:1.5px solid var(--border);color:var(--text2);border-radius:8px;width:30px;height:30px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-size:14px;transition:all .15s}
+  .btn-reset-pw:hover{border-color:var(--orange);color:var(--orange);background:#fff7ed}
+
+  /* ═══ FORMS ═══ */
+  .field-lbl{font-size:11px;font-weight:700;color:var(--text2);letter-spacing:.4px;text-transform:uppercase;display:block;margin-bottom:5px;margin-top:12px}
+  .field-lbl:first-child{margin-top:0}
+  .field-input{width:100%;height:var(--input-h);border-radius:var(--input-r);border:1px solid var(--input-border);padding:0 12px;font-size:13px;font-family:inherit;background:var(--input-bg);color:var(--text);outline:none;transition:border .2s,box-shadow .2s}
+  .field-input:focus{border-color:var(--input-focus);box-shadow:0 0 0 3px rgba(13,124,95,.12)}
+  .add-user-form{display:flex;gap:8px;align-items:center;max-width:500px}
+  .user-msg{font-size:12px;margin-top:6px}
+  .user-msg.success{color:var(--green);font-weight:700}
+  .user-msg.error{color:var(--red);font-weight:700}
+
+  /* ═══ SETTINGS ACCORDION ═══ */
+  .acc-card{background:var(--card-bg);border:1.5px solid var(--border);border-radius:var(--radius-lg);margin-bottom:10px;overflow:hidden;box-shadow:var(--shadow);cursor:pointer;transition:all .2s}
+  .acc-card:hover{border-color:rgba(13,124,95,.2);box-shadow:var(--shadow-lg)}
+  .acc-card.open{border-color:var(--green);box-shadow:0 2px 12px rgba(13,124,95,.12)}
+  .acc-hdr{display:flex;align-items:center;gap:10px;padding:14px 18px;font-size:14px}
+  .acc-hdr span:first-child{font-size:18px}
+  .acc-hdr strong{flex:1;color:var(--text)}
+  .acc-arrow{color:var(--text3);font-size:12px;transition:transform .25s}
+  .acc-card.open .acc-arrow{transform:rotate(90deg);color:var(--green)}
+  .acc-body{display:none;padding:2px 18px 16px;border-top:1px solid var(--border)}
+  .acc-card.open .acc-body{display:block}
+  .stg-row{margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--border)}
+  .stg-row:last-child{margin-bottom:0;padding-bottom:0;border-bottom:none}
+  .stg-lbl{font-size:13px;font-weight:700;color:var(--text);margin-bottom:6px}
+  .stg-toggle{display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text);padding:6px 0}
+  .stg-toggle input[type="checkbox"]{width:18px;height:18px;cursor:pointer;accent-color:var(--green)}
+  .config-list{margin-top:8px}
+  .config-item{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--bg);border-radius:8px;margin-bottom:4px;font-size:13px;font-weight:600;border:1px solid var(--border);transition:all .15s}
+  .config-item:hover{border-color:var(--green);background:var(--green-light)}
+  .cfg-del{background:none;border:none;color:var(--red);cursor:pointer;font-size:15px;padding:2px 6px;border-radius:6px;transition:all .15s}
+  .cfg-del:hover{background:#fef2f2}
+
+  /* ═══ DATA SUB-TABS ═══ */
+  .data-sub-tabs{display:flex;gap:4px;margin-bottom:18px;background:var(--card-bg);border:1.5px solid var(--border);border-radius:var(--radius);padding:4px}
+  .data-sub{flex:1;text-align:center;padding:9px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;color:var(--text3);border:none;background:none;font-family:inherit;transition:all .15s}
+  .data-sub:hover{color:var(--text)}
+  .data-sub.active{background:linear-gradient(135deg,var(--green),var(--green2));color:#fff;box-shadow:0 2px 8px rgba(13,124,95,.2)}
+
+  /* ═══ REPORTS ═══ */
+  .report-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+  .rpt-bar-row{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+  .rpt-bar-label{font-size:12px;font-weight:700;color:var(--text);width:90px;flex-shrink:0}
+  .rpt-bar-wrap{flex:1;height:10px;background:var(--bg);border-radius:6px;overflow:hidden}
+  .rpt-bar{height:100%;border-radius:6px;background:linear-gradient(90deg,var(--green),var(--teal));transition:width .4s}
+  .rpt-bar-val{font-size:11px;font-weight:700;color:var(--text2);width:60px;text-align:right;flex-shrink:0}
+  .rpt-link{color:var(--green);cursor:pointer;text-decoration:underline;font-weight:700;font-size:12px}
+  .rpt-link:hover{color:var(--green2)}
+  .rpt-tab{padding:7px 12px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;color:var(--text3);border:none;background:none;font-family:inherit;transition:all .15s;flex:1;text-align:center}
+  .rpt-tab:hover{color:var(--text)}
+  .rpt-tab.active{background:linear-gradient(135deg,var(--green),var(--green2));color:#fff;box-shadow:0 2px 6px rgba(13,124,95,.2)}
+  .seller-link{color:var(--green);cursor:pointer;text-decoration:underline;font-weight:600}
+
+  /* ═══ ALLOC MODAL ═══ */
+  .adm-modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:200;display:none;align-items:center;justify-content:center;backdrop-filter:blur(2px)}
+  .adm-modal-overlay.show{display:flex}
+  .adm-modal{background:var(--card-bg);border-radius:16px;width:90%;max-width:480px;padding:24px;max-height:85vh;overflow-y:auto;box-shadow:var(--shadow-lg)}
+  .adm-modal h3{font-size:17px;font-weight:800;margin-bottom:14px;color:var(--text);letter-spacing:-.02em}
+  .adm-modal label{font-size:11px;font-weight:700;color:var(--text2);letter-spacing:.4px;text-transform:uppercase;display:block;margin-bottom:5px;margin-top:14px}
+  .adm-modal input,.adm-modal select{width:100%;height:var(--input-h);border-radius:var(--input-r);border:1px solid var(--input-border);padding:0 12px;font-size:14px;font-family:inherit;background:var(--input-bg);color:var(--text)}
+  .adm-modal .row{display:flex;gap:12px}
+  .adm-modal .row>div{flex:1}
+  .modal-btns{display:flex;gap:8px;margin-top:18px}
+  .btn-cancel{flex:1;height:40px;border-radius:8px;border:1.5px solid var(--border);background:var(--card-bg);color:var(--text2);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .15s}
+  .btn-cancel:hover{background:var(--hover);border-color:var(--text3)}
+  .btn-save{flex:2;height:40px;border-radius:8px;border:none;background:linear-gradient(135deg,var(--green),var(--green2));color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;box-shadow:0 2px 6px rgba(13,124,95,.2);transition:all .15s}
+  .btn-save:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(13,124,95,.25)}
+  .adm-err{color:var(--red);font-size:12px;margin-top:8px;font-weight:600}
+  .alloc-modal .modal-content{background:var(--card-bg);border-radius:16px;width:90%;max-width:560px;max-height:85vh;overflow-y:auto;padding:24px;box-shadow:var(--shadow-lg)}
+  .alloc-tabs{display:flex;gap:4px;margin-bottom:14px;background:var(--tab-bg);border-radius:8px;padding:3px}
+  .alloc-tab{flex:1;text-align:center;padding:8px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;color:var(--text3);border:none;background:none;font-family:inherit;transition:all .15s}
+  .alloc-tab.active{background:var(--card-bg);color:var(--green);box-shadow:var(--shadow)}
+  .alloc-branch,.alloc-start,.alloc-end{height:34px;border-radius:7px;border:1.5px solid var(--input-border);padding:0 10px;font-size:12px;font-family:inherit;background:var(--input-bg);color:var(--text)}
+  .alloc-row{display:flex;gap:6px;align-items:center;margin-bottom:6px;padding:8px 10px;background:var(--bg);border-radius:8px;border:1px solid var(--border)}
+  .alloc-row-del{background:none;border:none;color:var(--red);cursor:pointer;font-size:16px;padding:2px 6px}
+
+  /* ═══ BANK POPOVER ═══ */
+  .bank-pop{position:fixed;z-index:300;background:var(--card-bg);border:1px solid var(--border);border-radius:12px;padding:14px;box-shadow:var(--shadow-lg);max-width:260px;font-size:12px}
+  .bank-pop .bp-name{font-weight:800;font-size:14px;margin-bottom:8px;color:var(--green)}
+  .bank-pop .bp-row{display:flex;gap:8px;margin-bottom:4px}
+  .bank-pop .bp-lbl{color:var(--text3);width:50px;flex-shrink:0;font-weight:600}
+  .bank-pop .bp-val{font-weight:700}
+  .bank-pop .bp-close{position:absolute;top:6px;right:8px;background:none;border:none;font-size:14px;cursor:pointer;color:var(--text3)}
+  .admin-logo{display:none}
+
+  /* ═══ ACTIVE USERS ═══ */
+  .user-status-card{background:var(--card-bg);border-radius:10px;border:1px solid var(--border);padding:10px 12px;display:flex;align-items:center;gap:10px;transition:all .15s}
+  .user-status-card:hover{box-shadow:var(--shadow);border-color:rgba(13,124,95,.2)}
+  .user-status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+  .user-status-dot.online{background:#22c55e;box-shadow:0 0 8px rgba(34,197,94,.5)}
+  .user-status-dot.offline{background:#d1d5db}
+  .user-status-info{flex:1}
+  .user-status-name{font-size:13px;font-weight:700}
+  .user-status-meta{font-size:10px;color:var(--text3);margin-top:1px}
+  .user-status-badge{font-size:9px;padding:3px 8px;border-radius:12px;font-weight:700;text-transform:uppercase}
+  .user-status-badge.admin{background:#fef3c7;color:var(--orange)}
+  .user-status-badge.user{background:var(--green-light);color:var(--green)}
+
+  /* ═══ TOOLS ═══ */
+  .tools-section{background:var(--card-bg);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px 20px;margin-bottom:16px;box-shadow:var(--shadow)}
+  .tools-section-hdr{display:flex;align-items:center;gap:10px;margin-bottom:14px;padding-bottom:12px;border-bottom:2px solid var(--green-light)}
+  .tools-section-hdr span{font-size:20px}
+  .tools-section-hdr h3{flex:1;font-size:15px;font-weight:800;color:var(--text);letter-spacing:-.02em;margin:0;padding:0;border:none}
+  .tools-btn{background:var(--bg);border:1.5px solid var(--border);color:var(--text2);border-radius:8px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .15s}
+  .tools-btn:hover{border-color:var(--green);color:var(--green);background:var(--green-light)}
+  .tools-btn.danger{border-color:var(--red);color:var(--red)}
+  .tools-btn.danger:hover{background:#fef2f2}
+
+  /* ═══ TOOL ACTION CARDS ═══ */
+  .tool-card{background:var(--card-bg);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px;display:flex;align-items:center;gap:14px;cursor:pointer;transition:all .2s;box-shadow:var(--shadow)}
+  .tool-card:hover{box-shadow:var(--shadow-lg);transform:translateY(-2px);border-color:rgba(13,124,95,.2)}
+  .tool-card:active{transform:scale(.98)}
+  .tool-card-icon{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;color:#fff}
+  .tool-card-info{flex:1}
+  .tool-card-info strong{display:block;font-size:13px;font-weight:700;color:var(--text);margin-bottom:2px}
+  .tool-card-info small{font-size:11px;color:var(--text3)}
+
+  /* ═══ ALLOC TILES ═══ */
+  .alloc-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px}
+  .alloc-tile{background:var(--card-bg);border:1.5px solid var(--border);border-radius:var(--radius);padding:12px 14px;cursor:pointer;transition:all .2s;position:relative;overflow:hidden}
+  .alloc-tile:hover{border-color:rgba(13,124,95,.3);box-shadow:var(--shadow)}
+  .alloc-tile.expanded{grid-column:1/-1;border-color:var(--green)}
+  .alloc-tile-bar{position:absolute;bottom:0;left:0;height:4px;border-radius:0 0 var(--radius) var(--radius);transition:width .4s}
+  .alloc-tile-branch{font-size:13px;font-weight:800;color:var(--text);margin-bottom:4px}
+  .alloc-tile-stats{display:flex;align-items:center;gap:8px}
+  .alloc-tile-pct{font-size:18px;font-weight:800}
+  .alloc-tile-count{font-size:11px;color:var(--text3)}
+  .alloc-tile-detail{margin-top:10px;padding-top:10px;border-top:1px solid var(--border);display:none}
+  .alloc-tile.expanded .alloc-tile-detail{display:block}
+
+  /* ═══ ALLOC STATS ═══ */
+  .alloc-stats-wrap{background:linear-gradient(135deg,#f0fdf4,#ecfdf5);border:1.5px solid rgba(13,124,95,.15);border-radius:var(--radius-lg);padding:18px 20px;margin-bottom:16px;box-shadow:0 2px 8px rgba(13,124,95,.06)}
+  [data-theme="dark"] .alloc-stats-wrap{background:linear-gradient(135deg,#0d2818,#0f1f16);border-color:rgba(29,171,130,.15)}
+
+  /* ═══ MOBILE CARDS ═══ */
+  .users-cards{display:none}
+  .adm-user-card{background:var(--card-bg);border-radius:12px;border:1px solid var(--border);padding:14px;margin-bottom:8px;display:flex;align-items:center;gap:12px;box-shadow:var(--shadow)}
+  .adm-user-avatar{width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,var(--green-light),#d1fae5);color:var(--green);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:16px;flex-shrink:0}
+  .adm-user-avatar.admin-av{background:linear-gradient(135deg,#fef3c7,#fde68a);color:var(--orange)}
+  .adm-user-info{flex:1}
+  .adm-user-name{font-weight:700;font-size:13px;display:flex;align-items:center;gap:6px}
+  .adm-user-meta{font-size:12px;color:var(--text2);margin-top:2px}
+  .adm-user-del{background:none;border:1.5px solid var(--red);color:var(--red);border-radius:8px;padding:6px 14px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:700;transition:all .15s}
+  .adm-user-del:hover{background:#fef2f2}
+  .lots-cards{display:none}
+  .adm-lot-card{background:var(--card-bg);border-radius:12px;border:1px solid var(--border);padding:14px;margin-bottom:8px;box-shadow:var(--shadow)}
+  .adm-lot-card:nth-child(even){background:var(--row-even)}
+  .adm-lot-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+  .adm-lot-num{font-weight:800;font-size:14px}
+  .adm-lot-user{font-size:10px;background:linear-gradient(135deg,#fef3c7,#fde68a);color:var(--orange);padding:3px 10px;border-radius:12px;font-weight:700}
+  .adm-lot-name{font-weight:700;font-size:13px}
+  .adm-lot-loc{font-size:12px;color:var(--text2);margin-top:2px}
+  .adm-lot-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:8px}
+  .adm-lot-field{text-align:center;background:var(--bg);border-radius:8px;padding:6px 2px;border:1px solid var(--border)}
+  .adm-lot-field .fv{font-weight:800;font-size:13px}
+  .adm-lot-field .fl{font-size:9px;color:var(--text2);text-transform:uppercase;margin-top:1px;font-weight:700}
+  .adm-lot-field.qty-field .fv{color:var(--green)}
+  .adm-lot-acts{display:flex;gap:6px;margin-top:8px;align-items:center}
+  .adm-lot-acts label{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text2);cursor:pointer;margin-right:auto}
+  .adm-lot-time{font-size:11px;color:var(--text3)}
+  .audit-cards{display:none}
+  .audit-card{background:var(--card-bg);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:8px;box-shadow:var(--shadow)}
+  .ac-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+  .ac-hdr strong{font-size:13px}
+  .ac-hdr span{font-size:11px;color:var(--text3)}
+  .ac-detail{font-size:12px;color:var(--text2)}
+
+  /* ═══ MOBILE ═══ */
+  .sidebar-toggle{display:none;background:none;border:none;font-size:24px;cursor:pointer;color:var(--text);padding:4px}
+  .sidebar-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:99;backdrop-filter:blur(2px)}
+  .sidebar-backdrop.open{display:block}
+
+  @media(max-width:768px){
+    .sidebar{transform:translateX(-100%);width:270px;z-index:100}
+    .sidebar.open{transform:translateX(0)}
+    .main-wrap{margin-left:0}
+    .sidebar-toggle{display:block}
+    .content-area{padding:14px}
+    .topbar{padding:10px 14px}
+    .topbar h1{font-size:16px}
+    .topbar-right .server-info{display:none}
+    .stats-row{grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:6px}
+    .controls{flex-direction:column;gap:6px}
+    .controls select,.controls button,.controls input{width:100%!important;min-width:0!important}
+    .lots-cards{display:block!important;max-height:calc(100vh - 320px);overflow-y:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--border);border-radius:var(--radius-lg);padding:8px}
+    #lots-table-wrap{display:none!important}
+    .users-cards{display:block!important}
+    #users-table-wrap{display:none!important}
+    .settings-row{grid-template-columns:1fr!important;gap:10px!important}
+    .report-grid{grid-template-columns:1fr!important;gap:10px!important}
+    .rpt-tab{padding:6px 8px;font-size:10px}
+    #report-content{overflow-x:hidden}
+    #report-content .settings-card{overflow:hidden}
+    #report-content table{min-width:0!important}
+    #data-reports .controls{flex-direction:column}
+    #data-reports .controls select,#data-reports .controls button{width:100%}
+    .grid-2col{grid-template-columns:1fr!important}
+    #tab-users .settings-card{overflow:hidden}
+    .add-user-form{flex-direction:column}
+    .add-user-form input,.add-user-form select{width:100%!important}
+    .btn-add-user{width:100%}
+    .adm-modal{padding:16px;width:96%;border-radius:14px}
+    .adm-modal .row{flex-direction:column;gap:0}
+
+
+    .lot-actions-bar{gap:4px}
+    .btn-sm{font-size:11px;height:30px;padding:0 10px}
+    .trade-item{padding:12px 14px}
+    .trade-title{font-size:13px}
+    .t-btn{width:32px;height:32px}
+    .t-btn svg{width:14px;height:14px}
+    #tab-tools .table-wrap{display:none!important}
+    #tab-tools .audit-cards{display:block!important}
+    #tab-tools [style*="grid-template-columns: 1fr 1fr"]{grid-template-columns:1fr!important}
+  }
+  @media(max-width:380px){
+    .stats-row{gap:4px}
+    .stat-card{padding:10px}
+    .stat-card .value{font-size:16px}
+    .adm-lot-grid{grid-template-columns:repeat(2,1fr)}
+  }
+</style></head>
+<body>
+
+<!-- ═══ LOGIN ═══ -->
+<div id="login-page" class="login-wrap">
+  <div class="login-card">
+    <img id="admin-login-logo" class="login-logo-img" src="" style="display:none">
+    <h1><div class="dot"></div> <span id="login-title">Spice Auction</span></h1>
+    <div class="subtitle">Admin login</div>
+    <label>USERNAME</label>
+    <input type="text" id="login-user" placeholder="admin" autocomplete="username">
+    <label>PASSWORD</label>
+    <div style="position:relative"><input type="password" id="login-pass" placeholder="••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()" style="padding-right:40px"><button type="button" onclick="togglePwdVis('login-pass',this)" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--text3);font-size:16px;padding:4px" title="Show password">👁</button></div>
+    <button class="btn-login" onclick="doLogin()">Log in</button>
+    <div class="error-msg" id="login-error"></div>
+  </div>
+</div>
+
+<!-- ═══ DASHBOARD ═══ -->
+<div id="dashboard" class="admin-layout hidden">
+
+  <!-- Sidebar backdrop (mobile) -->
+  <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="toggleSidebar()"></div>
+
+  <!-- Sidebar -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <img id="admin-logo" src="" style="display:none">
+      <span id="admin-title">Spice Auction</span>
+    </div>
+    <div class="sidebar-nav">
+      <div class="nav-item active" onclick="switchTab('lots')"><span class="nav-icon">📋</span> Lots</div>
+      <div class="nav-item" onclick="switchTab('trades')"><span class="nav-icon">🔄</span> Trades</div>
+      <div class="nav-item" onclick="switchTab('data')"><span class="nav-icon">📂</span> Data</div>
+      <div class="nav-divider"></div>
+      <div class="nav-item" onclick="switchTab('users')"><span class="nav-icon">👥</span> Users</div>
+      <div class="nav-item" onclick="switchTab('settings')"><span class="nav-icon">⚙️</span> Settings</div>
+      <div class="nav-item" onclick="switchTab('tools')"><span class="nav-icon">🛠️</span> Tools</div>
+      <div class="nav-divider"></div>
+      <div class="nav-item" onclick="switchTab('profile')"><span class="nav-icon">👤</span> My Profile</div>
+    </div>
+    <div class="sidebar-footer">
+      <div class="nav-item dm-toggle" id="adm-dm-btn" onclick="toggleAdminDark()"><span class="nav-icon">🌓</span> <span id="dm-lbl">Dark Mode</span></div>
+      <div class="nav-item logout-item" onclick="doLogout()"><span class="nav-icon">⏻</span> Logout</div>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <div class="main-wrap">
+    <div class="topbar">
+      <div style="display:flex;align-items:center;gap:10px">
+        <button class="sidebar-toggle" onclick="toggleSidebar()">☰</button>
+        <h1 id="topbar-title">Lots</h1>
+      </div>
+      <div class="topbar-right">
+        <div class="server-info">Server: <code id="server-url">loading...</code></div>
+        <span class="user-badge-header" id="logged-in-user"></span>
+      </div>
+    </div>
+    <div class="content-area">
+
+  <!-- ── Lots ── -->
+  <div id="tab-lots">
+    <div class="stats-row">
+      <div class="stat-card"><div class="label">Total lots</div><div class="value" id="stat-lots">—</div></div>
+      <div class="stat-card"><div class="label">Total quantity</div><div class="value" id="stat-qty">—</div></div>
+      <div class="stat-card"><div class="label">Total bags</div><div class="value muted" id="stat-bags">—</div></div>
+      <div class="stat-card"><div class="label" id="stat-auction-label">Active Trade</div><div class="value muted" id="stat-auction">—</div></div>
+    </div>
+
+    <div class="controls">
+      <select id="auction-select"><option value="">Select auction...</option></select>
+      <select id="filter-branch"><option value="">All branches</option></select>
+      <select id="filter-user"><option value="">All users</option></select>
+      <input type="text" id="filter-seller" placeholder="Search seller..." style="height:34px;border-radius:7px;border:1px solid #ccc;padding:0 12px;font-size:13px;font-family:inherit;width:160px" oninput="filterBySeller()">
+      <button class="ico-act rf" onclick="refresh()" title="Refresh" style="margin-left:auto"><svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg></button>
+    </div>
+
+    <div class="lot-actions-bar" id="lot-actions-bar" style="display:none">
+      <button class="ico-act pr" onclick="printSelected()" title="Print selected"><svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg></button>
+      <button class="ico-act pr" onclick="printAllBySeller()" title="Print all by seller"><svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg><svg viewBox="0 0 24 24" fill="currentColor" width="10" height="10" style="margin-left:-2px"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg></button>
+      <button class="ico-act dl" onclick="deleteSelected()" title="Delete selected"><svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg></button>
+      <button class="ico-act dl-out" onclick="deleteAllLots()" title="Delete all lots"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2M10 11v6M14 11v6"/></svg></button>
+      <button class="ico-act rf" onclick="refresh()" title="Refresh"><svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg></button>
+      <span class="sel-count" id="sel-count"></span>
+    </div>
+    <!-- Allocation Status Tile -->
+    <div id="alloc-stats" style="display:none;margin-bottom:12px">
+      <div class="tool-card" onclick="document.getElementById('alloc-popup').style.display='flex'" style="border-left:4px solid var(--green)">
+        <div class="tool-card-icon" style="background:linear-gradient(135deg,var(--green),var(--green2))">📊</div>
+        <div class="tool-card-info">
+          <strong>Lot Allocation Status</strong>
+          <small id="alloc-stats-total">Loading...</small>
+        </div>
+        <button onclick="event.stopPropagation();openReassignFromLots()" title="Reassign lots" style="background:linear-gradient(135deg,var(--orange),#b87308);color:#fff;border:none;border-radius:7px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">↔ Reassign</button>
+      </div>
+    </div>
+    <!-- Alloc Popup -->
+    <div id="alloc-popup" class="adm-modal-overlay" style="display:none;z-index:250" onclick="if(event.target===this)this.style.display='none'">
+      <div class="adm-modal" style="max-width:600px;padding:20px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <h3 style="margin:0">📊 Lot Allocation</h3>
+          <button onclick="document.getElementById('alloc-popup').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text3)">✕</button>
+        </div>
+        <div id="alloc-stats-bars"></div>
+      </div>
+    </div>
+    <!-- Lot list separator -->
+    <div style="height:1px;background:var(--border);margin-bottom:12px"></div>
+    <div class="table-wrap" id="lots-table-wrap">
+      <div class="lots-table-scroll">
+      <table>
+        <thead><tr><th style="width:30px"><input type="checkbox" id="select-all" onchange="toggleSelectAll(this.checked)"></th><th>Lot</th><th>Seller name</th><th>Branch</th><th>Grade</th><th>Bags</th><th>Litre</th><th>Qty (kg)</th><th>User</th><th>Time</th><th style="width:100px">Actions</th></tr></thead>
+        <tbody id="lots-body"><tr><td colspan="11" class="empty-state"><div class="icon">&#9881;</div><p>Select an auction to view lots</p></td></tr></tbody>
+      </table>
+      </div>
+    </div>
+    <!-- Mobile card view -->
+    <div id="lots-cards" class="lots-cards"></div>
+    <!-- Pagination -->
+    <div class="pagination" id="pagination" style="display:none"></div>
+    <div class="auto-refresh">Auto-refreshes every 5 seconds</div>
+  </div>
+
+  <!-- ── TAB: Trades ── -->
+
+  <!-- ── Trades ── -->
+  <div id="tab-trades" class="hidden">
+    <div class="data-sub-tabs">
+      <button class="data-sub active" onclick="showTradeSub('create',this)">➕ Create Trade</button>
+      <button class="data-sub" onclick="showTradeSub('manage',this)">📋 Manage Trades</button>
+    </div>
+    <div id="trade-create">
+      <div class="settings-card">
+          <div class="grid-2col" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div><label class="field-lbl">Trade #</label><input type="number" id="ct-ano" class="field-input" placeholder="e.g. 1" inputmode="numeric" min="1"></div>
+            <div><label class="field-lbl">Date</label><input type="date" id="ct-date" class="field-input"></div>
+            <div><label class="field-lbl">Crop Type</label><select id="ct-crop" class="field-input"></select></div>
+            <div><label class="field-lbl">Start Time</label><input type="time" id="ct-start" class="field-input"></div>
+            <div><label class="field-lbl">End Time</label><input type="time" id="ct-end" class="field-input"></div>
+          </div>
+          <p style="font-size:11px;color:#888;margin-top:6px">Time is optional — leave blank for no limit</p>
+          <div style="margin-top:14px;padding-top:14px;border-top:1px solid #e1f5ee">
+            <h3 style="font-size:14px;margin-bottom:8px;padding-bottom:0;border:none;display:flex;align-items:center;justify-content:space-between">Lot Allocations <button type="button" style="background:#1D9E75;color:#fff;border:none;border-radius:5px;padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer" onclick="addAllocRow('ct')">+ Add Branch</button></h3>
+            <div id="ct-list" style="margin-bottom:8px"></div>
+            <div id="ct-summary" style="font-size:11px;color:#888"></div>
+          </div>
+          <button class="btn-add-user" style="width:100%;margin-top:12px;height:36px;font-size:13px" onclick="createTrade()" title="Create a new trade with lot allocations">Create Trade</button>
+          <div class="user-msg" id="ct-msg"></div>
+        </div>
+    </div>
+    <div id="trade-manage" style="display:none">
+      <div class="settings-card" style="display:flex;flex-direction:column">
+          <div id="trades-list" style="flex:1;overflow-y:auto;max-height:600px"></div>
+        </div>
+    </div>
+  </div>
+
+  <!-- Allocation modal for editing existing trades -->
+  <div class="adm-modal-overlay" id="alloc-modal">
+    <div class="adm-modal" style="max-width:560px">
+      <h3 style="margin-bottom:10px">Lot Allocations — Trade #<span id="alloc-modal-ano"></span></h3>
+
+      <!-- Tab switcher -->
+      <div style="display:flex;gap:0;margin-bottom:14px;border-bottom:2px solid #e8e8e8">
+        <button id="alloc-tab-edit" onclick="switchAllocTab('edit')" style="flex:1;padding:8px 0;font-size:13px;font-weight:600;border:none;background:none;cursor:pointer;color:#1D9E75;border-bottom:2px solid #1D9E75;margin-bottom:-2px">📝 Edit Allocations</button>
+        <button id="alloc-tab-reassign" onclick="switchAllocTab('reassign')" style="flex:1;padding:8px 0;font-size:13px;font-weight:600;border:none;background:none;cursor:pointer;color:#888;border-bottom:2px solid transparent;margin-bottom:-2px">↔ Reassign Lots</button>
+      </div>
+
+      <!-- Edit panel -->
+      <div id="alloc-panel-edit">
+        <div id="alloc-edit-list" style="margin-bottom:10px"></div>
+        <button type="button" style="background:#1D9E75;color:#fff;border:none;border-radius:6px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;margin-bottom:12px" onclick="addAllocRow('alloc-edit')">+ Add Branch</button>
+        <div id="alloc-edit-summary" style="font-size:11px;color:#888;margin-bottom:10px"></div>
+        <div class="adm-err" id="alloc-err"></div>
+        <div class="modal-btns">
+          <button class="btn-cancel" onclick="document.getElementById('alloc-modal').classList.remove('show')">Cancel</button>
+          <button class="btn-save" onclick="saveAllocations()">Save Allocations</button>
+        </div>
+      </div>
+
+      <!-- Reassign panel -->
+      <div id="alloc-panel-reassign" style="display:none">
+        <p style="font-size:12px;color:#888;margin-bottom:12px">Move unused lot numbers from one branch to another. Only empty (not yet entered) lots can be reassigned.</p>
+
+        <div id="alloc-reassign-status" style="margin-bottom:14px"></div>
+
+        <div style="background:#fff8f0;border:1px solid #f0d8c0;border-radius:10px;padding:14px">
+          <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:end;margin-bottom:10px">
+            <div><label class="field-lbl" style="font-size:10px;margin-top:0">FROM BRANCH</label><select id="ra-from" class="field-input" style="height:34px;font-size:12px" onchange="loadReassignPreview()"></select></div>
+            <div style="font-size:18px;color:#E67E22;padding-bottom:6px;font-weight:700">→</div>
+            <div><label class="field-lbl" style="font-size:10px;margin-top:0">TO BRANCH</label><select id="ra-to" class="field-input" style="height:34px;font-size:12px"></select></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+            <div><label class="field-lbl" style="font-size:10px;margin-top:0">START LOT</label><input type="text" id="ra-start" class="field-input" placeholder="e.g. 051" style="height:34px;font-size:12px"></div>
+            <div><label class="field-lbl" style="font-size:10px;margin-top:0">END LOT</label><input type="text" id="ra-end" class="field-input" placeholder="e.g. 100" style="height:34px;font-size:12px"></div>
+          </div>
+          <div id="ra-preview" style="font-size:11px;color:#888;margin-bottom:10px"></div>
+          <button type="button" style="background:#E67E22;color:#fff;border:none;border-radius:8px;padding:8px 20px;font-size:13px;font-weight:600;cursor:pointer;width:100%" onclick="executeReassign()">↔ Reassign Lots</button>
+          <div class="adm-err" id="ra-err" style="margin-top:8px"></div>
+        </div>
+
+        <div class="modal-btns" style="margin-top:14px">
+          <button class="btn-cancel" style="width:100%" onclick="document.getElementById('alloc-modal').classList.remove('show')">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── TAB: Exports ── -->
+  <!-- ── TAB: Data (Exports + Reports) ── -->
+
+  <!-- ── Data ── -->
+  <div id="tab-data" class="hidden">
+    <div class="data-sub-tabs">
+      <button class="data-sub active" onclick="showDataSub('exports',this)">📁 Exports</button>
+      <button class="data-sub" onclick="showDataSub('reports',this)">📊 Reports</button>
+    </div>
+    <div id="data-exports">
+      <div class="settings-grid">
+        <div class="settings-row">
+          <div class="settings-card">
+            <h3>📁 Source File (Seller Data)</h3>
+            <p style="font-size:12px;color:var(--text3);margin-bottom:12px">Upload a SOURCE file to import/update seller records, or export current seller data.</p>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+              <input type="file" id="source-file" accept=".xls,.xlsx,.XLS,.XLSX" style="font-size:12px">
+              <button class="btn-upload" id="upload-btn" onclick="uploadSource()" disabled>Upload & Import</button>
+            </div>
+            <div class="upload-status" id="upload-status"></div>
+            <div style="font-size:11px;color:var(--text3);margin-bottom:12px"><span id="trader-count">—</span> traders loaded</div>
+            <div style="display:flex;gap:8px">
+              <button class="btn-xlsx" onclick="exportSource('xlsx')">⬇ Export Source .xlsx</button>
+              <button class="btn-dbf" onclick="exportSource('dbf')">⬇ Export Source .dbf</button>
+            </div>
+          </div>
+          <div class="settings-card">
+            <h3>📊 Lot Data Export</h3>
+            <p style="font-size:12px;color:var(--text3);margin-bottom:12px">Export lot entries for the selected trade.</p>
+            <div style="margin-bottom:12px">
+              <label class="field-lbl">Select Trade</label>
+              <select id="export-auction" class="field-input" style="height:38px"></select>
+            </div>
+            <div style="display:flex;gap:8px">
+              <button class="btn-xlsx" onclick="exportFileFromTab('xlsx')">⬇ Export Lots .xlsx</button>
+              <button class="btn-dbf" onclick="exportFileFromTab('dbf')">⬇ Export Lots .dbf</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="data-reports" style="display:none">
+      <div class="controls" style="margin-bottom:16px">
+        <select id="report-auction" onchange="loadReport()"><option value="">Select trade for report...</option></select>
+        <button class="btn-xlsx" onclick="downloadSummaryPdf()">⬇ Summary PDF</button>
+      </div>
+      <div id="report-content" style="display:none;overflow:hidden">
+        <!-- Compact summary strip -->
+        <div id="report-stats" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px"></div>
+
+        <!-- Grade compact row -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+          <div style="background:var(--card-bg);border:1px solid var(--border);border-radius:10px;padding:10px;overflow:hidden">
+            <div style="font-size:11px;font-weight:700;color:var(--green);margin-bottom:6px">🌿 Grade 1 · Planters</div>
+            <div id="report-grade1">—</div>
+          </div>
+          <div style="background:var(--card-bg);border:1px solid var(--border);border-radius:10px;padding:10px;overflow:hidden">
+            <div style="font-size:11px;font-weight:700;color:#d97706;margin-bottom:6px">🏪 Grade 2 · Dealers</div>
+            <div id="report-grade2">—</div>
+          </div>
+        </div>
+
+        <!-- Chart switcher -->
+        <div style="background:var(--card-bg);border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:12px;overflow:hidden">
+          <div style="display:flex;gap:2px;margin-bottom:10px;background:var(--bg);border-radius:6px;padding:2px">
+            <button class="rpt-tab active" onclick="switchChart('grade',this)">🎯 Grade</button>
+            <button class="rpt-tab" onclick="switchChart('branch',this)">🏢 Branch</button>
+            <button class="rpt-tab" onclick="switchChart('hourly',this)">🕐 Hourly</button>
+            <button class="rpt-tab" id="rpt-tab-users" onclick="switchChart('users',this)" style="display:none">👤 Users</button>
+          </div>
+          <div id="rpt-chart-grade" class="rpt-view"><div id="report-grade-chart" style="display:flex;align-items:center;justify-content:center"></div></div>
+          <div id="rpt-chart-branch" class="rpt-view" style="display:none"><div id="report-branch-chart"></div></div>
+          <div id="rpt-chart-hourly" class="rpt-view" style="display:none"><div id="report-hourly"></div></div>
+          <div id="rpt-chart-users" class="rpt-view" style="display:none"><div id="report-users"></div></div>
+        </div>
+
+        <div style="background:var(--card-bg);border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:12px;overflow:hidden"><div style="font-size:12px;font-weight:700;margin-bottom:8px" id="report-sellers-title">Top Sellers</div><div id="report-sellers" style="max-height:300px;overflow-y:auto"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Seller History Modal -->
+  <div class="adm-modal-overlay" id="seller-history-modal">
+    <div class="adm-modal" style="max-width:480px;max-height:80vh;overflow-y:auto">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <h3 id="sh-title" style="margin:0;font-size:15px">Seller History</h3>
+        <button onclick="document.getElementById('seller-history-modal').classList.remove('show')" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text3)">✕</button>
+      </div>
+      <div id="sh-summary" style="margin-bottom:10px"></div>
+      <div id="sh-body" style="max-height:50vh;overflow-y:auto"></div>
+    </div>
+  </div>
+
+
+  <!-- ── Users ── -->
+  <div id="tab-users" class="hidden">
+    <div class="settings-grid">
+      <div class="settings-row">
+        <div class="settings-card">
+          <h3>Add New User</h3>
+          <div class="grid-2col">
+            <div><label class="field-lbl">Username</label><input type="text" id="new-username" placeholder="Enter username" class="field-input"></div>
+            <div><label class="field-lbl">Password</label><input type="password" id="new-password" placeholder="Enter password" class="field-input"></div>
+            <div><label class="field-lbl">Role</label><select id="new-role" class="field-input"><option value="user">User</option><option value="admin">Admin</option></select></div>
+            <div><label class="field-lbl">Branch</label><select id="new-user-branch" class="field-input"><option value="">No branch</option></select></div>
+          </div>
+          <button class="btn-add-user" style="width:100%;margin-top:12px;height:38px;font-size:14px" onclick="addUser()">Create User</button>
+          <div class="user-msg" id="user-msg"></div>
+        </div>
+        <div class="settings-card" style="display:flex;flex-direction:column">
+          <h3>All Users</h3>
+          <div class="table-wrap" id="users-table-wrap" style="flex:1;max-height:320px;overflow-y:auto">
+            <table class="user-list-table"><thead><tr><th>ID</th><th>Username</th><th>Role</th><th>Branch</th><th>Created</th><th></th></tr></thead><tbody id="users-body"></tbody></table>
+          </div>
+          <div id="users-cards" class="users-cards"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="tab-settings" class="hidden">
+    <!-- Settings Tiles -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:16px">
+      <div class="tool-card" onclick="var w=document.getElementById('stg-general-wrap');document.querySelectorAll('.stg-wrap').forEach(function(e){if(e!==w)e.style.display='none'});w.style.display=w.style.display==='none'?'block':'none'">
+        <div class="tool-card-icon" style="background:linear-gradient(135deg,#64748b,#475569)">⚙️</div>
+        <div class="tool-card-info"><strong>General</strong><small>Title, logo, pagination</small></div>
+      </div>
+      <div class="tool-card" onclick="var w=document.getElementById('stg-lotentry-wrap');document.querySelectorAll('.stg-wrap').forEach(function(e){if(e!==w)e.style.display='none'});w.style.display=w.style.display==='none'?'block':'none'">
+        <div class="tool-card-icon" style="background:linear-gradient(135deg,var(--green),var(--green2))">📝</div>
+        <div class="tool-card-info"><strong>Lot Entry</strong><small>Sample weight, moisture, edit lock</small></div>
+      </div>
+      <div class="tool-card" onclick="var w=document.getElementById('stg-receipts-wrap');document.querySelectorAll('.stg-wrap').forEach(function(e){if(e!==w)e.style.display='none'});w.style.display=w.style.display==='none'?'block':'none'">
+        <div class="tool-card-icon" style="background:linear-gradient(135deg,var(--blue),#1d4ed8)">🖨️</div>
+        <div class="tool-card-info"><strong>Receipts</strong><small>Masking, username display</small></div>
+      </div>
+      <div class="tool-card" onclick="var w=document.getElementById('stg-branches-wrap');document.querySelectorAll('.stg-wrap').forEach(function(e){if(e!==w)e.style.display='none'});w.style.display=w.style.display==='none'?'block':'none'">
+        <div class="tool-card-icon" style="background:linear-gradient(135deg,var(--orange),#b87308)">🏢</div>
+        <div class="tool-card-info"><strong>Branches & Crops</strong><small>Add or remove branches</small></div>
+      </div>
+      <div class="tool-card" onclick="var w=document.getElementById('stg-labels-wrap');document.querySelectorAll('.stg-wrap').forEach(function(e){if(e!==w)e.style.display='none'});w.style.display=w.style.display==='none'?'block':'none'">
+        <div class="tool-card-icon" style="background:linear-gradient(135deg,var(--purple),#6d28d9)">🏷️</div>
+        <div class="tool-card-info"><strong>Field Labels</strong><small>Customize field names</small></div>
+      </div>
+    </div>
+    <!-- General -->
+    <div id="stg-general-wrap" class="stg-wrap tools-section" style="display:none">
+      <div class="tools-section-hdr"><span>⚙️</span><h3>General</h3></div>
+      <div class="stg-row"><div class="stg-lbl">App Title</div><div class="add-user-form"><input type="text" id="cfg-title" placeholder="e.g. Spice Auction" style="flex:1"><button class="btn-add-user" onclick="saveTitle()">Save</button></div><div class="user-msg" id="title-msg"></div></div>
+      <div class="stg-row"><div class="stg-lbl">Trade Tile Title</div><div class="add-user-form"><input type="text" id="cfg-trade-tile" placeholder="e.g. Active Trade" style="flex:1"><button class="btn-add-user" onclick="saveTradeTileTitle()">Save</button></div><div class="user-msg" id="trade-tile-msg"></div></div>
+      <div class="stg-row"><div class="stg-lbl">Logo</div><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><img id="logo-preview" src="" style="height:36px;display:none;border-radius:4px"><input type="file" id="logo-file" accept=".png,.jpg,.jpeg" style="max-width:160px"><button class="btn-add-user" style="height:28px;font-size:11px" onclick="uploadLogo()">Upload</button><button style="height:28px;font-size:11px;border-radius:6px;border:1px solid var(--red);background:var(--card-bg);color:var(--red);cursor:pointer;font-family:inherit;padding:0 8px" onclick="removeLogo()">Remove</button></div><div class="user-msg" id="logo-msg"></div></div>
+      <div class="stg-row" style="border:none"><div class="stg-lbl">Lots per page</div><div class="add-user-form"><input type="text" id="cfg-page-limit" placeholder="20" inputmode="numeric" style="width:80px" oninput="sanitizeInt(this)"><button class="btn-add-user" onclick="savePageLimit()">Save</button></div><div class="user-msg" id="page-limit-msg"></div></div>
+    </div>
+    <!-- Lot Entry -->
+    <div id="stg-lotentry-wrap" class="stg-wrap tools-section" style="display:none">
+      <div class="tools-section-hdr"><span>📝</span><h3>Lot Entry</h3></div>
+      <div class="stg-row"><div class="stg-lbl">Sample Weight (kg)</div><p style="font-size:11px;color:var(--text3);margin:0 0 4px">Auto-added to every lot.</p><div class="add-user-form"><input type="text" id="cfg-sample-weight" placeholder="e.g. 0.500" inputmode="decimal" style="flex:1" oninput="sanitizeDec(this)"><button class="btn-add-user" onclick="saveSampleWeight()">Save</button></div><div class="user-msg" id="sample-weight-msg"></div></div>
+      <div class="stg-row"><div class="stg-lbl">Default Litre</div><p style="font-size:11px;color:var(--text3);margin:0 0 4px">Pre-filled in entry form. Users can edit.</p><div class="add-user-form"><input type="text" id="cfg-default-litre" placeholder="e.g. 410" inputmode="numeric" style="width:100px" oninput="sanitizeInt(this)"><button class="btn-add-user" onclick="saveDefaultLitre()">Save</button></div><div class="user-msg" id="default-litre-msg"></div></div>
+      <div class="stg-row"><label class="stg-toggle"><input type="checkbox" id="cfg-show-moisture" onchange="saveShowMoisture()"><span>Show moisture field</span></label><div class="user-msg" id="show-moisture-msg"></div></div>
+      <div class="stg-row"><div class="stg-lbl">Edit lock timer</div><div class="add-user-form"><input type="text" id="cfg-edit-timeout" placeholder="0" inputmode="numeric" style="width:80px" oninput="sanitizeInt(this)"><span style="font-size:12px;color:var(--text3)">min</span><button class="btn-add-user" onclick="saveEditTimeout()">Save</button></div><div class="user-msg" id="timeout-msg"></div></div>
+      <div class="stg-row" style="border:none"><label class="stg-toggle"><input type="checkbox" id="cfg-edit-enabled" onchange="saveEditEnabled()"><span>Allow edit/delete</span></label><div class="user-msg" id="edit-enabled-msg"></div></div>
+    </div>
+    <!-- Receipts -->
+    <div id="stg-receipts-wrap" class="stg-wrap tools-section" style="display:none">
+      <div class="tools-section-hdr"><span>🖨️</span><h3>Receipts</h3></div>
+      <div class="stg-row"><label class="stg-toggle"><input type="checkbox" id="cfg-show-username" onchange="saveShowUsername()"><span>Show username in receipts</span></label><div class="user-msg" id="show-username-msg"></div></div>
+      <div class="stg-row" style="border:none"><div class="stg-lbl">A/C Number Masking</div><div class="add-user-form"><select id="cfg-acct-mask" style="flex:1"><option value="none">No masking</option><option value="show_last4">Last 4 — ********5678</option><option value="show_first4_last4">First & last 4 — 1234****5678</option><option value="show_last4_star">Stars + last 4 — ****5678</option></select><button class="btn-add-user" onclick="saveAcctMask()">Save</button></div><div class="user-msg" id="acct-mask-msg"></div></div>
+    </div>
+    <!-- Branches -->
+    <div id="stg-branches-wrap" class="stg-wrap tools-section" style="display:none">
+      <div class="tools-section-hdr"><span>🏢</span><h3>Branches & Crop Types</h3></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div><div class="stg-lbl" style="margin-bottom:6px">Branches</div><div class="add-user-form" style="margin-bottom:6px"><input type="text" id="new-branch" placeholder="Add" style="flex:1;text-transform:uppercase" class="field-input"><button class="btn-add-user" onclick="addConfig('branch')">Add</button></div><div class="user-msg" id="branch-msg"></div><div class="config-list" id="branches-list"></div></div>
+        <div><div class="stg-lbl" style="margin-bottom:6px">Crop Types</div><div class="add-user-form" style="margin-bottom:6px"><input type="text" id="new-crop" placeholder="Add" style="flex:1;text-transform:uppercase" class="field-input"><button class="btn-add-user" onclick="addConfig('crop_type')">Add</button></div><div class="user-msg" id="crop-msg"></div><div class="config-list" id="crops-list"></div></div>
+      </div>
+    </div>
+    <!-- Labels -->
+    <div id="stg-labels-wrap" class="stg-wrap tools-section" style="display:none">
+      <div class="tools-section-hdr"><span>🏷️</span><h3>Field Labels</h3></div>
+      <p style="font-size:11px;color:var(--text3);margin-bottom:12px">Customize names used in forms, receipts & exports.</p>
+      <div id="labels-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px"></div>
+      <div style="margin-top:12px;display:flex;gap:8px;align-items:center"><button class="btn-add-user" onclick="saveLabels()">Save Labels</button><button style="height:34px;font-size:12px;border-radius:7px;border:1px solid var(--border);background:var(--card-bg);color:var(--text2);cursor:pointer;font-family:inherit;padding:0 12px" onclick="resetLabels()">Reset</button><div class="user-msg" id="labels-msg"></div></div>
+    </div>
+  </div>
+
+  <div id="tab-tools" class="hidden">
+    <!-- Active Users -->
+    <div class="tools-section" style="margin-bottom:16px">
+      <div class="tools-section-hdr"><span>👥</span><h3>Active Users</h3><button class="tools-btn" onclick="loadActiveUsers()">↻ Refresh</button></div>
+      <div id="active-users-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px"><div style="color:var(--text3);font-size:12px;grid-column:1/-1">Loading...</div></div>
+    </div>
+    <!-- Action Cards -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;margin-bottom:16px">
+      <div class="tool-card" onclick="downloadBackup()">
+        <div class="tool-card-icon" style="background:linear-gradient(135deg,var(--green),var(--green2))">💾</div>
+        <div class="tool-card-info"><strong>Backup Database</strong><small>Download a full copy of your data</small></div>
+      </div>
+      <div class="tool-card" onclick="document.getElementById('restore-wrap').style.display=document.getElementById('restore-wrap').style.display==='none'?'block':'none'">
+        <div class="tool-card-icon" style="background:linear-gradient(135deg,var(--orange),#b87308)">📥</div>
+        <div class="tool-card-info"><strong>Restore Database</strong><small>Upload a backup to restore</small></div>
+      </div>
+      <div class="tool-card" onclick="var w=document.getElementById('audit-wrap');if(w.style.display==='none'){w.style.display='block';loadAuditLog()}else{w.style.display='none'}">
+        <div class="tool-card-icon" style="background:linear-gradient(135deg,var(--blue),#1d4ed8)">📜</div>
+        <div class="tool-card-info"><strong>Audit Log</strong><small>View all admin actions</small></div>
+      </div>
+    </div>
+    <!-- Restore panel (hidden by default) -->
+    <div id="restore-wrap" style="display:none" class="tools-section">
+      <div class="tools-section-hdr"><span>📥</span><h3>Restore Database</h3></div>
+      <input type="file" id="restore-file" accept=".db" style="margin-bottom:8px">
+      <button class="btn-add-user" style="width:100%;height:40px;font-size:14px;background:linear-gradient(135deg,var(--red),#b91c1c)" onclick="restoreBackup()">⬆ Restore from Backup</button>
+      <div class="user-msg" id="restore-msg"></div>
+    </div>
+    <!-- Audit panel (hidden by default) -->
+    <div id="audit-wrap" style="display:none" class="tools-section">
+      <div class="tools-section-hdr"><span>📜</span><h3>Audit Log</h3><div style="display:flex;gap:6px"><button class="tools-btn" onclick="loadAuditLog()">↻ Refresh</button><button class="tools-btn danger" onclick="clearAuditLog()">✕ Clear</button></div></div>
+      <div class="table-wrap" style="max-height:350px;overflow-y:auto"><table><thead><tr><th>Time</th><th>User</th><th>Action</th><th>Details</th></tr></thead><tbody id="audit-body"><tr><td colspan="4" style="padding:16px;text-align:center;color:var(--text3)">Click Refresh</td></tr></tbody></table></div>
+      <div class="audit-cards" id="audit-cards"></div>
+    </div>
+  </div>
+
+  <!-- ── Profile ── -->
+  <div id="tab-profile" class="hidden">
+    <!-- Action Tiles -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;margin-bottom:16px">
+      <div class="tool-card" onclick="var w=document.getElementById('pw-wrap');if(w.style.display==='none'){w.style.display='block'}else{w.style.display='none'}">
+        <div class="tool-card-icon" style="background:linear-gradient(135deg,var(--green),var(--green2))">🔒</div>
+        <div class="tool-card-info"><strong>Change Password</strong><small>Update your login credentials</small></div>
+      </div>
+      <div class="tool-card" onclick="var w=document.getElementById('lh-wrap');if(w.style.display==='none'){w.style.display='block';loadLoginHistory()}else{w.style.display='none'}">
+        <div class="tool-card-icon" style="background:linear-gradient(135deg,var(--blue),#1d4ed8)">📋</div>
+        <div class="tool-card-info"><strong>Login History</strong><small>View recent login activity</small></div>
+      </div>
+    </div>
+    <!-- Change Password panel -->
+    <div id="pw-wrap" style="display:none" class="tools-section">
+      <div class="tools-section-hdr"><span>🔒</span><h3>Change Password</h3></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;max-width:500px">
+        <div style="flex:1;min-width:140px"><label class="field-lbl" style="margin-top:0">Current Password</label><input type="password" id="cp-current" placeholder="Enter current password"></div>
+        <div style="flex:1;min-width:140px"><label class="field-lbl" style="margin-top:0">New Password</label><input type="password" id="cp-new" placeholder="Min 6 characters"></div>
+        <button class="btn-add-user" style="height:34px" onclick="changeMyPassword()">Update</button>
+      </div>
+      <div class="user-msg" id="cp-msg"></div>
+    </div>
+    <!-- Login History panel -->
+    <div id="lh-wrap" style="display:none" class="tools-section">
+      <div class="tools-section-hdr"><span>📋</span><h3>Login History</h3><div style="display:flex;gap:6px"><button class="tools-btn" onclick="loadLoginHistory()">↻ Refresh</button><button class="tools-btn danger" onclick="clearLoginHistory()">✕ Clear</button></div></div>
+      <div class="table-wrap" style="max-height:300px;overflow-y:auto"><table style="table-layout:auto;min-width:0!important"><thead><tr><th>Time</th><th>User</th><th>Device</th><th>IP</th></tr></thead><tbody id="login-history-body"><tr><td colspan="4" style="padding:16px;text-align:center;color:var(--text3)">Click Refresh</td></tr></tbody></table></div>
+    </div>
+  </div>
+
+
+    </div>
+  </div>
+</div>
+<div class="adm-modal-overlay" id="adm-edit-modal">
+  <div class="adm-modal" style="max-width:480px;max-height:85vh;overflow-y:auto">
+
+    <h3>Edit Lot #<span id="adm-ed-lotno-display"></span></h3>
+
+    <label>LOT NUMBER</label>
+
+    <input type="text" id="adm-ed-lotno">
+
+    <label>SELLER</label>
+
+    <div id="adm-ed-seller-wrap">
+
+      <div id="adm-ed-seller-card" style="background:#e1f5ee;border-radius:6px;padding:8px 10px;font-size:13px;font-weight:600;color:#0F6E56;margin-bottom:4px;display:flex;align-items:center;gap:6px">
+
+        <span id="adm-ed-seller-name" style="flex:1"></span>
+
+        <button onclick="admEditSellerMode()" style="background:none;border:none;color:#1D9E75;font-size:11px;font-weight:600;cursor:pointer;text-decoration:underline">Change</button>
+
+      </div>
+
+      <div id="adm-ed-seller-search" style="display:none">
+
+        <input type="text" id="adm-ed-seller-input" placeholder="Search seller by name, phone..." oninput="searchAdmEditSeller(this.value)" autocomplete="off">
+
+        <div id="adm-ed-seller-res" style="display:none;background:#fff;border:1px solid #ddd;border-radius:8px;max-height:180px;overflow-y:auto;margin-top:4px"></div>
+
+      </div>
+
+    </div>
+
+    <div id="adm-ed-bank" style="display:none;margin:6px 0">
+
+      <div style="background:#f7faf8;border:1px solid #e4e3df;border-radius:8px;padding:8px 10px;font-size:12px">
+
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+
+          <span style="font-weight:700;color:#666;font-size:11px">BANK ACCOUNT</span>
+
+        </div>
+
+        <div style="display:flex;gap:6px;align-items:center">
+
+          <select id="adm-ed-bank-select" style="flex:1;height:34px;border-radius:6px;border:1px solid #ccc;padding:0 8px;font-size:12px;font-family:inherit" onchange="onAdmBankSelect(this)">
+
+            <option value="">No bank account</option>
+
+          </select>
+
+          <button onclick="admEditBankEdit()" style="background:none;border:none;color:#1D9E75;cursor:pointer;font-size:15px" title="Edit">✎</button>
+
+          <button onclick="admDeleteBankSel()" style="background:none;border:none;color:#C62828;cursor:pointer;font-size:14px" title="Delete">✕</button>
+
+          <button onclick="admShowAddBank()" style="background:#1D9E75;color:#fff;border:none;border-radius:5px;padding:3px 8px;font-size:10px;font-weight:600;cursor:pointer;white-space:nowrap">+ Add</button>
+
+        </div>
+
+        <div id="adm-ed-bank-info" style="margin-top:4px;font-size:11px;color:#888"></div>
+
+      </div>
+
+      <div id="adm-ed-bank-form" style="display:none;margin-top:6px;background:#fff;border:1px solid #e4e3df;border-radius:8px;padding:10px">
+
+        <label>A/C NUMBER</label><input type="text" id="adm-ed-acct" placeholder="Account number">
+
+        <div id="adm-ed-acct-confirm-wrap"><label style="margin-top:6px">RE-ENTER A/C NUMBER</label><input type="text" id="adm-ed-acct-confirm" placeholder="Re-enter account number"></div>
+
+        <div class="row" style="margin-top:6px"><div><label>IFSC CODE</label><input type="text" id="adm-ed-ifsc" placeholder="IFSC code" style="text-transform:uppercase"></div><div><label>HOLDER NAME</label><input type="text" id="adm-ed-holder" placeholder="Account holder name"></div></div>
+
+        <label style="margin-top:6px">LABEL (optional)</label><input type="text" id="adm-ed-bank-label" placeholder="e.g. SBI Main">
+
+        <input type="hidden" id="adm-ed-bank-edit-id" value="">
+
+        <div style="display:flex;gap:8px;margin-top:8px">
+
+          <button class="btn-save" style="height:32px;font-size:12px;padding:0 14px" onclick="admSaveBankAccount()">Save</button>
+
+          <button class="btn-cancel" style="height:32px;font-size:12px;padding:0 14px" onclick="document.getElementById('adm-ed-bank-form').style.display='none'">Cancel</button>
+
+        </div>
+
+      </div>
+
+    </div>
+
+    <label>GRADE</label>
+
+    <input type="text" id="adm-ed-grade">
+
+    <div class="row" style="margin-top:8px">
+
+      <div><label>BAGS</label><input type="text" id="adm-ed-bags" inputmode="numeric" oninput="sanitizeInt(this)"></div>
+
+      <div><label>LITRE</label><input type="text" id="adm-ed-litre" inputmode="numeric" oninput="sanitizeInt(this)"></div>
+
+    </div>
+
+    <label>NET WEIGHT (KG)</label>
+
+    <input type="text" id="adm-ed-qty" inputmode="decimal" oninput="sanitizeDec(this);calcAdmGross()">
+
+    <div class="row" style="margin-top:8px">
+
+      <div><label>SAMPLE WT</label><input type="text" id="adm-ed-sample" readonly style="background:#f5f5f5;color:#888"></div>
+
+      <div><label>GROSS WT</label><input type="text" id="adm-ed-gross" readonly style="background:#f5f5f5;color:#1D9E75;font-weight:700"></div>
+
+    </div>
+
+    <div id="adm-ed-moisture-wrap" style="display:none;margin-top:8px"><label>MOISTURE %</label><input type="text" id="adm-ed-moisture" inputmode="decimal" oninput="sanitizeDec(this)"></div>
+
+    <div class="adm-err" id="adm-ed-err"></div>
+
+    <div class="modal-btns">
+
+      <button class="btn-cancel" onclick="closeAdmEdit()">Cancel</button>
+
+      <button class="btn-save" onclick="saveAdmEdit()">Save changes</button>
+
+    </div>
+
+  </div>
+
+</div>
+
+
+
+<script>
+const BASE = window.location.origin;
+let authToken = localStorage.getItem('auction_token') || '';
+let currentUser = null;
+let currentAuctionId = null;
+let refreshTimer = null;
+let currentPage = 1;
+let PAGE_SIZE = 20;
+
+function authHeaders() {
+  return { 'Authorization': 'Bearer ' + authToken, 'Content-Type': 'application/json' };
+}
+
+// Global 401 interceptor — catches expired tokens on ANY API call
+let _handlingLogout = false;
+const _origFetch = window.fetch;
+window.fetch = async function(...args) {
+  const res = await _origFetch.apply(this, args);
+  const url = typeof args[0] === 'string' ? args[0] : args[0]?.url || '';
+  if (url.includes('/api/') && !url.includes('/api/auth/login') && !url.includes('/api/config') && !url.includes('/api/status') && res.status === 401 && !_handlingLogout) {
+    _handlingLogout = true;
+    authToken = '';
+    localStorage.removeItem('auction_token');
+    document.getElementById('dashboard').classList.add('hidden');
+    document.getElementById('login-page').classList.remove('hidden');
+    if (refreshTimer) clearInterval(refreshTimer);
+    _handlingLogout = false;
+  }
+  return res;
+};
+
+// ── LOGIN / LOGOUT ──
+
+async function doLogin(force) {
+  const username = document.getElementById('login-user').value.trim();
+  const password = document.getElementById('login-pass').value;
+  const errEl = document.getElementById('login-error');
+  errEl.innerHTML = '';
+
+  if (!username || !password) { errEl.textContent = 'Enter username and password'; return; }
+
+  try {
+    const res = await fetch(`${BASE}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password, force: force || false }),
+    });
+    const data = await res.json();
+    if (res.status === 409 && data.error === 'already_logged_in') {
+      errEl.innerHTML = data.message + '<br><button onclick="doLogin(true)" style="margin-top:8px;background:#1D9E75;color:#fff;border:none;border-radius:8px;padding:6px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Yes, switch to this device</button>';
+      return;
+    }
+    if (!res.ok) { errEl.textContent = data.error || 'Login failed'; return; }
+
+    if (data.user.role !== 'admin') {
+      errEl.textContent = 'Admin access required';
+      return;
+    }
+
+    authToken = data.token;
+    currentUser = data.user;
+    localStorage.setItem('auction_token', authToken);
+    showDashboard();
+  } catch (e) {
+    errEl.textContent = 'Could not connect to server';
+  }
+}
+
+// Dark mode
+function showDataSub(id, el) {
+  document.getElementById('data-exports').style.display = id === 'exports' ? 'block' : 'none';
+  document.getElementById('data-reports').style.display = id === 'reports' ? 'block' : 'none';
+  document.querySelectorAll('.data-sub').forEach(b => b.classList.remove('active'));
+  if (el) el.classList.add('active');
+  if (id === 'reports') populateReportAuctions();
+}
+
+function toggleAdminDark() {
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  document.documentElement.setAttribute('data-theme', isDark ? '' : 'dark');
+  var lbl = document.getElementById('dm-lbl');
+  if (lbl) lbl.textContent = isDark ? 'Dark Mode' : 'Light Mode';
+  localStorage.setItem('admin_dark', isDark ? '' : 'dark');
+}
+(function() {
+  const saved = localStorage.getItem('admin_dark');
+  if (saved === 'dark') {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    setTimeout(function() { var b = document.getElementById('adm-dm-btn'); if (b) b.textContent = '☀️'; }, 0);
+  }
+})();
+
+function doLogout() {
+  fetch(`${BASE}/api/auth/logout`, { method: 'POST', headers: authHeaders() }).catch(() => {});
+  authToken = '';
+  currentUser = null;
+  localStorage.removeItem('auction_token');
+  document.getElementById('dashboard').classList.add('hidden');
+  document.getElementById('login-page').classList.remove('hidden');
+  document.getElementById('login-pass').value = '';
+}
+
+async function checkExistingToken() {
+  if (!authToken) return;
+  try {
+    const res = await fetch(`${BASE}/api/auth/me`, { headers: authHeaders() });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.user.role === 'admin') {
+        currentUser = data.user;
+        showDashboard();
+        return;
+      }
+    }
+  } catch (e) {}
+  authToken = '';
+  localStorage.removeItem('auction_token');
+}
+
+let cachedBranches = [];
+
+async function showDashboard() {
+  document.getElementById('login-page').classList.add('hidden');
+  document.getElementById('dashboard').classList.remove('hidden');
+  document.getElementById('logged-in-user').textContent = currentUser.username;
+
+  // Load config once (branches for dropdowns, title)
+  try {
+    const cfgRes = await fetch(`${BASE}/api/config`);
+    const cfgData = await cfgRes.json();
+    cachedBranches = cfgData.branches || [];
+    populateBranchDropdown();
+    // Update title everywhere
+    const title = cfgData.title || 'Spice Auction';
+    document.getElementById('admin-title').textContent = title;
+    document.title = title + ' — Admin';
+    editTimeoutMinutes = cfgData.editTimeout || 0;
+    PAGE_SIZE = cfgData.pageLimit || 20;
+    document.getElementById('stat-auction-label').textContent = cfgData.tradeTileTitle || 'Active Trade';
+    loadLogo();
+  } catch(e) { console.error('Config load failed:', e); }
+
+  loadStatus();
+  loadAuctions();
+  startAutoRefresh();
+}
+
+function populateBranchDropdown() {
+  const brSel = document.getElementById('new-user-branch');
+  if (brSel) {
+    brSel.innerHTML = '<option value="">No branch</option>' +
+      cachedBranches.map(b => `<option value="${b.value}">${b.value}</option>`).join('');
+  }
+}
+
+// ── TABS ──
+
+function togglePwdVis(id, btn) {
+  var inp = document.getElementById(id);
+  if (inp.type === 'password') { inp.type = 'text'; btn.textContent = '🙈'; }
+  else { inp.type = 'password'; btn.textContent = '👁'; }
+}
+function switchTab(tab) {
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  var items = document.querySelectorAll('.sidebar-nav .nav-item');
+  var tabMap = { lots: 0, trades: 1, data: 2, users: 3, settings: 4, tools: 5, profile: 6 };
+  var idx = tabMap[tab];
+  if (idx !== undefined && items[idx]) items[idx].classList.add('active');
+
+  ['tab-lots','tab-trades','tab-data','tab-users','tab-settings','tab-tools','tab-profile'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.classList.add('hidden');
+  });
+  var target = document.getElementById('tab-' + tab);
+  if (target) target.classList.remove('hidden');
+
+  var titles = { lots:'Lots', trades:'Trades', data:'Data', users:'Users', settings:'Settings', tools:'Tools', profile:'My Profile' };
+  var titleEl = document.getElementById('topbar-title');
+  if (titleEl) titleEl.textContent = titles[tab] || tab;
+
+  if (tab === 'trades') { loadConfig().then(() => loadTrades()); var d = document.getElementById('ct-date'); if (d && !d.value) d.valueAsDate = new Date(); }
+  if (tab === 'data') { loadExportAuctions(); populateReportAuctions(); }
+  if (tab === 'users') { loadUsers(); }
+  if (tab === 'settings') { loadConfig(); }
+  if (tab === 'tools') { loadActiveUsers(); }
+  if (tab === 'profile') { loadLoginHistory(); }
+
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebar-backdrop').classList.remove('open');
+}
+
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('sidebar-backdrop').classList.toggle('open');
+}
+
+function showTradeSub(id, btn) {
+  document.getElementById('trade-create').style.display = id === 'create' ? 'block' : 'none';
+  document.getElementById('trade-manage').style.display = id === 'manage' ? 'block' : 'none';
+  document.querySelectorAll('#tab-trades .data-sub').forEach(function(b) { b.classList.remove('active'); });
+  if (btn) btn.classList.add('active');
+  if (id === 'manage') loadTrades();
+}
+
+function showStgSub(id, btn) {
+  document.querySelectorAll('.stg-panel').forEach(function(p) { p.classList.remove('active'); });
+  document.querySelectorAll('.stg-sub').forEach(function(b) { b.classList.remove('active'); });
+  var el = document.getElementById('stg-' + id);
+  if (el) el.classList.add('active');
+  if (btn) btn.classList.add('active');
+}
+
+// ── CONFIG MANAGEMENT ──
+
+let editTimeoutMinutes = 0;
+
+async function loadConfig() {
+  try {
+    const res = await fetch(`${BASE}/api/config`);
+    const data = await res.json();
+
+    document.getElementById('cfg-title').value = data.title || 'Spice Auction';
+    editTimeoutMinutes = data.editTimeout || 0;
+    document.getElementById('cfg-edit-timeout').value = editTimeoutMinutes || '';
+    const editEnabledEl = document.getElementById('cfg-edit-enabled');
+    if (editEnabledEl) editEnabledEl.checked = data.editEnabled !== false;
+    const showUsernameEl = document.getElementById('cfg-show-username');
+    if (showUsernameEl) showUsernameEl.checked = data.showUsername === true;
+    const sampleWeightEl = document.getElementById('cfg-sample-weight');
+    if (sampleWeightEl) sampleWeightEl.value = data.sampleWeight || 0;
+    const showMoistureEl = document.getElementById('cfg-show-moisture');
+    if (showMoistureEl) showMoistureEl.checked = data.showMoisture === true;
+    const acctMaskEl = document.getElementById('cfg-acct-mask');
+    if (acctMaskEl) acctMaskEl.value = data.acctMask || 'none';
+    const defaultLitreEl = document.getElementById('cfg-default-litre');
+    if (defaultLitreEl) defaultLitreEl.value = data.defaultLitre || '';
+    // Labels
+    if (data.labels && Object.keys(data.labels).length) currentLabels = { ...DEFAULT_LABELS, ...data.labels };
+    renderLabelsGrid();
+    const tradeTileEl = document.getElementById('cfg-trade-tile');
+    if (tradeTileEl) tradeTileEl.value = data.tradeTileTitle || 'Active Trade';
+    document.getElementById('stat-auction-label').textContent = data.tradeTileTitle || 'Active Trade';
+    // Logo
+    loadLogo();
+    PAGE_SIZE = data.pageLimit || 20;
+    const pageLimitEl = document.getElementById('cfg-page-limit');
+    if (pageLimitEl) pageLimitEl.value = PAGE_SIZE;
+
+    cachedBranches = data.branches || [];
+    populateBranchDropdown();
+
+    document.getElementById('branches-list').innerHTML = cachedBranches.map(b =>
+      `<div class="config-item"><span>${b.value}</span><button class="cfg-del" onclick="deleteConfig(${b.id},'${b.value}','branch')" title="Delete">&times;</button></div>`
+    ).join('') || '<div style="padding:12px;color:#888;text-align:center;font-size:14px">No branches</div>';
+
+    document.getElementById('crops-list').innerHTML = (data.cropTypes || []).map(c =>
+      `<div class="config-item"><span>${c.value}</span><button class="cfg-del" onclick="deleteConfig(${c.id},'${c.value}','crop_type')" title="Delete">&times;</button></div>`
+    ).join('') || '<div style="padding:12px;color:#888;text-align:center;font-size:14px">No crop types</div>';
+
+    // Populate create trade crop dropdown
+    const ctCrop = document.getElementById('ct-crop');
+    if (ctCrop) {
+      ctCrop.innerHTML = (data.cropTypes || []).map(c => `<option value="${c.value}">${c.value}</option>`).join('');
+    }
+    // Set today's date
+    const ctDate = document.getElementById('ct-date');
+    if (ctDate && !ctDate.value) ctDate.valueAsDate = new Date();
+  } catch (e) { console.error('Failed to load config', e); }
+}
+
+async function saveEditTimeout() {
+  const val = document.getElementById('cfg-edit-timeout').value.trim();
+  const msgEl = document.getElementById('timeout-msg');
+  msgEl.textContent = '';
+  const minutes = parseInt(val) || 0;
+  try {
+    const res = await fetch(`${BASE}/api/config`, {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({ type: 'edit_timeout', value: String(minutes) })
+    });
+    if (res.ok) {
+      editTimeoutMinutes = minutes;
+      msgEl.textContent = minutes > 0 ? `Edit locked after ${minutes} min` : 'No time limit';
+      msgEl.className = 'user-msg success';
+    } else {
+      const d = await res.json();
+      msgEl.textContent = d.error || 'Failed';
+      msgEl.className = 'user-msg error';
+    }
+  } catch (e) { msgEl.textContent = 'Failed to save'; msgEl.className = 'user-msg error'; }
+}
+
+async function saveEditEnabled() {
+  const checked = document.getElementById('cfg-edit-enabled').checked;
+  const msgEl = document.getElementById('edit-enabled-msg');
+  msgEl.textContent = '';
+  try {
+    const res = await fetch(`${BASE}/api/config`, {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({ type: 'edit_enabled', value: String(checked) })
+    });
+    if (res.ok) {
+      msgEl.textContent = checked ? 'Edit enabled' : 'Edit disabled for users';
+      msgEl.className = 'user-msg success';
+    }
+  } catch (e) { msgEl.textContent = 'Failed'; msgEl.className = 'user-msg error'; }
+}
+
+async function saveShowUsername() {
+  const checked = document.getElementById('cfg-show-username').checked;
+  const msgEl = document.getElementById('show-username-msg');
+  msgEl.textContent = '';
+  try {
+    const res = await fetch(`${BASE}/api/config`, {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({ type: 'show_username', value: String(checked) })
+    });
+    if (res.ok) {
+      msgEl.textContent = checked ? 'Username shown in reports' : 'Username hidden';
+      msgEl.className = 'user-msg success';
+    }
+  } catch (e) { msgEl.textContent = 'Failed'; msgEl.className = 'user-msg error'; }
+}
+
+async function saveSampleWeight() {
+  const val = parseFloat(document.getElementById('cfg-sample-weight').value) || 0;
+  const msgEl = document.getElementById('sample-weight-msg');
+  msgEl.textContent = '';
+  if (val < 0) { msgEl.textContent = 'Cannot be negative'; msgEl.className = 'user-msg error'; return; }
+  try {
+    const res = await fetch(`${BASE}/api/config`, {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({ type: 'sample_weight', value: String(val) })
+    });
+    if (res.ok) {
+      msgEl.textContent = 'Sample weight set to ' + val.toFixed(3) + ' kg';
+      msgEl.className = 'user-msg success';
+    }
+  } catch (e) { msgEl.textContent = 'Failed'; msgEl.className = 'user-msg error'; }
+}
+
+async function saveDefaultLitre() {
+  const val = document.getElementById('cfg-default-litre').value.trim();
+  const msgEl = document.getElementById('default-litre-msg');
+  msgEl.textContent = '';
+  try {
+    const res = await fetch(`${BASE}/api/config`, {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({ type: 'default_litre', value: val || '0' })
+    });
+    if (res.ok) {
+      msgEl.textContent = val ? 'Default litre set to ' + val : 'Default litre cleared';
+      msgEl.className = 'user-msg success';
+    }
+  } catch (e) { msgEl.textContent = 'Failed'; msgEl.className = 'user-msg error'; }
+}
+
+async function saveShowMoisture() {
+  const checked = document.getElementById('cfg-show-moisture').checked;
+  const msgEl = document.getElementById('show-moisture-msg');
+  msgEl.textContent = '';
+  try {
+    const res = await fetch(`${BASE}/api/config`, {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({ type: 'show_moisture', value: String(checked) })
+    });
+    if (res.ok) {
+      msgEl.textContent = checked ? 'Moisture field visible' : 'Moisture field hidden';
+      msgEl.className = 'user-msg success';
+    }
+  } catch (e) { msgEl.textContent = 'Failed'; msgEl.className = 'user-msg error'; }
+}
+
+async function saveAcctMask() {
+  const val = document.getElementById('cfg-acct-mask').value;
+  const msgEl = document.getElementById('acct-mask-msg');
+  msgEl.textContent = '';
+  try {
+    const res = await fetch(`${BASE}/api/config`, {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({ type: 'acct_mask', value: val })
+    });
+    if (res.ok) {
+      const labels = { none: 'No masking', show_last4: 'Show last 4 only', show_first4_last4: 'Show first & last 4', show_last4_star: 'Mask all but last 4' };
+      msgEl.textContent = labels[val] || 'Saved';
+      msgEl.className = 'user-msg success';
+    }
+  } catch (e) { msgEl.textContent = 'Failed'; msgEl.className = 'user-msg error'; }
+}
+
+// ── LABELS CONFIG ──
+const DEFAULT_LABELS = {
+  lot_no: 'Lot No', seller: 'Seller', grade: 'Grade', bags: 'Bags',
+  litre_wt: 'Litre Wt', net_wt: 'Net Wt (KG)', sample_wt: 'Sample Wt',
+  gross_wt: 'Gross Wt', moisture: 'Moisture %', place: 'Place',
+  gstin: 'GSTIN/CR', acct_no: 'A/C No', ifsc: 'IFSC', holder_name: 'Holder Name'
+};
+let currentLabels = { ...DEFAULT_LABELS };
+
+function renderLabelsGrid() {
+  const grid = document.getElementById('labels-grid');
+  grid.innerHTML = Object.entries(DEFAULT_LABELS).map(([key, def]) => {
+    const val = currentLabels[key] || def;
+    return `<div style="display:flex;flex-direction:column;gap:2px">
+      <label style="font-size:10px;font-weight:600;color:#888;text-transform:uppercase">${def}</label>
+      <input type="text" value="${val}" data-label-key="${key}" class="field-input" style="height:32px;font-size:13px">
+    </div>`;
+  }).join('');
+}
+
+async function saveLabels() {
+  const msgEl = document.getElementById('labels-msg');
+  msgEl.textContent = '';
+  const inputs = document.querySelectorAll('#labels-grid input[data-label-key]');
+  const labels = {};
+  inputs.forEach(inp => { labels[inp.dataset.labelKey] = inp.value.trim() || DEFAULT_LABELS[inp.dataset.labelKey]; });
+  try {
+    const res = await fetch(`${BASE}/api/config`, {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({ type: 'labels', value: JSON.stringify(labels) })
+    });
+    if (res.ok) {
+      currentLabels = labels;
+      msgEl.textContent = 'Labels saved — changes apply to all users';
+      msgEl.className = 'user-msg success';
+    }
+  } catch (e) { msgEl.textContent = 'Failed'; msgEl.className = 'user-msg error'; }
+}
+
+function resetLabels() {
+  if (!confirm('Reset all labels to defaults?')) return;
+  currentLabels = { ...DEFAULT_LABELS };
+  renderLabelsGrid();
+  saveLabels();
+}
+
+async function saveTradeTileTitle() {
+  const val = document.getElementById('cfg-trade-tile').value.trim() || 'Active Trade';
+  const msgEl = document.getElementById('trade-tile-msg');
+  msgEl.textContent = '';
+  try {
+    const res = await fetch(`${BASE}/api/config`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ type: 'trade_tile_title', value: val }) });
+    if (res.ok) { document.getElementById('stat-auction-label').textContent = val; msgEl.textContent = 'Saved'; msgEl.className = 'user-msg success'; }
+  } catch (e) { msgEl.textContent = 'Failed'; msgEl.className = 'user-msg error'; }
+}
+
+function loadLogo() {
+  const img = document.getElementById('admin-logo');
+  const preview = document.getElementById('logo-preview');
+  const loginLogo = document.getElementById('admin-login-logo');
+  fetch(`${BASE}/api/logo`).then(r => { if (r.ok) { const url = `${BASE}/api/logo?t=${Date.now()}`; [img, preview, loginLogo].forEach(el => { if(el) { el.src = url; el.style.display = el.classList.contains('login-logo-img') ? 'block' : 'inline'; } }); } else { [img, preview, loginLogo].forEach(el => { if(el) el.style.display = 'none'; }); } }).catch(() => {});
+}
+
+async function uploadLogo() {
+  const f = document.getElementById('logo-file');
+  const msgEl = document.getElementById('logo-msg');
+  msgEl.textContent = '';
+  if (!f.files.length) { msgEl.textContent = 'Select a file'; msgEl.className = 'user-msg error'; return; }
+  const fd = new FormData(); fd.append('logo', f.files[0]);
+  try {
+    const r = await fetch(`${BASE}/api/logo`, { method: 'POST', headers: { 'Authorization': 'Bearer ' + authToken }, body: fd });
+    if (r.ok) { msgEl.textContent = 'Logo uploaded'; msgEl.className = 'user-msg success'; loadLogo(); }
+    else { const d = await r.json(); msgEl.textContent = d.error || 'Failed'; msgEl.className = 'user-msg error'; }
+  } catch (e) { msgEl.textContent = 'Failed'; msgEl.className = 'user-msg error'; }
+}
+
+async function removeLogo() {
+  if (!confirm('Remove logo?')) return;
+  try { await fetch(`${BASE}/api/logo`, { method: 'DELETE', headers: authHeaders() }); loadLogo(); document.getElementById('logo-msg').textContent = ''; } catch (e) {}
+}
+
+// Bank popover — admin sees full PII
+function maskPII(val, show) { show = show || 4; if (!val || val.length <= show) return val || '—'; return '●'.repeat(val.length - show) + val.slice(-show); }
+function showBankPop(e, name, acct, ifsc, tel, cr) {
+  e.stopPropagation();
+  const pop = document.getElementById('bank-pop');
+  // Close if already showing same seller
+  if (pop.style.display === 'block' && pop._currentName === name) {
+    pop.style.display = 'none';
+    pop._currentName = null;
+    return;
+  }
+  pop._currentName = name;
+  document.getElementById('bp-name').textContent = name;
+  document.getElementById('bp-acct').textContent = acct || '—';
+  document.getElementById('bp-ifsc').textContent = ifsc || '—';
+  document.getElementById('bp-tel').textContent = tel || '—';
+  document.getElementById('bp-cr').textContent = cr || '—';
+  pop.style.display = 'block';
+  const rect = e.target.getBoundingClientRect();
+  pop.style.top = Math.min(rect.bottom + 4, window.innerHeight - 180) + 'px';
+  pop.style.left = Math.min(rect.left, window.innerWidth - 290) + 'px';
+  // Remove old listener, add new
+  document.removeEventListener('click', closeBankPop);
+  setTimeout(() => document.addEventListener('click', closeBankPop), 10);
+}
+function closeBankPop() {
+  document.getElementById('bank-pop').style.display = 'none';
+  document.getElementById('bank-pop')._currentName = null;
+  document.removeEventListener('click', closeBankPop);
+}
+
+async function savePageLimit() {
+  const val = parseInt(document.getElementById('cfg-page-limit').value) || 20;
+  const limit = Math.max(5, Math.min(100, val));
+  const msgEl = document.getElementById('page-limit-msg');
+  msgEl.textContent = '';
+  try {
+    const res = await fetch(`${BASE}/api/config`, {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({ type: 'page_limit', value: String(limit) })
+    });
+    if (res.ok) {
+      PAGE_SIZE = limit;
+      currentPage = 1;
+      msgEl.textContent = 'Showing ' + limit + ' lots per page';
+      msgEl.className = 'user-msg success';
+      if (currentAuctionId) loadLots();
+    }
+  } catch (e) { msgEl.textContent = 'Failed'; msgEl.className = 'user-msg error'; }
+}
+
+async function saveTitle() {
+  const value = document.getElementById('cfg-title').value.trim();
+  const msgEl = document.getElementById('title-msg');
+  msgEl.textContent = '';
+  if (!value) { msgEl.textContent = 'Enter a title'; msgEl.className = 'user-msg error'; return; }
+  try {
+    const res = await fetch(`${BASE}/api/config`, {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({ type: 'title', value })
+    });
+    if (res.ok) {
+      msgEl.textContent = 'Title saved!';
+      msgEl.className = 'user-msg success';
+      // Update title everywhere immediately
+      document.getElementById('admin-title').textContent = value;
+      document.getElementById('login-title').textContent = value;
+      document.title = value + ' — Admin';
+    } else {
+      const d = await res.json();
+      msgEl.textContent = d.error || 'Failed';
+      msgEl.className = 'user-msg error';
+    }
+  } catch (e) { msgEl.textContent = 'Failed to save'; msgEl.className = 'user-msg error'; }
+}
+
+async function addConfig(type) {
+  const inputId = type === 'branch' ? 'new-branch' : 'new-crop';
+  const msgId = type === 'branch' ? 'branch-msg' : 'crop-msg';
+  const value = document.getElementById(inputId).value.trim();
+  const msgEl = document.getElementById(msgId);
+  msgEl.textContent = '';
+
+  if (!value) { msgEl.textContent = 'Enter a value'; msgEl.className = 'user-msg error'; return; }
+
+  try {
+    const res = await fetch(`${BASE}/api/config`, {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({ type, value })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      msgEl.textContent = `Added "${data.value}"`;
+      msgEl.className = 'user-msg success';
+      document.getElementById(inputId).value = '';
+      loadConfig();
+    } else {
+      msgEl.textContent = data.error || 'Failed';
+      msgEl.className = 'user-msg error';
+    }
+  } catch (e) { msgEl.textContent = 'Failed to add'; msgEl.className = 'user-msg error'; }
+}
+
+async function deleteConfig(id, value, type) {
+  if (!confirm(`Delete "${value}"?`)) return;
+  try {
+    await fetch(`${BASE}/api/config/${id}`, { method: 'DELETE', headers: authHeaders() });
+    loadConfig();
+  } catch (e) {}
+}
+
+// ── DATA LOADING ──
+
+async function loadStatus() {
+  try {
+    const res = await fetch(`${BASE}/api/status`);
+    const data = await res.json();
+    document.getElementById('server-url').textContent = data.connectUrl;
+    document.getElementById('trader-count').textContent = data.traders;
+  } catch (e) { document.getElementById('server-url').textContent = 'offline'; }
+}
+
+async function loadAuctions() {
+  try {
+    const res = await fetch(`${BASE}/api/auctions`, { headers: authHeaders() });
+    const data = await res.json();
+    cachedAuctions = data.auctions || [];
+    const sel = document.getElementById('auction-select');
+    const prev = currentAuctionId || sel.value;
+    sel.innerHTML = '<option value="">Select auction...</option>';
+    data.auctions.forEach(a => {
+      const opt = document.createElement('option');
+      opt.value = a.id;
+      opt.textContent = `Trade #${a.ano} — ${fmtDate(a.date)} — ${a.crop_type} (${a.lot_count} lots)`;
+      sel.appendChild(opt);
+    });
+    // Restore previous selection
+    if (prev) {
+      sel.value = prev;
+      currentAuctionId = sel.value || null;
+    }
+    // Auto-select first if nothing selected
+    if (!sel.value && data.auctions.length > 0) {
+      sel.value = data.auctions[0].id;
+      currentAuctionId = data.auctions[0].id;
+    }
+    if (currentAuctionId) {
+      loadLots();
+      loadAllocStats();
+    }
+    loadTrades();
+  } catch (e) {}
+}
+
+let admEditId = null;
+const ICO_EDIT = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 000-1.41l-2.34-2.34a1 1 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>';
+const ICO_DEL = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>';
+const ICO_PRINT = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>';
+function fmtDate(d){if(!d)return'';const p=d.split('-');return p.length===3?p[2]+'/'+p[1]+'/'+p[0]:d}
+
+function isEditLocked(createdAt) {
+  if (!editTimeoutMinutes || editTimeoutMinutes <= 0) return false;
+  if (!createdAt) return false;
+  const created = new Date(createdAt.replace(' ', 'T'));
+  const now = new Date();
+  const diffMin = (now - created) / (1000 * 60);
+  return diffMin > editTimeoutMinutes;
+}
+
+async function loadLots() {
+  if (!currentAuctionId) return;
+  try {
+    const filterBranch = document.getElementById('filter-branch').value;
+    const filterUser = document.getElementById('filter-user').value;
+    let url = `${BASE}/api/lots?auction_id=${currentAuctionId}&page=${currentPage}&limit=${PAGE_SIZE}`;
+    if (filterBranch) url += `&branch=${encodeURIComponent(filterBranch)}`;
+    if (filterUser) url += `&user_id=${encodeURIComponent(filterUser)}`;
+    const filterSeller = document.getElementById('filter-seller').value.trim();
+    if (filterSeller) url += `&seller=${encodeURIComponent(filterSeller)}`;
+
+    const res = await fetch(url, { headers: authHeaders() });
+    const data = await res.json();
+    document.getElementById('stat-lots').textContent = data.stats.lotCount;
+    document.getElementById('stat-qty').textContent = data.stats.totalQty.toFixed(3) + ' kg';
+    document.getElementById('stat-bags').textContent = data.stats.totalBags;
+    const sel = document.getElementById('auction-select');
+    const opt = sel.options[sel.selectedIndex];
+    document.getElementById('stat-auction').textContent = opt ? opt.textContent.split('(')[0].trim() : '—';
+
+    if (data.filters) {
+      const bSel = document.getElementById('filter-branch');
+      const uSel = document.getElementById('filter-user');
+      const prevB = bSel.value, prevU = uSel.value;
+      bSel.innerHTML = '<option value="">All branches</option>' +
+        (data.filters.branches || []).map(b => `<option value="${b}"${b===prevB?' selected':''}>${b}</option>`).join('');
+      uSel.innerHTML = '<option value="">All users</option>' +
+        (data.filters.users || []).map(u => `<option value="${u}"${u===prevU?' selected':''}>${u}</option>`).join('');
+    }
+
+    const tbody = document.getElementById('lots-body');
+    const cardsDiv = document.getElementById('lots-cards');
+    const actBar = document.getElementById('lot-actions-bar');
+    const pgDiv = document.getElementById('pagination');
+    document.getElementById('select-all').checked = false;
+
+    if (data.stats.lotCount === 0) {
+      tbody.innerHTML = '<tr><td colspan="11" class="empty-state"><div class="icon">&#128722;</div><p>No lots found</p></td></tr>';
+      cardsDiv.innerHTML = '<div style="text-align:center;padding:32px;color:#888">No lots found</div>';
+      actBar.style.display = 'none';
+      pgDiv.style.display = 'none';
+      return;
+    }
+
+    actBar.style.display = 'flex';
+    _totalLots = data.stats.lotCount;
+
+    // Desktop table
+    tbody.innerHTML = data.lots.map(l => {
+
+      return `<tr>
+      <td><input type="checkbox" class="lot-cb" value="${l.id}" onchange="updateSelCount()"></td>
+      <td class="lot-no">${l.lot_no}</td>
+      <td><strong><span class="seller-link" onclick="showBankPop(event,'${(l.trader_name||'').replace(/'/g,"\\'")}','${l.acctnum||''}','${l.ifsc||''}','${l.tel||''}','${l.cr||''}')">${l.trader_name}</span></strong><br><span style="font-size:11px;color:#888;">${l.ppla||''}, ${l.pin||''}</span></td>
+      <td>${l.branch}</td>
+      <td>${l.grade}</td>
+      <td>${l.bags}</td><td>${l.litre}</td><td><strong>${Number(l.qty).toFixed(3)}</strong></td>
+      <td><span class="user-badge">${l.user_id}</span></td>
+      <td style="font-size:11px;color:#888;">${l.created_at?l.created_at.split(' ')[1]||l.created_at:''}</td>
+      <td style="white-space:nowrap"><button class="ico-btn pr" onclick="printLot(${l.id})" title="Print receipt">${ICO_PRINT}</button><button class="ico-btn ed" title="Edit lot" onclick="openAdmEdit(${l.id},'${String(l.lot_no).replace(/'/g,"\\'")}','${(l.trader_name||'').replace(/'/g,"\\'")}','${String(l.grade||'').replace(/'/g,"\\'")}',${l.bags},${l.litre},${l.qty},${l.trader_id},${l.bank_id||'null'})">${ICO_EDIT}</button><button class="ico-btn dl" title="Delete lot" onclick="adminDeleteLot(${l.id},'${String(l.lot_no).replace(/'/g,"\\'")}')">${ICO_DEL}</button>
+      </td>
+    </tr>`}).join('');
+
+    // Mobile cards
+    cardsDiv.innerHTML = data.lots.map(l => {
+      const time = l.created_at ? l.created_at.split(' ')[1] || '' : '';
+      const loc = [l.ppla||'', l.pin||''].filter(Boolean).join(', ');
+
+      return `<div class="adm-lot-card">
+        <div class="adm-lot-hdr">
+          <span class="adm-lot-num">#${l.lot_no}</span>
+          <span class="adm-lot-user">${l.user_id}</span>
+        </div>
+        <div class="adm-lot-name"><span class="seller-link" onclick="showBankPop(event,'${(l.trader_name||'').replace(/'/g,"\\'")}','${l.acctnum||''}','${l.ifsc||''}','${l.tel||''}','${l.cr||''}')">${l.trader_name}</span></div>
+        <div class="adm-lot-loc">${l.branch} — ${loc}</div>
+        <div class="adm-lot-grid">
+          <div class="adm-lot-field"><div class="fv">${l.grade}</div><div class="fl">Grade</div></div>
+          <div class="adm-lot-field"><div class="fv">${l.bags}</div><div class="fl">Bags</div></div>
+          <div class="adm-lot-field"><div class="fv">${l.litre}</div><div class="fl">Litre</div></div>
+          <div class="adm-lot-field qty-field"><div class="fv">${Number(l.qty).toFixed(3)}</div><div class="fl">Qty (kg)</div></div>
+        </div>
+        <div class="adm-lot-acts">
+          <label><input type="checkbox" class="lot-cb" value="${l.id}" onchange="updateSelCount()"> Select</label>
+          <span class="adm-lot-time">${time}</span>
+          <button class="ico-btn pr" onclick="printLot(${l.id})" title="Print receipt">${ICO_PRINT}</button>
+          <button class="ico-btn ed" title="Edit lot" onclick="openAdmEdit(${l.id},'${String(l.lot_no).replace(/'/g,"\\'")}','${(l.trader_name||'').replace(/'/g,"\\'")}','${String(l.grade||'').replace(/'/g,"\\'")}',${l.bags},${l.litre},${l.qty},${l.trader_id},${l.bank_id||'null'})">${ICO_EDIT}</button><button class="ico-btn dl" title="Delete lot" onclick="adminDeleteLot(${l.id},'${String(l.lot_no).replace(/'/g,"\\'")}')">${ICO_DEL}</button>
+        </div>
+      </div>`;
+    }).join('');
+
+    // Add scroll pills inside cards
+    var scrollPill = '<div style="text-align:right;padding:4px 8px">';
+    var topPill = scrollPill + '<a onclick="this.closest(\'.lots-cards\').scrollTo({top:this.closest(\'.lots-cards\').scrollHeight,behavior:\'smooth\'})" style="display:inline-flex;align-items:center;gap:3px;font-size:10px;color:#fff;font-weight:700;cursor:pointer;background:var(--green);padding:3px 10px;border-radius:16px">⬇ Last Lot</a></div>';
+    var bottomPill = scrollPill + '<a onclick="this.closest(\'.lots-cards\').scrollTo({top:0,behavior:\'smooth\'})" style="display:inline-flex;align-items:center;gap:3px;font-size:10px;color:#fff;font-weight:700;cursor:pointer;background:var(--green);padding:3px 10px;border-radius:16px">⬆ First Lot</a></div>';
+    if (data.lots.length > 3) {
+      cardsDiv.innerHTML = topPill + cardsDiv.innerHTML + bottomPill;
+    }
+
+    // Pagination
+    const pg = data.pagination;
+    if (pg && pg.totalPages > 1) {
+      pgDiv.style.display = 'flex';
+      let pgHtml = '';
+      pgHtml += `<button class="pg-btn" onclick="goPage(1)" ${pg.page===1?'disabled':''}>&laquo;</button>`;
+      pgHtml += `<button class="pg-btn" onclick="goPage(${pg.page-1})" ${pg.page===1?'disabled':''}>&lsaquo;</button>`;
+      
+      // Show page numbers with ellipsis
+      const start = Math.max(1, pg.page - 2);
+      const end = Math.min(pg.totalPages, pg.page + 2);
+      if (start > 1) pgHtml += `<button class="pg-btn" onclick="goPage(1)">1</button>`;
+      if (start > 2) pgHtml += `<span class="pg-info">...</span>`;
+      for (let i = start; i <= end; i++) {
+        pgHtml += `<button class="pg-btn${i===pg.page?' active':''}" onclick="goPage(${i})">${i}</button>`;
+      }
+      if (end < pg.totalPages - 1) pgHtml += `<span class="pg-info">...</span>`;
+      if (end < pg.totalPages) pgHtml += `<button class="pg-btn" onclick="goPage(${pg.totalPages})">${pg.totalPages}</button>`;
+
+      pgHtml += `<button class="pg-btn" onclick="goPage(${pg.page+1})" ${pg.page===pg.totalPages?'disabled':''}>&rsaquo;</button>`;
+      pgHtml += `<button class="pg-btn" onclick="goPage(${pg.totalPages})" ${pg.page===pg.totalPages?'disabled':''}>&raquo;</button>`;
+      pgHtml += `<span class="pg-info">${(pg.page-1)*pg.limit+1}–${Math.min(pg.page*pg.limit, pg.totalItems)} of ${pg.totalItems}</span>`;
+      pgDiv.innerHTML = pgHtml;
+    } else {
+      pgDiv.style.display = 'none';
+    }
+
+    updateSelCount();
+  } catch (e) { console.error('loadLots error:', e); }
+}
+
+function goPage(p) {
+  currentPage = p;
+  loadLots();
+  // Scroll to top of table
+  const tw = document.querySelector('.lots-table-scroll');
+  if (tw) tw.scrollTop = 0;
+}
+
+// ── ADMIN LOT ACTIONS ──
+
+function toggleSelectAll(checked) {
+  document.querySelectorAll('.lot-cb').forEach(cb => cb.checked = checked);
+  updateSelCount();
+}
+
+let _totalLots = 0;
+
+function updateSelCount() {
+  // Deduplicate by value since both table and cards have checkboxes
+  const checkedValues = new Set();
+  document.querySelectorAll('.lot-cb:checked').forEach(cb => checkedValues.add(cb.value));
+  const checked = checkedValues.size;
+  document.getElementById('sel-count').textContent = checked > 0 ? checked + ' of ' + _totalLots + ' selected' : _totalLots + ' lots';
+}
+
+function getSelectedIds() {
+  const ids = new Set();
+  document.querySelectorAll('.lot-cb:checked').forEach(cb => ids.add(parseInt(cb.value)));
+  return Array.from(ids);
+}
+
+async function deleteSelected() {
+  const ids = getSelectedIds();
+  if (ids.length === 0) { alert('Select at least one lot'); return; }
+  if (!confirm('Delete ' + ids.length + ' selected lot(s)?')) return;
+  try {
+    await fetch(`${BASE}/api/lots/bulk-delete`, {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({ ids })
+    });
+    loadLots();
+    loadAuctions();
+  } catch (e) { alert('Delete failed'); }
+}
+
+async function deleteAllLots() {
+  if (!currentAuctionId) return;
+  if (!confirm('Delete ALL lots for this auction? This cannot be undone.')) return;
+  if (!confirm('Are you sure? This will permanently delete all lots.')) return;
+  try {
+    await fetch(`${BASE}/api/lots/bulk-delete`, {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({ auction_id: parseInt(currentAuctionId), all: true })
+    });
+    loadLots();
+    loadAuctions();
+  } catch (e) { alert('Delete failed'); }
+}
+
+async function adminDeleteLot(id, lotNo) {
+  if (!confirm('Delete Lot #' + lotNo + '?')) return;
+  try {
+    await fetch(`${BASE}/api/lots/${id}`, { method: 'DELETE', headers: authHeaders() });
+    loadLots();
+    loadAuctions();
+  } catch (e) { alert('Delete failed'); }
+}
+
+let admEditTraderId = null;
+let admEditBanks = [];
+
+function openAdmEdit(id, lotNo, seller, grade, bags, litre, qty, traderId, bankId) {
+  admEditId = id;
+  admEditTraderId = traderId || null;
+  document.getElementById('adm-ed-lotno-display').textContent = lotNo;
+  document.getElementById('adm-ed-lotno').value = lotNo;
+  document.getElementById('adm-ed-seller-name').textContent = seller;
+  document.getElementById('adm-ed-seller-card').style.display = 'flex';
+  document.getElementById('adm-ed-seller-search').style.display = 'none';
+  document.getElementById('adm-ed-seller-res').style.display = 'none';
+  document.getElementById('adm-ed-grade').value = grade;
+  document.getElementById('adm-ed-bags').value = bags;
+  document.getElementById('adm-ed-litre').value = litre;
+  document.getElementById('adm-ed-qty').value = Number(qty).toFixed(3);
+  document.getElementById('adm-ed-err').textContent = '';
+  document.getElementById('adm-ed-bank-form').style.display = 'none';
+  // Load sample weight from config
+  fetch(`${BASE}/api/config`).then(r=>r.json()).then(d=>{
+    const sw = d.sampleWeight || 0;
+    document.getElementById('adm-ed-sample').value = Number(sw).toFixed(3);
+    document.getElementById('adm-ed-moisture-wrap').style.display = d.showMoisture ? 'block' : 'none';
+    calcAdmGross();
+  }).catch(()=>{});
+  // Fetch lot details for moisture
+  fetch(`${BASE}/api/lots/${id}/detail`, { headers: authHeaders() }).then(r=>r.json()).then(d=>{
+    if (d.lot) {
+      if (d.lot.moisture != null) document.getElementById('adm-ed-moisture').value = d.lot.moisture;
+      else document.getElementById('adm-ed-moisture').value = '';
+    }
+  }).catch(()=>{});
+  document.getElementById('adm-edit-modal').classList.add('show');
+  if (traderId) loadAdmEditBanks(traderId, bankId);
+}
+
+function sanitizeInt(inp) {
+  var v = inp.value.replace(/[^0-9]/g, '');
+  if (v !== inp.value) inp.value = v;
+}
+function sanitizeDec(inp) {
+  var v = inp.value.replace(/[^0-9.]/g, '');
+  var parts = v.split('.');
+  if (parts.length > 2) v = parts[0] + '.' + parts.slice(1).join('');
+  if (v !== inp.value) inp.value = v;
+}
+
+function calcAdmGross() {
+  var net = parseFloat(document.getElementById('adm-ed-qty').value) || 0;
+  var sample = parseFloat(document.getElementById('adm-ed-sample').value) || 0;
+  document.getElementById('adm-ed-gross').value = (net + sample).toFixed(3);
+}
+
+function closeAdmEdit() {
+  document.getElementById('adm-edit-modal').classList.remove('show');
+  admEditId = null; admEditTraderId = null;
+}
+
+// Seller search
+function admEditSellerMode() {
+  document.getElementById('adm-ed-seller-card').style.display = 'none';
+  document.getElementById('adm-ed-seller-search').style.display = 'block';
+  document.getElementById('adm-ed-seller-input').value = '';
+  document.getElementById('adm-ed-seller-input').focus();
+}
+
+let admSelTimer;
+function searchAdmEditSeller(q) {
+  clearTimeout(admSelTimer);
+  const el = document.getElementById('adm-ed-seller-res');
+  if (q.length < 2) { el.style.display = 'none'; return; }
+  admSelTimer = setTimeout(async () => {
+    try {
+      const r = await fetch(`${BASE}/api/traders?q=${encodeURIComponent(q)}&limit=50`, { headers: authHeaders() });
+      const d = await r.json();
+      const ts = d.traders || [];
+      const qu = q.toUpperCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      el.innerHTML = ts.map((t, i) => {
+        const h = (t.name||'').replace(new RegExp('(' + qu + ')','gi'),'<mark>$1</mark>');
+        const loc = [t.ppla, t.pin].filter(Boolean).join(', ');
+        const info = [t.cr, t.tel].filter(Boolean).join(' | ');
+        return `<div style="padding:8px 10px;border-bottom:1px solid var(--border);cursor:pointer;font-size:12px" data-idx="${i}" onclick="pickAdmSeller(this)"><strong>${h}</strong><br><span style="color:var(--text3)">${loc}${info ? ' — ' + info : ''}</span></div>`;
+      }).join('') || '<div style="padding:10px;color:var(--text3);font-size:12px">No sellers found</div>';
+      el.style.display = 'block';
+      el._traders = ts;
+    } catch(e) {}
+  }, 200);
+}
+
+function pickAdmSeller(el) {
+  const traders = document.getElementById('adm-ed-seller-res')._traders;
+  const t = traders[parseInt(el.dataset.idx)];
+  if (!t) return;
+  admEditTraderId = t.id;
+  admEditBankId = null;
+  document.getElementById('adm-ed-seller-name').textContent = t.name;
+  document.getElementById('adm-ed-seller-card').style.display = 'flex';
+  document.getElementById('adm-ed-seller-search').style.display = 'none';
+  document.getElementById('adm-ed-seller-res').style.display = 'none';
+  // Auto-grade: CR. → Grade 1, GSTIN → Grade 2
+  var cr = (t.cr || '').trim();
+  var grade = '1';
+  if (cr.length > 5 && !cr.toUpperCase().startsWith('CR.')) grade = '2';
+  document.getElementById('adm-ed-grade').value = grade;
+  loadAdmEditBanks(t.id);
+}
+
+// Bank management
+async function loadAdmEditBanks(traderId, selBankId) {
+  try {
+    const r = await fetch(`${BASE}/api/traders/${traderId}/last-lot`, { headers: authHeaders() });
+    const d = await r.json();
+    admEditBanks = d.banks || [];
+    renderAdmBankList(selBankId);
+    document.getElementById('adm-ed-bank').style.display = 'block';
+  } catch(e) { document.getElementById('adm-ed-bank').style.display = 'none'; }
+}
+
+function renderAdmBankList(selBankId) {
+  const sel = document.getElementById('adm-ed-bank-select');
+  sel.innerHTML = '<option value="">No bank account</option>';
+  admEditBanks.forEach(b => {
+    const label = b.label ? ' (' + b.label + ')' : '';
+    const opt = document.createElement('option');
+    opt.value = b.id;
+    opt.textContent = b.acctnum + label;
+    if (selBankId ? b.id == selBankId : b.is_default) opt.selected = true;
+    sel.appendChild(opt);
+  });
+  onAdmBankSelect(sel);
+}
+
+function onAdmBankSelect(sel) {
+  const b = admEditBanks.find(x => x.id == sel.value);
+  if (b) {
+    var parts = ['IFSC: ' + (b.ifsc || '—')];
+    if (b.holder_name) parts.push('Holder: ' + b.holder_name);
+    document.getElementById('adm-ed-bank-info').textContent = parts.join(' | ');
+  } else { document.getElementById('adm-ed-bank-info').textContent = ''; }
+}
+
+function admEditBankEdit() {
+  const sel = document.getElementById('adm-ed-bank-select');
+  if (!sel.value) { admShowAddBank(); return; }
+  const b = admEditBanks.find(x => x.id == sel.value);
+  if (!b) return;
+  document.getElementById('adm-ed-acct').value = b.acctnum || '';
+  document.getElementById('adm-ed-acct-confirm-wrap').style.display = 'none';
+  document.getElementById('adm-ed-ifsc').value = b.ifsc || '';
+  document.getElementById('adm-ed-holder').value = b.holder_name || '';
+  document.getElementById('adm-ed-bank-label').value = b.label || '';
+  document.getElementById('adm-ed-bank-edit-id').value = b.id;
+  document.getElementById('adm-ed-bank-form').style.display = 'block';
+}
+
+function admShowAddBank() {
+  document.getElementById('adm-ed-acct').value = '';
+  document.getElementById('adm-ed-acct-confirm').value = '';
+  document.getElementById('adm-ed-acct-confirm-wrap').style.display = 'block';
+  document.getElementById('adm-ed-ifsc').value = '';
+  document.getElementById('adm-ed-holder').value = '';
+  document.getElementById('adm-ed-bank-label').value = '';
+  document.getElementById('adm-ed-bank-edit-id').value = '';
+  document.getElementById('adm-ed-bank-form').style.display = 'block';
+}
+
+async function admSaveBankAccount() {
+  if (!admEditTraderId) return;
+  const acct = document.getElementById('adm-ed-acct').value.trim();
+  const ifsc = document.getElementById('adm-ed-ifsc').value.trim().toUpperCase();
+  const label = document.getElementById('adm-ed-bank-label').value.trim();
+  const holder = document.getElementById('adm-ed-holder').value.trim();
+  const editBankId = document.getElementById('adm-ed-bank-edit-id').value;
+  const confirm = document.getElementById('adm-ed-acct-confirm').value.trim();
+  if (!acct) { alert('Enter account number'); return; }
+  if (!/^\d{9,18}$/.test(acct)) { alert('Account number must be 9-18 digits'); return; }
+  if (!editBankId && acct !== confirm) { alert('Account numbers do not match'); return; }
+  if (ifsc && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifsc)) { alert('Invalid IFSC (e.g., ICIC0003816)'); return; }
+  try {
+    let r;
+    const body = { acctnum: acct, ifsc, label, holder_name: holder };
+    if (!editBankId) body.confirm_acctnum = confirm;
+    if (editBankId) {
+      r = await fetch(`${BASE}/api/traders/${admEditTraderId}/banks/${editBankId}`, { method: 'PUT', headers: authHeaders(), body: JSON.stringify(body) });
+    } else {
+      r = await fetch(`${BASE}/api/traders/${admEditTraderId}/banks`, { method: 'POST', headers: authHeaders(), body: JSON.stringify(body) });
+    }
+    const d = await r.json();
+    if (!r.ok) { alert(d.error || 'Failed'); return; }
+    document.getElementById('adm-ed-bank-form').style.display = 'none';
+    loadAdmEditBanks(admEditTraderId);
+  } catch(e) { alert('Failed'); }
+}
+
+async function admDeleteBankSel() {
+  const sel = document.getElementById('adm-ed-bank-select');
+  if (!sel.value || !admEditTraderId) { alert('Select a bank account first'); return; }
+  if (!confirm('Delete this bank account?')) return;
+  try {
+    await fetch(`${BASE}/api/traders/${admEditTraderId}/banks/${sel.value}`, { method: 'DELETE', headers: authHeaders() });
+    loadAdmEditBanks(admEditTraderId);
+  } catch(e) {}
+}
+
+async function saveAdmEdit() {
+  const lotNo = document.getElementById('adm-ed-lotno').value.trim();
+  const grade = document.getElementById('adm-ed-grade').value.trim();
+  const bags = parseInt(document.getElementById('adm-ed-bags').value);
+  const litre = parseInt(document.getElementById('adm-ed-litre').value);
+  const qty = parseFloat(document.getElementById('adm-ed-qty').value);
+  const errEl = document.getElementById('adm-ed-err');
+  errEl.textContent = '';
+
+  if (!lotNo) { errEl.textContent = 'Enter lot number'; return; }
+  if (bags < 0) { errEl.textContent = 'Bags cannot be negative'; return; }
+  if (litre < 0) { errEl.textContent = 'Litre cannot be negative'; return; }
+  if (!qty || qty < 0) { errEl.textContent = 'Enter valid net weight'; return; }
+
+  const sampleWt = parseFloat(document.getElementById('adm-ed-sample').value) || 0;
+  const grossWt = parseFloat(document.getElementById('adm-ed-gross').value) || 0;
+  const moistureEl = document.getElementById('adm-ed-moisture');
+  const moisture = moistureEl && moistureEl.value ? parseFloat(moistureEl.value) : null;
+  if (moisture !== null && moisture < 0) { errEl.textContent = 'Moisture cannot be negative'; return; }
+
+  const body = { lot_no: lotNo, grade, bags, litre, qty, gross_weight: grossWt, sample_weight: sampleWt, moisture: moisture };
+  if (admEditTraderId) body.trader_id = admEditTraderId;
+  const bankSel = document.getElementById('adm-ed-bank-select');
+  if (bankSel) body.bank_id = bankSel.value ? parseInt(bankSel.value) : null;
+
+  try {
+    const r = await fetch(`${BASE}/api/lots/${admEditId}`, {
+      method: 'PUT', headers: authHeaders(),
+      body: JSON.stringify(body)
+    });
+    const d = await r.json();
+    if (!r.ok) { errEl.textContent = d.error || 'Failed'; return; }
+    closeAdmEdit();
+    loadLots();
+    loadAuctions();
+  } catch (e) { errEl.textContent = 'Failed to save'; }
+}
+
+async function exportFile(format) {
+  if (!currentAuctionId) { alert('Select an auction first'); return; }
+  try {
+    const res = await fetch(`${BASE}/api/export/${currentAuctionId}/${format}?token=${authToken}`);
+    if (!res.ok) { const d = await res.json().catch(()=>({})); alert(d.error || 'Export failed'); return; }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `AUCTION_${currentAuctionId}.${format}`;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  } catch (e) { alert('Export failed'); }
+}
+
+function refresh() { loadStatus(); loadAuctions(); }
+
+// ── REPORTS ──
+
+function populateReportAuctions() {
+  const sel = document.getElementById('report-auction');
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">Select trade for report...</option>';
+  cachedAuctions.filter(a => a.lot_count > 0).forEach(a => {
+    sel.innerHTML += `<option value="${a.id}">Trade #${a.ano} — ${fmtDate(a.date)} — ${a.crop_type} (${a.lot_count} lots)</option>`;
+  });
+  if (prev) sel.value = prev;
+}
+
+function switchChart(id, btn) {
+  document.querySelectorAll('.rpt-view').forEach(function(v) { v.style.display = 'none'; });
+  document.querySelectorAll('.rpt-tab').forEach(function(b) { b.classList.remove('active'); });
+  var el = document.getElementById('rpt-chart-' + id);
+  if (el) el.style.display = 'block';
+  if (btn) btn.classList.add('active');
+}
+
+async function loadReport() {
+  const aucId = document.getElementById('report-auction').value;
+  const content = document.getElementById('report-content');
+  if (!aucId) { content.style.display = 'none'; return; }
+  content.style.display = 'block';
+
+  try {
+    const r = await fetch(`${BASE}/api/reports/trade-summary/${aucId}`, { headers: authHeaders() });
+    const d = await r.json();
+    const t = d.totals || {};
+
+    // Compact summary chips
+    document.getElementById('report-stats').innerHTML =
+      `<div style="background:var(--green);color:#fff;padding:5px 12px;border-radius:20px;font-size:12px;font-weight:700">${t.lot_count||0} Lots</div>` +
+      `<div style="background:#2563eb;color:#fff;padding:5px 12px;border-radius:20px;font-size:12px;font-weight:700">${Number(t.total_qty||0).toFixed(1)} kg</div>` +
+      `<div style="background:var(--orange);color:#fff;padding:5px 12px;border-radius:20px;font-size:12px;font-weight:700">${t.total_bags||0} Bags</div>` +
+      `<div style="background:#9333ea;color:#fff;padding:5px 12px;border-radius:20px;font-size:12px;font-weight:700">${t.seller_count||0} Sellers</div>` +
+      `<div style="background:#64748b;color:#fff;padding:5px 12px;border-radius:20px;font-size:12px;font-weight:700">${t.branch_count||0} Branches</div>`;
+
+    // Grade-wise breakdown — compact
+    var g1 = (d.gradeWise||[]).find(g => g.grade === '1') || { lot_count:0, total_bags:0, total_qty:0, seller_count:0 };
+    var g2 = (d.gradeWise||[]).find(g => g.grade === '2') || { lot_count:0, total_bags:0, total_qty:0, seller_count:0 };
+    function gradeCard(g, color) {
+      return `<div style="display:flex;gap:6px;flex-wrap:wrap">
+        <div style="flex:1;min-width:60px;background:var(--bg);border-radius:6px;padding:6px;text-align:center"><div style="font-size:16px;font-weight:800;color:${color}">${g.lot_count||0}</div><div style="font-size:9px;color:var(--text3);font-weight:600">Lots</div></div>
+        <div style="flex:1;min-width:60px;background:var(--bg);border-radius:6px;padding:6px;text-align:center"><div style="font-size:16px;font-weight:800;color:var(--text)">${g.total_bags||0}</div><div style="font-size:9px;color:var(--text3);font-weight:600">Bags</div></div>
+        <div style="flex:1;min-width:60px;background:var(--bg);border-radius:6px;padding:6px;text-align:center"><div style="font-size:14px;font-weight:800;color:${color}">${Number(g.total_qty||0).toFixed(1)}</div><div style="font-size:9px;color:var(--text3);font-weight:600">kg</div></div>
+      </div>`;
+    }
+    document.getElementById('report-grade1').innerHTML = gradeCard(g1, 'var(--green)');
+    document.getElementById('report-grade2').innerHTML = gradeCard(g2, '#d97706');
+
+    // ── CHART: Grade donut ──
+    var totalQty = Number(t.total_qty||0);
+    var g1Qty = Number(g1.total_qty||0);
+    var g2Qty = Number(g2.total_qty||0);
+    var g1Pct = totalQty > 0 ? Math.round(g1Qty/totalQty*100) : 0;
+    var g2Pct = 100 - g1Pct;
+    var g1Angle = (g1Pct/100)*360;
+    function describeArc(cx,cy,r,startAngle,endAngle) {
+      var s = (startAngle-90)*Math.PI/180, e = (endAngle-90)*Math.PI/180;
+      var x1=cx+r*Math.cos(s),y1=cy+r*Math.sin(s),x2=cx+r*Math.cos(e),y2=cy+r*Math.sin(e);
+      var large = endAngle-startAngle>180?1:0;
+      return 'M'+x1+' '+y1+' A'+r+' '+r+' 0 '+large+' 1 '+x2+' '+y2;
+    }
+    var donutSvg = '<svg viewBox="0 0 200 200" style="width:110px;height:110px">';
+    if (totalQty > 0 && g1Angle > 0 && g1Angle < 360) {
+      donutSvg += '<path d="'+describeArc(100,100,70,0,g1Angle)+'" fill="none" stroke="#0d7c5f" stroke-width="24" stroke-linecap="round"/>';
+      donutSvg += '<path d="'+describeArc(100,100,70,g1Angle,360)+'" fill="none" stroke="#f59e0b" stroke-width="24" stroke-linecap="round"/>';
+    } else if (g1Angle >= 360) {
+      donutSvg += '<circle cx="100" cy="100" r="70" fill="none" stroke="#0d7c5f" stroke-width="24"/>';
+    } else {
+      donutSvg += '<circle cx="100" cy="100" r="70" fill="none" stroke="#f59e0b" stroke-width="24"/>';
+    }
+    donutSvg += '<text x="100" y="95" text-anchor="middle" font-size="22" font-weight="800" fill="currentColor">'+totalQty.toFixed(0)+'</text>';
+    donutSvg += '<text x="100" y="115" text-anchor="middle" font-size="10" fill="gray">kg total</text></svg>';
+    var gradeDetail = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;max-width:280px;margin-left:auto;margin-right:auto">' +
+      '<div style="background:#ecfdf5;border-radius:8px;padding:8px;text-align:center"><div style="display:flex;align-items:center;justify-content:center;gap:4px;margin-bottom:4px"><span style="width:8px;height:8px;border-radius:2px;background:#0d7c5f;display:inline-block"></span><span style="font-size:10px;font-weight:700;color:var(--text3)">Grade 1</span></div><div style="font-size:16px;font-weight:800;color:#0d7c5f">'+g1Pct+'%</div><div style="font-size:10px;color:var(--text3)">'+g1Qty.toFixed(1)+' kg · '+g1.lot_count+' lots</div></div>' +
+      '<div style="background:#eff6ff;border-radius:8px;padding:8px;text-align:center"><div style="display:flex;align-items:center;justify-content:center;gap:4px;margin-bottom:4px"><span style="width:8px;height:8px;border-radius:2px;background:#f59e0b;display:inline-block"></span><span style="font-size:10px;font-weight:700;color:var(--text3)">Grade 2</span></div><div style="font-size:16px;font-weight:800;color:#2563eb">'+g2Pct+'%</div><div style="font-size:10px;color:var(--text3)">'+g2Qty.toFixed(1)+' kg · '+g2.lot_count+' lots</div></div></div>';
+    document.getElementById('report-grade-chart').innerHTML = '<div style="text-align:center">'+donutSvg+gradeDetail+'</div>';
+
+    // ── CHART: Branch — stat cards ──
+    var branches = d.branchWise || [];
+    var barColors = ['#0d7c5f','#f59e0b','#e74c8c','#2563eb','#dc3545','#0891b2','#65a30d'];
+    var totalBrQty = branches.reduce((s,b) => s + Number(b.total_qty||0), 0) || 1;
+    document.getElementById('report-branch-chart').innerHTML = branches.length ? branches.map((b,i) => {
+      var clr = barColors[i % barColors.length];
+      var pct = Math.round(Number(b.total_qty)/totalBrQty*100);
+      return '<div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg);border-radius:8px;margin-bottom:6px;border-left:4px solid '+clr+'">' +
+        '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:800;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+b.branch+'</div>' +
+        '<div style="font-size:10px;color:var(--text3);margin-top:2px">'+b.seller_count+' sellers · '+b.lot_count+' lots</div></div>' +
+        '<div style="text-align:right"><div style="font-size:16px;font-weight:800;color:'+clr+'">'+Number(b.total_qty).toFixed(1)+'</div>' +
+        '<div style="font-size:9px;color:var(--text3)">kg · '+pct+'%</div></div></div>';
+    }).join('') : '<div style="color:var(--text3);font-size:12px;text-align:center;padding:20px">No data</div>';
+
+    // ── CHART: Hourly — timeline list ──
+    const hourly = d.hourly || [];
+    const maxH = Math.max(...hourly.map(h => h.lot_count), 1);
+    if (hourly.length) {
+      document.getElementById('report-hourly').innerHTML = hourly.map(h => {
+        var pct = Math.max((h.lot_count/maxH*100), 3).toFixed(0);
+        var isPeak = h.lot_count === maxH;
+        return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">' +
+          '<div style="width:40px;font-size:12px;font-weight:800;color:'+(isPeak?'#2563eb':'var(--text)')+';flex-shrink:0">'+h.hour+':00</div>' +
+          '<div style="flex:1;height:14px;background:var(--bg);border-radius:4px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:'+(isPeak?'linear-gradient(90deg,#2563eb,#3b82f6)':'linear-gradient(90deg,#94a3b8,#cbd5e1)')+';border-radius:4px"></div></div>' +
+          '<div style="min-width:70px;text-align:right;flex-shrink:0"><span style="font-size:13px;font-weight:800;color:'+(isPeak?'#2563eb':'var(--text)')+'">'+h.lot_count+'</span> <span style="font-size:9px;color:var(--text3)">lots</span></div>' +
+          '<div style="min-width:55px;text-align:right;flex-shrink:0"><span style="font-size:11px;font-weight:700;color:var(--text3)">'+Number(h.total_qty||0).toFixed(1)+'</span> <span style="font-size:9px;color:var(--text3)">kg</span></div></div>';
+      }).join('');
+    } else {
+      document.getElementById('report-hourly').innerHTML = '<div style="color:var(--text3);font-size:12px;text-align:center;padding:20px">No data</div>';
+    }
+
+    // ── CHART: User performance ──
+    var usersTab = document.getElementById('rpt-tab-users');
+    if (d.showUsername && (d.userWise||[]).length) {
+      usersTab.style.display = '';
+      document.getElementById('report-users').innerHTML = d.userWise.map(u => {
+        return '<div style="display:flex;align-items:center;gap:10px;padding:8px;background:var(--bg);border-radius:8px;margin-bottom:4px;border-left:4px solid #9333ea">' +
+          '<div style="flex:1"><div style="font-size:12px;font-weight:700">'+u.user_id+'</div></div>' +
+          '<div style="text-align:center;min-width:50px"><div style="font-size:14px;font-weight:800;color:#9333ea">'+u.lot_count+'</div><div style="font-size:8px;color:var(--text3)">lots</div></div>' +
+          '<div style="text-align:center;min-width:60px"><div style="font-size:14px;font-weight:800;color:var(--text)">'+Number(u.total_qty).toFixed(1)+'</div><div style="font-size:8px;color:var(--text3)">kg</div></div></div>';
+      }).join('');
+    } else {
+      usersTab.style.display = 'none';
+    }
+
+    // Top sellers — cards instead of table
+    const tradeLabel = 'Trade #' + (d.auction?.ano || '') + ' — ' + fmtDate(d.auction?.date || '');
+    document.getElementById('report-sellers-title').textContent = 'Top Sellers — ' + tradeLabel;
+    document.getElementById('report-sellers').innerHTML = (d.sellerWise||[]).map((s,i) =>
+      `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg);border-radius:8px;margin-bottom:4px">
+        <div style="width:20px;height:20px;border-radius:50%;background:var(--green);color:#fff;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0">${i+1}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;color:var(--green);text-decoration:underline" onclick="showSellerHistory('${(s.seller_name||'Unknown').replace(/'/g,"\\'")}', ${aucId})">${s.seller_name||'Unknown'}</div>
+          <div style="font-size:9px;color:var(--text3)">${s.branch||''}</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0">
+          <div style="text-align:center"><div style="font-size:12px;font-weight:800">${s.lot_count}</div><div style="font-size:8px;color:var(--text3)">lots</div></div>
+          <div style="text-align:center"><div style="font-size:12px;font-weight:800">${s.total_bags}</div><div style="font-size:8px;color:var(--text3)">bags</div></div>
+          <div style="text-align:center;background:var(--green-light);padding:2px 6px;border-radius:6px"><div style="font-size:14px;font-weight:800;color:var(--green)">${Number(s.total_qty).toFixed(1)}</div><div style="font-size:8px;color:var(--green)">kg</div></div>
+        </div>
+      </div>`
+    ).join('') || '<div style="padding:16px;text-align:center;color:var(--text3);font-size:12px">No data</div>';
+
+  } catch (e) { console.error('Report error:', e); }
+}
+
+function downloadSummaryPdf() {
+  const aucId = document.getElementById('report-auction').value;
+  if (!aucId) { alert('Select a trade first'); return; }
+  window.open(`${BASE}/api/reports/summary-pdf/${aucId}?token=${authToken}`, '_blank');
+}
+
+async function showSellerHistory(sellerName, aucId) {
+  // Find trader ID from the report data
+  try {
+    const r = await fetch(`${BASE}/api/traders?q=${encodeURIComponent(sellerName)}&limit=1`, { headers: authHeaders() });
+    const d = await r.json();
+    if (!d.traders || !d.traders.length) { alert('Seller not found'); return; }
+    const traderId = d.traders[0].id;
+
+    const r2 = await fetch(`${BASE}/api/reports/seller-history/${traderId}?auction_id=${aucId}`, { headers: authHeaders() });
+    const d2 = await r2.json();
+
+    document.getElementById('sh-title').textContent = (d2.trader?.name || 'Unknown') + ' — History';
+    const s = d2.summary || {};
+    document.getElementById('sh-summary').innerHTML =
+      `<div style="display:flex;gap:10px;flex-wrap:wrap;font-size:12px">
+        <span style="background:#e1f5ee;padding:3px 8px;border-radius:4px"><strong>${s.trade_count||0}</strong> trades</span>
+        <span style="background:#e1f5ee;padding:3px 8px;border-radius:4px"><strong>${s.total_lots||0}</strong> lots</span>
+        <span style="background:#e1f5ee;padding:3px 8px;border-radius:4px"><strong>${s.total_bags||0}</strong> bags</span>
+        <span style="background:#e1f5ee;padding:3px 8px;border-radius:4px"><strong>${Number(s.total_qty||0).toFixed(3)}</strong> kg</span>
+      </div>`;
+
+    document.getElementById('sh-body').innerHTML = (d2.lots||[]).map(l =>
+      `<div style="display:flex;align-items:center;gap:8px;padding:8px;background:var(--bg);border-radius:8px;margin-bottom:4px">
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+            <span style="font-size:12px;font-weight:800;color:var(--green)">Lot ${l.lot_no}</span>
+            <span style="font-size:10px;background:var(--green-light);color:var(--green);padding:1px 6px;border-radius:4px;font-weight:700">G${l.grade}</span>
+          </div>
+          <div style="font-size:10px;color:var(--text3);margin-top:2px">Trade #${l.ano} · ${fmtDate(l.date)}</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-shrink:0">
+          <div style="text-align:center"><div style="font-size:13px;font-weight:800">${l.bags}</div><div style="font-size:8px;color:var(--text3)">bags</div></div>
+          <div style="text-align:center"><div style="font-size:13px;font-weight:800;color:var(--green)">${Number(l.qty).toFixed(3)}</div><div style="font-size:8px;color:var(--text3)">kg</div></div>
+        </div>
+      </div>`
+    ).join('') || '<div style="padding:16px;text-align:center;color:var(--text3);font-size:12px">No history</div>';
+
+    document.getElementById('seller-history-modal').classList.add('show');
+  } catch (e) { console.error('Seller history error:', e); }
+}
+
+// ── AUDIT LOG ──
+
+let auditPage = 1;
+
+async function loadAuditLog() {
+  try {
+    const r = await fetch(`${BASE}/api/audit-log?page=${auditPage}&limit=30`, { headers: authHeaders() });
+    const d = await r.json();
+    const tbody = document.getElementById('audit-body');
+    const cardsDiv = document.getElementById('audit-cards');
+    if (!d.logs || !d.logs.length) {
+      tbody.innerHTML = '<tr><td colspan="4" style="padding:20px;text-align:center;color:#888">No audit entries</td></tr>';
+      cardsDiv.innerHTML = '<div style="padding:20px;text-align:center;color:#888;font-size:13px">No audit entries</div>';
+      document.getElementById('audit-pagination').style.display = 'none';
+      return;
+    }
+    const actionColors = { create: '#1D9E75', edit: '#E67E22', delete: '#C62828', 'bulk-delete': '#C62828', restore: '#378ADD', login: '#378ADD', export: '#9C27B0', 'password-change': '#E67E22', 'reset-password': '#C62828' };
+    function fmtAuditDetails(raw) {
+      try { const p = JSON.parse(raw || '{}'); const keys = ['lot_no','trader','qty','count','format','type','target']; return Object.entries(p).filter(([k]) => keys.includes(k)).map(([k,v]) => k + ': ' + v).join(', '); } catch(e) { return (raw||'').substring(0,60); }
+    }
+    function fmtEntity(l) { return l.user_id + ' → ' + l.entity + (l.entity_id ? ' #' + l.entity_id : ''); }
+
+    tbody.innerHTML = d.logs.map(l => {
+      const details = fmtAuditDetails(l.details);
+      const color = actionColors[l.action] || '#888';
+      return `<tr>
+        <td>${l.created_at || ''}</td>
+        <td><strong>${l.user_id}</strong></td>
+        <td><span style="background:${color};color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600">${l.action}</span></td>
+        <td style="font-size:11px">${details}</td>
+      </tr>`;
+    }).join('');
+
+    // Mobile cards
+    cardsDiv.innerHTML = d.logs.map(l => {
+      const details = fmtAuditDetails(l.details);
+      const color = actionColors[l.action] || '#888';
+      return `<div class="audit-card">
+        <div class="ac-hdr"><strong>${l.user_id}</strong> <span style="background:${color};color:#fff;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600">${l.action}</span></div>
+        <div style="font-size:11px;color:#888">${l.created_at || ''}</div>
+        ${details ? '<div class="ac-detail">' + details + '</div>' : ''}
+      </div>`;
+    }).join('');
+
+    const pgDiv = document.getElementById('audit-pagination');
+    if (d.totalPages > 1) {
+      pgDiv.style.display = 'flex';
+      pgDiv.innerHTML = `<button class="pg-btn" onclick="auditPage=1;loadAuditLog()" ${auditPage===1?'disabled':''}>&laquo;</button>` +
+        `<button class="pg-btn" onclick="auditPage=${auditPage-1};loadAuditLog()" ${auditPage===1?'disabled':''}>&lsaquo;</button>` +
+        `<span class="pg-info">Page ${d.page} of ${d.totalPages}</span>` +
+        `<button class="pg-btn" onclick="auditPage=${auditPage+1};loadAuditLog()" ${auditPage>=d.totalPages?'disabled':''}>&rsaquo;</button>` +
+        `<button class="pg-btn" onclick="auditPage=${d.totalPages};loadAuditLog()" ${auditPage>=d.totalPages?'disabled':''}>&raquo;</button>`;
+    } else { pgDiv.style.display = 'none'; }
+  } catch (e) { console.error('Audit log error:', e); }
+}
+
+async function clearAuditLog() {
+  if (!confirm('Clear all audit log entries? This cannot be undone.')) return;
+  try {
+    await fetch(`${BASE}/api/audit-log`, { method: 'DELETE', headers: authHeaders() });
+    auditPage = 1;
+    loadAuditLog();
+  } catch (e) {}
+}
+
+// ── LOGIN HISTORY ──
+
+async function loadActiveUsers() {
+  try {
+    const res = await fetch(`${BASE}/api/auth/users`, { headers: authHeaders() });
+    const data = await res.json();
+    const el = document.getElementById('active-users-list');
+    if (!data.users || !data.users.length) { el.innerHTML = '<div style="padding:16px;text-align:center;color:#888;grid-column:1/-1">No users found</div>'; return; }
+    el.innerHTML = data.users.map(u => {
+      const online = u.is_online;
+      const ago = u.last_login ? timeAgo(u.last_login) : 'Never';
+      return `<div class="user-status-card">
+        <div class="user-status-dot ${online ? 'online' : 'offline'}"></div>
+        <div class="user-status-info">
+          <div class="user-status-name">${u.username}</div>
+          <div class="user-status-meta">${u.branch || '—'} · ${online ? 'Online' : 'Last: ' + ago}${u.last_device ? ' · ' + u.last_device : ''}</div>
+        </div>
+        <span class="user-status-badge ${u.role}">${u.role}</span>
+      </div>`;
+    }).join('');
+  } catch (e) { console.error(e); }
+}
+function timeAgo(dt) {
+  const diff = Date.now() - new Date(dt).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return mins + 'm ago';
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return hrs + 'h ago';
+  const days = Math.floor(hrs / 24);
+  return days + 'd ago';
+}
+
+async function loadLoginHistory() {
+  try {
+    const r = await fetch(`${BASE}/api/login-history`, { headers: authHeaders() });
+    const d = await r.json();
+    const tbody = document.getElementById('login-history-body');
+    if (!d.logs || !d.logs.length) {
+      tbody.innerHTML = '<tr><td colspan="4" style="padding:16px;text-align:center;color:#888">No login records</td></tr>';
+      return;
+    }
+    tbody.innerHTML = d.logs.map(l => `<tr>
+      <td style="font-size:12px">${l.created_at || ''}</td>
+      <td><strong>${l.username}</strong></td>
+      <td>${l.user_agent || ''}</td>
+      <td style="font-size:11px;color:#888">${l.ip || ''}</td>
+    </tr>`).join('');
+  } catch (e) { console.error('Login history error:', e); }
+}
+
+async function clearLoginHistory() {
+  if (!confirm('Clear all login history?')) return;
+  try {
+    await fetch(`${BASE}/api/login-history`, { method: 'DELETE', headers: authHeaders() });
+    loadLoginHistory();
+  } catch(e) {}
+}
+
+// ── CHANGE PASSWORD ──
+
+async function changeMyPassword() {
+  const current = document.getElementById('cp-current').value;
+  const newPwd = document.getElementById('cp-new').value;
+  const msgEl = document.getElementById('cp-msg');
+  msgEl.textContent = '';
+  if (!current || !newPwd) { msgEl.textContent = 'Fill both fields'; msgEl.className = 'user-msg error'; return; }
+  if (newPwd.length < 6) { msgEl.textContent = 'Minimum 6 characters'; msgEl.className = 'user-msg error'; return; }
+  try {
+    const r = await fetch(`${BASE}/api/auth/change-password`, {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({ current_password: current, new_password: newPwd })
+    });
+    const d = await r.json();
+    if (r.ok) {
+      msgEl.textContent = 'Password changed!';
+      msgEl.className = 'user-msg success';
+      document.getElementById('cp-current').value = '';
+      document.getElementById('cp-new').value = '';
+    } else {
+      msgEl.textContent = d.error || 'Failed';
+      msgEl.className = 'user-msg error';
+    }
+  } catch (e) { msgEl.textContent = 'Failed'; msgEl.className = 'user-msg error'; }
+}
+
+async function resetUserPassword(userId, username) {
+  const newPwd = prompt('Enter new password for ' + username + ' (min 6 chars):');
+  if (!newPwd) return;
+  if (newPwd.length < 6) { alert('Minimum 6 characters'); return; }
+  try {
+    const r = await fetch(`${BASE}/api/auth/reset-password/${userId}`, {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({ new_password: newPwd })
+    });
+    const d = await r.json();
+    if (r.ok) { alert('Password reset for ' + username); } 
+    else { alert(d.error || 'Failed'); }
+  } catch (e) { alert('Failed'); }
+}
+
+// ── BACKUP & RESTORE ──
+
+function downloadBackup() {
+  window.open(`${BASE}/api/backup?token=${authToken}`, '_blank');
+}
+
+async function restoreBackup() {
+  const fileInput = document.getElementById('restore-file');
+  const msgEl = document.getElementById('restore-msg');
+  msgEl.textContent = '';
+  if (!fileInput.files.length) { msgEl.textContent = 'Select a backup file'; msgEl.className = 'user-msg error'; return; }
+  if (!confirm('⚠️ This will REPLACE your entire database with the backup file. All current data will be lost. Continue?')) return;
+  const formData = new FormData();
+  formData.append('file', fileInput.files[0]);
+  try {
+    const r = await fetch(`${BASE}/api/restore`, {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + authToken },
+      body: formData
+    });
+    const d = await r.json();
+    if (r.ok) {
+      msgEl.textContent = d.message || 'Restored successfully';
+      msgEl.className = 'user-msg success';
+      setTimeout(() => location.reload(), 1500);
+    } else {
+      msgEl.textContent = d.error || 'Restore failed';
+      msgEl.className = 'user-msg error';
+    }
+  } catch (e) { msgEl.textContent = 'Restore failed'; msgEl.className = 'user-msg error'; }
+}
+
+let sellerSearchTimer;
+function filterBySeller() {
+  clearTimeout(sellerSearchTimer);
+  sellerSearchTimer = setTimeout(() => { currentPage = 1; loadLots(); }, 300);
+}
+
+function exportSource(format) {
+  window.open(`${BASE}/api/export-source/${format}?token=${authToken}`, '_blank');
+}
+
+// ── EXPORTS TAB ──
+
+function loadExportAuctions() {
+  const sel = document.getElementById('export-auction');
+  if (!cachedAuctions || !cachedAuctions.length) {
+    fetch(`${BASE}/api/auctions`, { headers: authHeaders() })
+      .then(r => r.json()).then(d => { cachedAuctions = d.auctions || []; populateExportSelect(sel); }).catch(() => {});
+  } else { populateExportSelect(sel); }
+}
+function populateExportSelect(sel) {
+  sel.innerHTML = '<option value="">Select trade...</option>';
+  (cachedAuctions || []).forEach(a => {
+    const opt = document.createElement('option');
+    opt.value = a.id;
+    opt.textContent = `Trade #${a.ano} — ${fmtDate(a.date)} — ${a.crop_type} (${a.lot_count} lots)`;
+    sel.appendChild(opt);
+  });
+}
+
+function exportFileFromTab(format) {
+  const aucId = document.getElementById('export-auction').value;
+  if (!aucId) { alert('Select a trade first'); return; }
+  window.open(`${BASE}/api/export/${aucId}/${format}?token=${authToken}`, '_blank');
+}
+
+function printLot(id) {
+  window.open(`${BASE}/api/lots/${id}/receipt?token=${authToken}`, '_blank');
+}
+
+async function printSelected() {
+  const ids = getSelectedIds();
+  if (ids.length === 0) {
+    const allCbs = document.querySelectorAll('.lot-cb');
+    const selectAll = document.getElementById('select-all');
+    if (selectAll && selectAll.checked) {
+      allCbs.forEach(cb => ids.push(parseInt(cb.value)));
+    }
+    if (ids.length === 0) { alert('Select at least one lot'); return; }
+  }
+  window.open(`${BASE}/api/lots/print-batch?ids=${ids.join(',')}&token=${authToken}`, '_blank');
+}
+
+async function printAllBySeller() {
+  const aucId = document.getElementById('auction-select').value;
+  if (!aucId) { alert('Select a trade first'); return; }
+  const filterBranch = document.getElementById('filter-branch').value;
+  let url = `${BASE}/api/lots/print-all-sellers/${aucId}?token=${authToken}`;
+  if (filterBranch) url += `&branch=${encodeURIComponent(filterBranch)}`;
+  window.open(url, '_blank');
+}
+
+// ── LOT ALLOCATIONS ──
+
+let allocBranches = [];
+
+function getConfigBranches() {
+  if (cachedBranches && cachedBranches.length) return cachedBranches.map(b => b.value);
+  if (allocBranches.length) return allocBranches;
+  return [];
+}
+
+async function ensureBranchesLoaded() {
+  if (cachedBranches && cachedBranches.length) return;
+  try {
+    const r = await fetch(`${BASE}/api/config`, { headers: authHeaders() });
+    const d = await r.json();
+    cachedBranches = d.branches || [];
+    allocBranches = cachedBranches.map(b => b.value);
+  } catch(e) {}
+}
+
+function addAllocRow(prefix) {
+  const list = document.getElementById(prefix + '-list');
+  const branches = getConfigBranches();
+  if (!branches.length) {
+    // Branches not loaded yet — load and retry
+    ensureBranchesLoaded().then(() => addAllocRow(prefix));
+    return;
+  }
+  const opts = branches.map(b => `<option value="${b}">${b}</option>`).join('');
+  const row = document.createElement('div');
+  row.style.cssText = 'display:grid;grid-template-columns:1fr 80px 80px 30px;gap:6px;align-items:center;margin-bottom:6px';
+  row.innerHTML = `<select class="field-input alloc-branch" style="height:32px;font-size:12px">${opts}</select>
+    <input type="text" class="field-input alloc-start" placeholder="Start" style="height:32px;font-size:12px">
+    <input type="text" class="field-input alloc-end" placeholder="End" style="height:32px;font-size:12px">
+    <button onclick="this.parentElement.remove();updateAllocSummary('${prefix}')" style="background:none;border:none;color:#C62828;cursor:pointer;font-size:16px" title="Remove">✕</button>`;
+  row.querySelectorAll('.alloc-start,.alloc-end').forEach(inp => inp.addEventListener('input', () => updateAllocSummary(prefix)));
+  list.appendChild(row);
+}
+
+function getAllocRows(prefix) {
+  const list = document.getElementById(prefix + '-list');
+  const rows = [];
+  list.querySelectorAll(':scope > div').forEach(row => {
+    const branch = row.querySelector('.alloc-branch')?.value;
+    const start = row.querySelector('.alloc-start')?.value?.trim();
+    const end = row.querySelector('.alloc-end')?.value?.trim();
+    if (branch && start && end) rows.push({ branch, start_lot: start, end_lot: end });
+  });
+  return rows;
+}
+
+function updateAllocSummary(prefix) {
+  const rows = getAllocRows(prefix);
+  let total = 0;
+  rows.forEach(r => {
+    const s = r.start_lot.match(/^([A-Za-z]*)(\d+)$/);
+    const e = r.end_lot.match(/^([A-Za-z]*)(\d+)$/);
+    if (s && e) total += parseInt(e[2]) - parseInt(s[2]) + 1;
+  });
+  const el = document.getElementById(prefix + '-summary');
+  if (el) el.textContent = rows.length ? `${rows.length} allocation(s), ${total} total lots` : '';
+}
+
+function populateAllocRows(prefix, allocs) {
+  const list = document.getElementById(prefix + '-list');
+  list.innerHTML = '';
+  allocs.forEach(a => {
+    addAllocRow(prefix);
+    const row = list.lastChild;
+    row.querySelector('.alloc-branch').value = a.branch;
+    row.querySelector('.alloc-start').value = a.start_lot || a.start || '';
+    row.querySelector('.alloc-end').value = a.end_lot || a.end || '';
+  });
+  updateAllocSummary(prefix);
+}
+
+let allocEditAuctionId = null;
+
+function switchAllocTab(tab) {
+  document.getElementById('alloc-panel-edit').style.display = tab === 'edit' ? 'block' : 'none';
+  document.getElementById('alloc-panel-reassign').style.display = tab === 'reassign' ? 'block' : 'none';
+  document.getElementById('alloc-tab-edit').style.color = tab === 'edit' ? '#1D9E75' : '#888';
+  document.getElementById('alloc-tab-edit').style.borderBottomColor = tab === 'edit' ? '#1D9E75' : 'transparent';
+  document.getElementById('alloc-tab-reassign').style.color = tab === 'reassign' ? '#E67E22' : '#888';
+  document.getElementById('alloc-tab-reassign').style.borderBottomColor = tab === 'reassign' ? '#E67E22' : 'transparent';
+}
+
+function openReassignFromLots() {
+  const aucId = document.getElementById('auction-select').value;
+  if (!aucId) { alert('Select a trade first'); return; }
+  const auc = (cachedAuctions || []).find(a => String(a.id) === String(aucId));
+  openAllocModal(parseInt(aucId), auc ? auc.ano : '?');
+  setTimeout(() => switchAllocTab('reassign'), 100);
+}
+
+function openAllocModal(auctionId, ano) {
+  allocEditAuctionId = auctionId;
+  document.getElementById('alloc-modal-ano').textContent = ano;
+  document.getElementById('alloc-err').textContent = '';
+  document.getElementById('ra-err').textContent = '';
+  document.getElementById('ra-start').value = '';
+  document.getElementById('ra-end').value = '';
+  document.getElementById('ra-preview').textContent = '';
+  switchAllocTab('edit');
+
+  // Load existing allocations + stats
+  Promise.all([
+    fetch(`${BASE}/api/auctions/${auctionId}/allocations`, { headers: authHeaders() }).then(r => r.json()),
+    fetch(`${BASE}/api/auctions/${auctionId}/allocation-stats`, { headers: authHeaders() }).then(r => r.json())
+  ]).then(([allocData, statsData]) => {
+    const allocs = allocData.allocations || [];
+    if (allocs.length) {
+      populateAllocRows('alloc-edit', allocs);
+    } else {
+      document.getElementById('alloc-edit-list').innerHTML = '';
+      addAllocRow('alloc-edit');
+    }
+
+    // Populate reassign dropdowns and status
+    const stats = statsData.stats || [];
+    const branches = getConfigBranches();
+    const fromSel = document.getElementById('ra-from');
+    const toSel = document.getElementById('ra-to');
+    fromSel.innerHTML = '<option value="">Select...</option>';
+    toSel.innerHTML = '<option value="">Select...</option>';
+    branches.forEach(b => {
+      fromSel.innerHTML += `<option value="${b}">${b}</option>`;
+      toSel.innerHTML += `<option value="${b}">${b}</option>`;
+    });
+
+    // Show current status
+    const statusEl = document.getElementById('alloc-reassign-status');
+    if (stats.length) {
+      statusEl.innerHTML = stats.map(s => {
+        const avail = s.total - s.used;
+        const pct = s.total > 0 ? Math.round((s.used / s.total) * 100) : 0;
+        const barColor = pct >= 90 ? '#C62828' : pct >= 70 ? '#E67E22' : '#1D9E75';
+        const rangeStr = s.ranges.map(r => r.start + '-' + r.end).join(', ');
+        return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:11px">
+          <span style="width:110px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${s.branch}</span>
+          <div style="flex:1;height:6px;background:#e8e8e8;border-radius:3px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${barColor};border-radius:3px"></div></div>
+          <span style="color:#888;white-space:nowrap">${s.used}/${s.total}</span>
+          <span style="color:${avail > 0 ? '#1D9E75' : '#C62828'};font-weight:600;white-space:nowrap">${avail} free</span>
+        </div>`;
+      }).join('');
+    } else {
+      statusEl.innerHTML = '<div style="font-size:11px;color:#888">No allocations yet</div>';
+    }
+
+    document.getElementById('alloc-modal').classList.add('show');
+  });
+}
+
+function loadReassignPreview() {
+  const from = document.getElementById('ra-from').value;
+  const preview = document.getElementById('ra-preview');
+  if (!from || !allocEditAuctionId) { preview.textContent = ''; return; }
+  
+  fetch(`${BASE}/api/auctions/${allocEditAuctionId}/allocation-stats`, { headers: authHeaders() })
+    .then(r => r.json()).then(d => {
+      const branchStats = (d.stats || []).find(s => s.branch === from);
+      if (!branchStats) { preview.textContent = 'No allocation found for ' + from; return; }
+      const avail = branchStats.total - branchStats.used;
+      const ranges = branchStats.ranges.map(r => r.start + '-' + r.end + ' (' + (r.total - r.used) + ' free)').join(', ');
+      preview.innerHTML = `<strong>${from}:</strong> ${avail} unused lots available — ${ranges}`;
+    });
+}
+
+async function executeReassign() {
+  const from = document.getElementById('ra-from').value;
+  const to = document.getElementById('ra-to').value;
+  const start = document.getElementById('ra-start').value.trim();
+  const end = document.getElementById('ra-end').value.trim();
+  const errEl = document.getElementById('ra-err');
+  errEl.textContent = '';
+
+  if (!from) { errEl.textContent = 'Select FROM branch'; return; }
+  if (!to) { errEl.textContent = 'Select TO branch'; return; }
+  if (from === to) { errEl.textContent = 'FROM and TO must be different'; return; }
+  if (!start || !end) { errEl.textContent = 'Enter start and end lot numbers'; return; }
+
+  if (!confirm(`Reassign lots ${start}-${end} from ${from} to ${to}?`)) return;
+
+  try {
+    const r = await fetch(`${BASE}/api/auctions/${allocEditAuctionId}/reassign-lots`, {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({ from_branch: from, to_branch: to, start_lot: start, end_lot: end })
+    });
+    const d = await r.json();
+    if (!r.ok) { errEl.textContent = d.error || 'Failed'; return; }
+
+    // Refresh the modal
+    errEl.style.color = '#1D9E75';
+    errEl.textContent = '✓ ' + d.message;
+
+    // Reload allocation rows
+    const r2 = await fetch(`${BASE}/api/auctions/${allocEditAuctionId}/allocations`, { headers: authHeaders() });
+    const d2 = await r2.json();
+    populateAllocRows('alloc-edit', d2.allocations || []);
+
+    // Refresh status
+    loadReassignPreview();
+    document.getElementById('ra-start').value = '';
+    document.getElementById('ra-end').value = '';
+
+    // Refresh external views
+    loadTrades();
+    loadAllocStats();
+
+    setTimeout(() => { errEl.textContent = ''; errEl.style.color = ''; }, 3000);
+  } catch (e) { errEl.textContent = 'Failed to reassign'; }
+}
+
+async function saveAllocations() {
+  const rows = getAllocRows('alloc-edit');
+  const errEl = document.getElementById('alloc-err');
+  errEl.textContent = '';
+  if (!rows.length) { errEl.textContent = 'Add at least one allocation'; return; }
+  try {
+    const r = await fetch(`${BASE}/api/auctions/${allocEditAuctionId}/allocations`, {
+      method: 'POST', headers: authHeaders(), body: JSON.stringify({ allocations: rows })
+    });
+    const d = await r.json();
+    if (!r.ok) { errEl.textContent = d.error || 'Failed'; return; }
+    document.getElementById('alloc-modal').classList.remove('show');
+    loadTrades();
+    loadAllocStats();
+  } catch(e) { errEl.textContent = 'Failed to save'; }
+}
+
+async function loadAllocStats() {
+  const aucId = document.getElementById('auction-select').value;
+  const statsDiv = document.getElementById('alloc-stats');
+  const barsDiv = document.getElementById('alloc-stats-bars');
+  const totalDiv = document.getElementById('alloc-stats-total');
+  if (!aucId) { statsDiv.style.display = 'none'; return; }
+  // Get selected branch filter
+  const branchFilter = document.getElementById('filter-branch') ? document.getElementById('filter-branch').value : '';
+  try {
+    const r = await fetch(`${BASE}/api/auctions/${aucId}/allocation-stats`, { headers: authHeaders() });
+    const d = await r.json();
+    statsDiv.style.display = 'block';
+    if (!d.stats || !d.stats.length) {
+      barsDiv.innerHTML = '<div style="padding:8px 0;font-size:12px;color:#E67E22">⚠ No lots allocated for this trade. Go to <strong>Trades</strong> tab → click 📋 to allocate.</div>';
+      totalDiv.textContent = '';
+      return;
+    }
+    // Filter by branch if selected
+    const filteredStats = branchFilter ? d.stats.filter(s => s.branch === branchFilter) : d.stats;
+    if (!filteredStats.length) {
+      barsDiv.innerHTML = '<div style="padding:8px 0;font-size:12px;color:#888">No allocation for branch <strong>' + branchFilter + '</strong></div>';
+      totalDiv.textContent = '';
+      return;
+    }
+    let grandTotal = 0, grandUsed = 0;
+    barsDiv.innerHTML = '<div class="alloc-tiles">' + filteredStats.map((s, si) => {
+      grandTotal += s.total; grandUsed += s.used;
+      const pct = s.total > 0 ? Math.round((s.used / s.total) * 100) : 0;
+      const barGrad = pct >= 90 ? 'linear-gradient(90deg,#dc3545,#b91c1c)' : pct >= 70 ? 'linear-gradient(90deg,#d4870b,#b87308)' : 'linear-gradient(90deg,#0d9488,#0d7c5f)';
+      const pctColor = pct >= 90 ? 'var(--red)' : pct >= 70 ? 'var(--orange)' : 'var(--green)';
+      const rangeStr = s.ranges.map(r => r.start + '-' + r.end).join(', ');
+      let gridHtml = '';
+      s.ranges.forEach(rng => {
+        if (rng.lots && rng.lots.length) {
+          gridHtml += rng.lots.map(l =>
+            `<span style="display:inline-flex;align-items:center;justify-content:center;min-width:36px;height:26px;border-radius:5px;font-size:10px;font-weight:800;margin:2px;padding:0 3px;${l.used ? 'background:linear-gradient(135deg,#0d7c5f,#0a6a50);color:#fff;box-shadow:0 1px 3px rgba(13,124,95,.3)' : 'background:var(--bg);color:var(--text3);border:1px dashed var(--border2)'}">${l.lot}</span>`
+          ).join('');
+        }
+      });
+      return `<div class="alloc-tile" onclick="showAllocPopup(this)" data-branch="${s.branch}" data-pct="${pct}" data-used="${s.used}" data-total="${s.total}" data-range="${rangeStr}">
+        <div class="alloc-tile-bar" style="width:${pct}%;background:${barGrad}"></div>
+        <div class="alloc-tile-branch">${s.branch}</div>
+        <div class="alloc-tile-stats">
+          <span class="alloc-tile-pct" style="color:${pctColor}">${pct}%</span>
+          <span class="alloc-tile-count"><b style="color:var(--green)">${s.used}</b> used · <b style="color:var(--red)">${s.total - s.used}</b> free</span>
+        </div>
+        <div class="alloc-tile-grid" style="display:none">${gridHtml}</div>
+      </div>`;
+    }).join('') + '</div>';
+    totalDiv.textContent = grandUsed + ' of ' + grandTotal + ' lots used (' + (grandTotal>0?Math.round(grandUsed/grandTotal*100):0) + '%) — tap to view details';
+  } catch(e) { statsDiv.style.display = 'none'; }
+}
+
+function showAllocPopup(tile) {
+  var branch = tile.dataset.branch;
+  var pct = tile.dataset.pct;
+  var used = tile.dataset.used;
+  var total = tile.dataset.total;
+  var range = tile.dataset.range;
+  var gridHtml = tile.querySelector('.alloc-tile-grid').innerHTML;
+  var pctColor = pct >= 90 ? 'var(--red)' : pct >= 70 ? 'var(--orange)' : 'var(--green)';
+  
+  var popup = document.createElement('div');
+  popup.className = 'adm-modal-overlay show';
+  popup.style.zIndex = '250';
+  popup.onclick = function(e) { if(e.target === popup) popup.remove(); };
+  popup.innerHTML = '<div class="adm-modal" style="max-width:520px;padding:20px">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">' +
+    '<h3 style="margin:0">' + branch + '</h3>' +
+    '<button onclick="this.closest(\'.adm-modal-overlay\').remove()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text3)">✕</button></div>' +
+    '<div style="display:flex;gap:16px;margin-bottom:14px">' +
+    '<div style="text-align:center;flex:1;padding:10px;background:var(--green-light);border-radius:10px"><div style="font-size:22px;font-weight:800;color:var(--green)">' + used + '</div><div style="font-size:10px;color:var(--text3);font-weight:600">USED</div></div>' +
+    '<div style="text-align:center;flex:1;padding:10px;background:#fef2f2;border-radius:10px;border:1px solid rgba(220,53,69,.15)"><div style="font-size:22px;font-weight:800;color:var(--red)">' + (total-used) + '</div><div style="font-size:10px;color:var(--text3);font-weight:600">REMAINING</div></div>' +
+    '<div style="text-align:center;flex:1;padding:10px;background:var(--bg);border-radius:10px;border:1px solid var(--border)"><div style="font-size:22px;font-weight:800;color:' + pctColor + '">' + pct + '%</div><div style="font-size:10px;color:var(--text3);font-weight:600">UTILIZATION</div></div></div>' +
+    '<div style="font-size:11px;color:var(--text3);margin-bottom:10px">Range: ' + range + '</div>' +
+    '<div style="margin-bottom:8px;font-size:10px;color:var(--text3);display:flex;gap:12px">' +
+    '<span style="display:inline-flex;align-items:center;gap:3px"><span style="display:inline-block;width:8px;height:8px;background:var(--green);border-radius:2px"></span> Used</span>' +
+    '<span style="display:inline-flex;align-items:center;gap:3px"><span style="display:inline-block;width:8px;height:8px;border:1px dashed var(--border2);border-radius:2px"></span> Available</span></div>' +
+    '<div style="display:flex;flex-wrap:wrap;gap:3px;max-height:300px;overflow-y:auto">' + gridHtml + '</div></div>';
+  document.body.appendChild(popup);
+}
+
+function toggleLotGrid(id, btn) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (el.style.display === 'none') { el.style.display = 'block'; if (btn) btn.textContent = '▲ Hide'; }
+  else { el.style.display = 'none'; if (btn) btn.textContent = '▼ Lots'; }
+}
+
+async function createTrade() {
+  const ano = parseInt(document.getElementById('ct-ano').value);
+  const date = document.getElementById('ct-date').value;
+  const crop = document.getElementById('ct-crop').value;
+  const st = document.getElementById('ct-start').value;
+  const et = document.getElementById('ct-end').value;
+  const msg = document.getElementById('ct-msg');
+  msg.textContent = '';
+  if (!ano || ano <= 0) { msg.textContent = 'Enter trade number'; msg.className = 'user-msg error'; return; }
+  if (!date) { msg.textContent = 'Select date'; msg.className = 'user-msg error'; return; }
+
+  const allocs = getAllocRows('ct');
+  if (!allocs.length) { msg.textContent = 'Add at least one lot allocation'; msg.className = 'user-msg error'; return; }
+
+  try {
+    const r = await fetch(`${BASE}/api/auctions`, {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({ ano, date, crop_type: crop || 'ASP', start_time: st || null, end_time: et || null })
+    });
+    const d = await r.json();
+    if (!r.ok) { msg.textContent = d.error || 'Failed'; msg.className = 'user-msg error'; return; }
+
+    // Save allocations
+    const auctionId = d.auction?.id || d.id;
+    if (auctionId) {
+      const r2 = await fetch(`${BASE}/api/auctions/${auctionId}/allocations`, {
+        method: 'POST', headers: authHeaders(), body: JSON.stringify({ allocations: allocs })
+      });
+      const d2 = await r2.json();
+      if (!r2.ok) { msg.textContent = 'Trade created but allocation failed: ' + (d2.error || ''); msg.className = 'user-msg error'; loadAuctions(); loadTrades(); return; }
+    }
+
+    msg.textContent = 'Trade #' + ano + ' created with ' + allocs.length + ' allocation(s)';
+    msg.className = 'user-msg success';
+    document.getElementById('ct-ano').value = '';
+    document.getElementById('ct-start').value = '';
+    document.getElementById('ct-end').value = '';
+    document.getElementById('ct-list').innerHTML = '';
+    document.getElementById('ct-summary').textContent = '';
+    loadAuctions();
+    loadTrades();
+  } catch (e) { msg.textContent = 'Failed'; msg.className = 'user-msg error'; }
+}
+
+async function loadTrades() {
+  try {
+    const r = await fetch(`${BASE}/api/auctions`, { headers: authHeaders() });
+    const d = await r.json();
+    cachedAuctions = d.auctions || [];
+
+    // Fetch branches for allocation dropdowns
+    try {
+      const br = await fetch(`${BASE}/api/config`, { headers: authHeaders() });
+      const bd = await br.json();
+      allocBranches = (bd.config || []).filter(c => c.type === 'branch').map(c => c.value);
+    } catch(e) {}
+
+    const list = document.getElementById('trades-list');
+    if (!cachedAuctions.length) { list.innerHTML = '<div style="padding:16px;text-align:center;color:#888;font-size:13px">No trades created</div>'; return; }
+
+    // Load allocation stats for each trade
+    const allocPromises = cachedAuctions.map(a =>
+      fetch(`${BASE}/api/auctions/${a.id}/allocation-stats`, { headers: authHeaders() }).then(r => r.json()).catch(() => ({ stats: [] }))
+    );
+    const allocResults = await Promise.all(allocPromises);
+
+    list.innerHTML = cachedAuctions.map((a, i) => {
+      const timeStr = a.start_time || a.end_time ? (a.start_time||'--') + ' – ' + (a.end_time||'--') : 'No time limit';
+      const stats = allocResults[i]?.stats || [];
+      let allocHtml = '';
+      if (stats.length) {
+        allocHtml = '<div style="margin-top:8px">' + stats.map(s => {
+          const pct = s.total > 0 ? Math.round((s.used / s.total) * 100) : 0;
+          const barColor = pct >= 90 ? '#C62828' : pct >= 70 ? '#E67E22' : '#1D9E75';
+          return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;font-size:11px">
+            <span style="width:100px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${s.branch}</span>
+            <div style="flex:1;height:6px;background:#e8e8e8;border-radius:3px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${barColor};border-radius:3px"></div></div>
+            <span style="color:#888;white-space:nowrap">${s.used}/${s.total}</span>
+          </div>`;
+        }).join('') + '</div>';
+      } else {
+        allocHtml = '<div style="margin-top:6px;font-size:11px;color:#E67E22">⚠ No lots allocated</div>';
+      }
+
+      return `<div class="trade-item">
+        <div class="trade-hdr">
+          <span class="trade-title">Trade #${a.ano} — ${fmtDate(a.date)} — ${a.crop_type}</span>
+          <span style="font-size:11px;color:#888">${a.lot_count} lots</span>
+        </div>
+        <div class="trade-meta">Time: ${timeStr}</div>
+        ${allocHtml}
+        <div style="display:flex;gap:5px;margin-top:8px;align-items:center;flex-wrap:wrap">
+          <input type="time" id="ts-${a.id}" value="${a.start_time||''}" style="height:28px;border-radius:6px;border:1px solid #ccc;padding:0 6px;font-size:12px;font-family:inherit;width:95px">
+          <span style="font-size:11px;color:#888">to</span>
+          <input type="time" id="te-${a.id}" value="${a.end_time||''}" style="height:28px;border-radius:6px;border:1px solid #ccc;padding:0 6px;font-size:12px;font-family:inherit;width:95px">
+          <button class="t-btn tb-save" onclick="updateTradeTime(${a.id},'${a.ano}','${a.date}','${a.crop_type}')" title="Save time"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg></button>
+          <button class="t-btn tb-clear" onclick="document.getElementById('ts-${a.id}').value='';document.getElementById('te-${a.id}').value='';updateTradeTime(${a.id},'${a.ano}','${a.date}','${a.crop_type}')" title="Clear time"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+          <button class="t-btn" style="color:#1D9E75;border-color:#1D9E75" onclick="openAllocModal(${a.id},${a.ano})" title="Manage lot allocations &amp; reassign">📋</button>
+          <button class="t-btn tb-del" onclick="deleteTrade(${a.id},${a.ano},${a.lot_count})" title="Delete trade"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
+        </div>
+      </div>`;
+    }).join('');
+  } catch (e) {}
+}
+
+async function updateTradeTime(id, ano, date, crop) {
+  const st = document.getElementById('ts-' + id).value;
+  const et = document.getElementById('te-' + id).value;
+  try {
+    await fetch(`${BASE}/api/auctions`, {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({ ano: parseInt(ano), date, crop_type: crop, start_time: st || null, end_time: et || null })
+    });
+    loadTrades();
+  } catch (e) {}
+}
+
+async function deleteTrade(id, ano, lotCount) {
+  const msg = lotCount > 0
+    ? 'Delete Trade #' + ano + ' and its ' + lotCount + ' lot(s)? This cannot be undone!'
+    : 'Delete Trade #' + ano + '?';
+  if (!confirm(msg)) return;
+  try {
+    const r = await fetch(`${BASE}/api/auctions/${id}`, { method: 'DELETE', headers: authHeaders() });
+    if (!r.ok) { const d = await r.json(); alert(d.error || 'Failed'); return; }
+    loadAuctions();
+    loadTrades();
+  } catch (e) {}
+}
+
+let cachedAuctions = [];
+
+document.getElementById('auction-select').addEventListener('change', (e) => {
+  currentAuctionId = e.target.value;
+  currentPage = 1;
+  if (currentAuctionId) { loadLots(); loadAllocStats(); }
+  else { document.getElementById('alloc-stats').style.display = 'none'; }
+});
+
+// Filter change listeners
+document.getElementById('filter-branch').addEventListener('change', () => { currentPage = 1; if (currentAuctionId) { loadLots(); loadAllocStats(); } });
+document.getElementById('filter-user').addEventListener('change', () => { currentPage = 1; if (currentAuctionId) loadLots(); });
+
+document.getElementById('source-file').addEventListener('change', (e) => {
+  document.getElementById('upload-btn').disabled = !e.target.files.length;
+  document.getElementById('upload-status').textContent = '';
+});
+
+async function uploadSource() {
+  const fileInput = document.getElementById('source-file');
+  const statusEl = document.getElementById('upload-status');
+  const btn = document.getElementById('upload-btn');
+  if (!fileInput.files.length) return;
+  btn.disabled = true; btn.textContent = 'Importing...'; statusEl.textContent = '';
+  try {
+    const formData = new FormData();
+    formData.append('file', fileInput.files[0]);
+    const res = await fetch(`${BASE}/api/upload-source`, { method:'POST', headers:{'Authorization':'Bearer '+authToken}, body:formData });
+    const data = await res.json();
+    if (res.ok) { statusEl.textContent = `Imported ${data.traders} traders`; statusEl.className='upload-status success'; document.getElementById('trader-count').textContent=data.traders; }
+    else { statusEl.textContent = data.error||'Import failed'; statusEl.className='upload-status error'; }
+  } catch(e) { statusEl.textContent='Upload failed'; statusEl.className='upload-status error'; }
+  btn.textContent='Upload & Import'; btn.disabled=false; fileInput.value='';
+}
+
+// ── USER MANAGEMENT ──
+
+async function loadUsers() {
+  try {
+    const res = await fetch(`${BASE}/api/auth/users`, { headers: authHeaders() });
+    const data = await res.json();
+
+    // Desktop table
+    const tbody = document.getElementById('users-body');
+    tbody.innerHTML = data.users.map(u => `<tr>
+      <td>${u.id}</td>
+      <td><strong>${u.username}</strong></td>
+      <td><span class="role-${u.role}">${u.role}</span></td>
+      <td>${u.branch || '—'}</td>
+      <td style="font-size:11px;color:#888;">${u.created_at||''}</td>
+      <td style="white-space:nowrap">
+        <button class="btn-edit-lot" style="font-size:10px;padding:2px 6px" title="Reset this user's password" onclick="resetUserPassword(${u.id},'${u.username}')" title="Reset password">🔑</button>
+        ${u.username!==currentUser.username?`<button class="btn-delete" onclick="deleteUser(${u.id},'${u.username}')">Delete</button>`:''}
+      </td>
+    </tr>`).join('');
+
+    // Mobile cards
+    const cardsDiv = document.getElementById('users-cards');
+    cardsDiv.innerHTML = data.users.map(u => {
+      const initial = (u.username||'?')[0].toUpperCase();
+      const isAdmin = u.role === 'admin';
+      return `<div class="adm-user-card">
+        <div class="adm-user-avatar${isAdmin?' admin-av':''}">${initial}</div>
+        <div class="adm-user-info">
+          <div class="adm-user-name">${u.username} <span class="role-${u.role}">${u.role}</span></div>
+          <div class="adm-user-meta">${u.branch || 'No branch'} &nbsp;·&nbsp; ${u.created_at ? u.created_at.split(' ')[0] : ''}</div>
+        </div>
+        <button class="btn-edit-lot" style="font-size:10px;padding:2px 6px;margin-right:4px" title="Reset this user's password" onclick="resetUserPassword(${u.id},'${u.username}')" title="Reset password">🔑</button>
+        ${u.username!==currentUser.username?`<button class="adm-user-del" onclick="deleteUser(${u.id},'${u.username}')">Delete</button>`:''}
+      </div>`;
+    }).join('');
+
+    populateBranchDropdown();
+  } catch(e) { console.error('loadUsers failed:', e); }
+}
+
+async function addUser() {
+  const username = document.getElementById('new-username').value.trim();
+  const password = document.getElementById('new-password').value;
+  const role = document.getElementById('new-role').value;
+  const branch = document.getElementById('new-user-branch').value;
+  const msgEl = document.getElementById('user-msg');
+  msgEl.textContent = '';
+  if (!username||!password) { msgEl.textContent='Username and password required'; msgEl.className='user-msg error'; return; }
+  try {
+    const res = await fetch(`${BASE}/api/auth/users`, { method:'POST', headers:authHeaders(), body:JSON.stringify({username,password,role,branch}) });
+    const data = await res.json();
+    if (res.ok) { msgEl.textContent=`User "${data.user.username}" created (${data.user.branch||'no branch'})`; msgEl.className='user-msg success'; document.getElementById('new-username').value=''; document.getElementById('new-password').value=''; loadUsers(); }
+    else { msgEl.textContent=data.error||'Failed'; msgEl.className='user-msg error'; }
+  } catch(e) { msgEl.textContent='Failed to create user'; msgEl.className='user-msg error'; }
+}
+
+async function deleteUser(id, username) {
+  if (!confirm(`Delete user "${username}"?`)) return;
+  try {
+    await fetch(`${BASE}/api/auth/users/${id}`, { method:'DELETE', headers:authHeaders() });
+    loadUsers();
+  } catch(e) {}
+}
+
+function startAutoRefresh() {
+  if (refreshTimer) clearInterval(refreshTimer);
+  refreshTimer = setInterval(() => {
+    if (!currentAuctionId) return;
+    // Skip refresh if any checkboxes are selected
+    const checked = document.querySelectorAll('.lot-cb:checked');
+    if (checked.length > 0) return;
+    loadLots();
+    // Only refresh alloc stats if no grids are open
+    const openGrids = document.querySelectorAll('[id^="ag-"]');
+    let anyOpen = false;
+    openGrids.forEach(g => { if (g.style.display !== 'none') anyOpen = true; });
+    if (!anyOpen) loadAllocStats();
+  }, 5000);
+}
+
+// ── INIT ──
+async function initApp() {
+  // Load title on all pages (login + dashboard)
+  try {
+    const r = await fetch(`${BASE}/api/config`);
+    const d = await r.json();
+    const t = d.title || 'Spice Auction';
+    document.getElementById('login-title').textContent = t;
+    document.title = t + ' — Admin';
+  } catch(e) {}
+  loadLogo();
+  checkExistingToken();
+}
+initApp();
+</script>
+<!-- Bank details popover -->
+<div id="bank-pop" class="bank-pop" style="display:none" onclick="event.stopPropagation()">
+  <button class="bp-close" onclick="closeBankPop()">&times;</button>
+  <div class="bp-name" id="bp-name"></div>
+  <div class="bp-row"><span class="bp-lbl">A/C No</span><span class="bp-val" id="bp-acct">—</span></div>
+  <div class="bp-row"><span class="bp-lbl">IFSC</span><span class="bp-val" id="bp-ifsc">—</span></div>
+  <div class="bp-row"><span class="bp-lbl">Phone</span><span class="bp-val" id="bp-tel">—</span></div>
+  <div class="bp-row"><span class="bp-lbl">GSTIN</span><span class="bp-val" id="bp-cr">—</span></div>
+</div>
+</body>
+</body>
+</html>
