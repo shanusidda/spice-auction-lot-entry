@@ -1,0 +1,2048 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Spice Config — Admin</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#f6f5f1;--card:#fff;--border:#e8e6e1;--border2:#d3d1c7;
+  --text:#1a1a18;--text2:#666;--text3:#888;
+  --green:#0d7c5f;--green-dk:#0a6a50;--green-bg:#e8f5f0;--green-border:#c3e8d9;
+  --orange:#E67E22;--orange-bg:#FEF3C7;
+  --red:#C62828;--red-bg:#FEE7E7;
+  --blue:#378ADD;
+  --tab-bg:#eae9e3;
+  /* Backward-compat aliases for inline styles */
+  --spice:#0d7c5f;--spice-lt:var(--green-bg);
+  --amber:var(--orange);--amber-bg:var(--orange-bg);
+  --border2:#ccc;
+  font-family:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+  letter-spacing:-.01em;
+}
+body{background:var(--bg);color:var(--text);min-height:100vh;font-size:14px}
+
+/* ── Login ───────────────────────────────────────────────── */
+#login{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px}
+.login-box{background:var(--card);border:1.5px solid var(--border);border-radius:16px;padding:40px;width:380px;box-shadow:0 4px 24px rgba(0,0,0,.06)}
+.login-box h1{font-size:22px;font-weight:800;color:var(--green);text-align:center;margin-bottom:6px;display:flex;align-items:center;justify-content:center;gap:10px}
+.login-box h1 .dot{width:12px;height:12px;border-radius:50%;background:var(--green);animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.login-box p{font-size:13px;color:var(--text2);text-align:center;margin-bottom:26px}
+.fg{margin-bottom:14px}
+.fg label{display:block;font-size:12px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px}
+.fg input,.fg select,.fg textarea{
+  width:100%;height:44px;padding:0 14px;border:1.5px solid #ccc;border-radius:10px;
+  font-size:15px;font-family:inherit;background:#fff;outline:none;transition:all .15s;
+  -webkit-appearance:none;appearance:none
+}
+.fg textarea{height:auto;padding:10px 14px;min-height:60px}
+.fg input[type="date"]{padding:0 12px}
+.fg input:focus,.fg select:focus,.fg textarea:focus{border-color:var(--green);box-shadow:0 0 0 3px rgba(13,124,95,.18)}
+.fg select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='10'%3E%3Cpath d='M1 1l6 6 6-6' stroke='%23666' fill='none' stroke-width='2'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center}
+
+/* ── Buttons ─────────────────────────────────────────────── */
+.btn{height:38px;padding:0 16px;border:none;border-radius:8px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.btn:hover{opacity:.88;transform:translateY(-1px)}
+.btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.btn-g{background:var(--green);color:#fff}
+.btn-g:hover{background:var(--green-dk)}
+.btn-a{background:var(--orange);color:#fff}
+.btn-r{background:var(--red);color:#fff}
+.btn-o{background:#fff;border:1.5px solid #ccc;color:var(--text2)}
+.btn-o:hover{background:#f5f4f0;border-color:#999}
+.btn-blue{background:var(--blue);color:#fff}
+.btn-full{width:100%;height:48px;font-size:15px}
+.err{color:var(--red);font-size:13px;text-align:center;margin-top:12px;font-weight:600;display:none}
+
+/* ── Top Bar ─────────────────────────────────────────────── */
+#app{display:none}
+.topbar{
+  background:var(--card);border-bottom:1.5px solid var(--border);
+  padding:12px 22px;display:flex;justify-content:space-between;align-items:center;
+  position:sticky;top:0;z-index:30
+}
+.topbar-left{display:flex;align-items:center;gap:14px}
+.hamburger{
+  display:none;width:40px;height:40px;border:none;background:none;cursor:pointer;
+  align-items:center;justify-content:center;border-radius:8px;padding:0
+}
+.hamburger:hover{background:var(--bg)}
+.hamburger svg{width:22px;height:22px;stroke:var(--text);stroke-width:2;fill:none;stroke-linecap:round}
+.topbar h1{
+  font-size:18px;font-weight:800;color:var(--green);
+  display:flex;align-items:center;gap:10px
+}
+.topbar h1 .dot{width:10px;height:10px;border-radius:50%;background:var(--green);animation:pulse 2s ease-in-out infinite}
+.topbar-user{font-size:13px;background:var(--green-bg);color:var(--green);padding:6px 14px;border-radius:8px;font-weight:700}
+
+/* ── Layout: Sidebar + Content ──────────────────────────── */
+.layout{display:flex;min-height:calc(100vh - 60px)}
+.sidebar{
+  width:230px;background:var(--card);border-right:1.5px solid var(--border);
+  padding:16px 10px;flex-shrink:0;position:sticky;top:60px;
+  height:calc(100vh - 60px);overflow-y:auto
+}
+.side-group{margin-bottom:18px}
+.side-group-lbl{
+  font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;
+  letter-spacing:.6px;padding:0 12px 6px;margin-top:4px
+}
+.side-item{
+  display:flex;align-items:center;gap:10px;
+  padding:10px 12px;border-radius:8px;cursor:pointer;
+  font-size:13px;font-weight:600;color:var(--text2);
+  margin-bottom:2px;transition:all .15s;
+  border:none;background:none;font-family:inherit;width:100%;text-align:left
+}
+.side-item:hover{background:var(--bg);color:var(--text)}
+.side-item.active{background:var(--green-bg);color:var(--green);font-weight:700}
+.side-item svg{width:16px;height:16px;flex-shrink:0;stroke-width:2;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round}
+.sidebar-overlay{
+  display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:25
+}
+
+.content{flex:1;padding:22px;max-width:1200px;margin:0 auto;min-width:0}
+.tc{display:none}
+.tc.active{display:block;animation:fadeIn .2s}
+@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+/* ── Icon action buttons (edit/del/pdf) ─────────────────── */
+.icon-btn{
+  width:32px;height:32px;padding:0;border-radius:7px;
+  border:1.5px solid var(--border);background:var(--card);
+  cursor:pointer;display:inline-flex;align-items:center;justify-content:center;
+  transition:all .15s;margin-right:4px
+}
+.icon-btn:hover{transform:translateY(-1px);box-shadow:0 2px 6px rgba(0,0,0,.08)}
+.icon-btn svg{width:15px;height:15px;stroke-width:2;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round}
+.icon-btn.i-edit{color:var(--text2);border-color:#d0cfc7}
+.icon-btn.i-edit:hover{color:var(--green);border-color:var(--green)}
+.icon-btn.i-del{color:var(--red);border-color:#f0c5c5}
+.icon-btn.i-del:hover{background:var(--red);color:#fff;border-color:var(--red)}
+.icon-btn.i-pdf{color:var(--green);border-color:var(--green-border)}
+.icon-btn.i-pdf:hover{background:var(--green);color:#fff}
+.icon-btn.i-view{color:var(--blue);border-color:#bfd5ec}
+.icon-btn.i-view:hover{background:var(--blue);color:#fff}
+
+/* ── Cards ───────────────────────────────────────────────── */
+.card{
+  background:var(--card);border:1.5px solid var(--border);border-radius:14px;
+  padding:20px;margin-bottom:16px
+}
+.card h2{
+  font-size:17px;font-weight:700;margin-bottom:14px;color:var(--text);
+  display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap
+}
+.card h3{font-size:14px;font-weight:700;margin:16px 0 10px;color:var(--green)}
+
+/* ── Tables ──────────────────────────────────────────────── */
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{
+  text-align:left;padding:10px 12px;background:var(--green-bg);
+  font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.4px;
+  color:var(--green);border-bottom:1.5px solid var(--green-border)
+}
+td{padding:10px 12px;border-bottom:1px solid #f2f1ec;font-size:13px}
+tr:hover td{background:#fafaf6}
+.num{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+
+/* ── Stat Cards ──────────────────────────────────────────── */
+.stats{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
+  gap:14px;margin-bottom:24px
+}
+.stat{
+  background:linear-gradient(135deg,#0d7c5f 0%,#0a6a50 50%,#085540 100%);
+  border-radius:14px;padding:22px 18px;text-align:center;color:#fff
+}
+.stat .n{font-size:32px;font-weight:800;color:#fff;line-height:1.1}
+.stat .l{
+  font-size:11px;color:rgba(255,255,255,.8);
+  text-transform:uppercase;letter-spacing:.6px;font-weight:700;margin-top:6px
+}
+
+/* ── Accordion (Settings) ────────────────────────────────── */
+.cat{
+  border:1.5px solid var(--border);border-radius:12px;margin-bottom:10px;
+  background:var(--card);overflow:hidden
+}
+.cat-h{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:14px 18px;cursor:pointer;transition:background .1s
+}
+.cat-h:hover{background:#fafaf6}
+.cat-h h3{font-size:14px;font-weight:700;color:var(--text);margin:0}
+.cat-h .arr{font-size:11px;color:var(--text3);transition:transform .2s;font-weight:700}
+.cat-h.open{background:var(--green-bg);border-bottom:1.5px solid var(--green-border)}
+.cat-h.open h3{color:var(--green)}
+.cat-h.open .arr{transform:rotate(90deg);color:var(--green)}
+.cat-b{display:none;padding:16px 18px}
+.cat-b.open{display:block}
+
+/* ── Settings layout ─────────────────────────────────────── */
+.set-wrap{display:grid;grid-template-columns:220px 1fr;gap:18px;align-items:start}
+.set-nav{
+  background:var(--card);border:1.5px solid var(--border);border-radius:12px;
+  padding:10px 8px;position:sticky;top:76px;max-height:calc(100vh - 100px);overflow-y:auto
+}
+.set-search{
+  width:100%;height:38px;padding:0 12px 0 34px;border:1.5px solid var(--border);border-radius:8px;
+  font-size:13px;font-family:inherit;margin-bottom:10px;background:var(--bg);outline:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.35-4.35'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:12px center
+}
+.set-search:focus{border-color:var(--green)}
+.set-nav-item{
+  display:flex;justify-content:space-between;align-items:center;gap:8px;
+  padding:9px 12px;border-radius:7px;cursor:pointer;font-size:13px;font-weight:600;
+  color:var(--text2);margin-bottom:2px;border:none;background:none;font-family:inherit;
+  width:100%;text-align:left;transition:all .15s
+}
+.set-nav-item:hover{background:var(--bg);color:var(--text)}
+.set-nav-item.active{background:var(--green-bg);color:var(--green)}
+.set-nav-item .count{
+  font-size:11px;color:var(--text3);background:var(--bg);
+  padding:1px 7px;border-radius:10px;font-weight:700
+}
+.set-nav-item.active .count{background:#fff;color:var(--green)}
+.set-panel{
+  background:var(--card);border:1.5px solid var(--border);border-radius:14px;
+  padding:22px;min-height:400px
+}
+.set-panel-hdr{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  margin-bottom:16px;padding-bottom:14px;border-bottom:1.5px solid var(--border)
+}
+.set-panel-hdr h3{font-size:16px;font-weight:700;color:var(--text);margin:0}
+.set-panel-hdr .desc{font-size:12px;color:var(--text3);margin-top:2px}
+.set-actions-bar{
+  display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;
+  background:var(--card);border:1.5px solid var(--border);
+  border-radius:12px;padding:12px 16px;margin-bottom:14px;
+  position:sticky;top:76px;z-index:5
+}
+.set-no-match{text-align:center;color:var(--text3);padding:40px;font-size:14px}
+@media(max-width:900px){
+  .set-wrap{grid-template-columns:1fr}
+  .set-nav{position:static;max-height:none}
+  .set-actions-bar{position:static}
+}
+
+/* ── Grids ───────────────────────────────────────────────── */
+.sgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+.bgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px 18px}
+
+/* ── Toggle Switch ───────────────────────────────────────── */
+.flag-row{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:10px 0;border-bottom:1px solid #f2f1ec;gap:12px
+}
+.flag-row:last-child{border-bottom:none}
+.flag-row label{font-size:13px;font-weight:600;cursor:pointer;flex:1;color:var(--text)}
+.sw{position:relative;width:44px;height:24px;flex-shrink:0}
+.sw input{opacity:0;width:0;height:0;position:absolute}
+.sl{
+  position:absolute;inset:0;background:#ccc;border-radius:24px;cursor:pointer;
+  transition:background .2s
+}
+.sl::before{
+  content:'';position:absolute;width:18px;height:18px;
+  left:3px;bottom:3px;background:#fff;border-radius:50%;
+  transition:transform .2s;box-shadow:0 1px 3px rgba(0,0,0,.2)
+}
+.sw input:checked+.sl{background:var(--green)}
+.sw input:checked+.sl::before{transform:translateX(20px)}
+
+/* ── Toast ───────────────────────────────────────────────── */
+.toast{
+  display:none;position:fixed;top:80px;right:24px;
+  padding:14px 22px;background:var(--green);color:#fff;
+  border-radius:10px;font-weight:700;font-size:14px;z-index:99;
+  box-shadow:0 4px 16px rgba(13,124,95,.25);animation:slideIn .2s
+}
+@keyframes slideIn{from{transform:translateX(30px);opacity:0}to{transform:none;opacity:1}}
+
+/* ── Modal ───────────────────────────────────────────────── */
+.modal-bg{
+  display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);
+  z-index:50;align-items:center;justify-content:center;padding:20px
+}
+.modal-bg.show{display:flex;animation:fadeIn .2s}
+.modal{
+  background:var(--card);border-radius:16px;padding:28px;
+  width:100%;max-width:520px;max-height:90vh;overflow-y:auto;
+  box-shadow:0 12px 40px rgba(0,0,0,.2)
+}
+.modal h2{font-size:19px;font-weight:700;margin-bottom:18px;color:var(--text)}
+.modal .actions{display:flex;gap:10px;justify-content:flex-end;margin-top:22px;flex-wrap:wrap}
+
+/* ── Mobile ──────────────────────────────────────────────── */
+@media(max-width:900px){
+  .hamburger{display:inline-flex}
+  .sidebar{
+    position:fixed;top:0;left:0;height:100vh;width:250px;z-index:40;
+    transform:translateX(-100%);transition:transform .25s;box-shadow:2px 0 16px rgba(0,0,0,.15)
+  }
+  .sidebar.open{transform:none}
+  .sidebar-overlay.open{display:block}
+  .content{padding:16px}
+}
+@media(max-width:768px){
+  body{font-size:13px}
+  .topbar{padding:10px 14px}
+  .topbar h1{font-size:16px}
+  .card{padding:16px;border-radius:12px}
+  .card h2{font-size:15px}
+  .stats{grid-template-columns:repeat(2,1fr);gap:10px}
+  .stat{padding:16px 12px}
+  .stat .n{font-size:24px}
+  .stat .l{font-size:10px}
+  .sgrid,.bgrid{grid-template-columns:1fr}
+  .modal{padding:22px}
+  .btn{height:42px;font-size:14px}
+  table{font-size:12px}
+  th,td{padding:8px 10px}
+}
+</style>
+</head>
+<body>
+<div id="login">
+  <div class="login-box">
+    <h1><span class="dot"></span> Spice Config</h1>
+    <p>Company Configuration & Reports</p>
+    <div class="fg"><label>Username</label><input id="inp-u" value="admin"></div>
+    <div class="fg"><label>Password</label><input type="password" id="inp-p" onkeydown="if(event.key==='Enter')login()"></div>
+    <button class="btn btn-g btn-full" onclick="login()">Sign In</button>
+    <div class="err" id="login-err"></div>
+  </div>
+</div>
+
+<div id="app">
+  <div class="topbar">
+    <div class="topbar-left">
+      <button class="hamburger" onclick="toggleSidebar()" aria-label="Menu">
+        <svg viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+      </button>
+      <h1><span class="dot"></span> Spice Config</h1>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center">
+      <span id="user-lbl" class="topbar-user"></span>
+      <button class="btn btn-o" onclick="logout()">Logout</button>
+    </div>
+  </div>
+
+  <div class="sidebar-overlay" id="sb-overlay" onclick="toggleSidebar()"></div>
+
+  <div class="layout">
+    <aside class="sidebar" id="sidebar">
+      <div class="side-group">
+        <div class="side-group-lbl">Overview</div>
+        <button class="side-item active" data-tab="dash" onclick="go('dash')">
+          <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+          Dashboard
+        </button>
+        <button class="side-item" data-tab="settings" onclick="go('settings')">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          Settings
+        </button>
+      </div>
+      <div class="side-group">
+        <div class="side-group-lbl">Master Data</div>
+        <button class="side-item" data-tab="traders" onclick="go('traders')">
+          <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          Sellers
+        </button>
+        <button class="side-item" data-tab="buyers" onclick="go('buyers')">
+          <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Buyers
+        </button>
+        <button class="side-item" data-tab="auctions" onclick="go('auctions')">
+          <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+          Auctions
+        </button>
+        <button class="side-item" data-tab="lots" onclick="go('lots')">
+          <svg viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.27 6.96 12 12.01l8.73-5.05M12 22.08V12"/></svg>
+          Lots
+        </button>
+      </div>
+      <div class="side-group">
+        <div class="side-group-lbl">Transactions</div>
+        <button class="side-item" data-tab="invoices" onclick="go('invoices')">
+          <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
+          Sales Invoices
+        </button>
+        <button class="side-item" data-tab="purchases" onclick="go('purchases')">
+          <svg viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0"/></svg>
+          Purchases
+        </button>
+        <button class="side-item" data-tab="bills" onclick="go('bills')">
+          <svg viewBox="0 0 24 24"><path d="M20 14v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8z"/><path d="M14 2v6h6M9 15h4M9 18h6M9 12h2"/></svg>
+          Bills of Supply
+        </button>
+        <button class="side-item" data-tab="debit" onclick="go('debit')">
+          <svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h2M12 15h2"/></svg>
+          Debit Notes
+        </button>
+        <button class="side-item" data-tab="payments" onclick="go('payments')">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01"/></svg>
+          Payments
+        </button>
+      </div>
+      <div class="side-group">
+        <div class="side-group-lbl">Reports</div>
+        <button class="side-item" data-tab="exports" onclick="go('exports')">
+          <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+          Exports
+        </button>
+        <button class="side-item" data-tab="tds" onclick="go('tds')">
+          <svg viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+          TDS Returns
+        </button>
+        <button class="side-item" data-tab="journals" onclick="go('journals')">
+          <svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+          Journals
+        </button>
+      </div>
+    </aside>
+
+    <div class="content">
+    <div class="toast" id="toast"></div>
+
+    <!-- DASHBOARD -->
+    <div class="tc active" id="tc-dash"><div class="stats" id="stats"></div></div>
+
+    <!-- SETTINGS -->
+    <div class="tc" id="tc-settings">
+      <div class="set-actions-bar">
+        <h2 style="font-size:16px;margin:0;margin-right:auto">Company Settings</h2>
+        <button class="btn btn-g" onclick="saveSettings()">Save Changes</button>
+        <button class="btn btn-a" onclick="exportSettings()">Export</button>
+        <button class="btn btn-o" onclick="document.getElementById('imp-set').click()">Import</button>
+        <input type="file" id="imp-set" accept=".json" style="display:none" onchange="importSettings(event)">
+      </div>
+      <div class="set-wrap">
+        <aside class="set-nav">
+          <input type="text" class="set-search" id="set-search" placeholder="Search settings..." oninput="filterSettings(this.value)">
+          <div id="set-nav-items"></div>
+        </aside>
+        <div class="set-panel">
+          <div class="set-panel-hdr">
+            <div>
+              <h3 id="set-panel-title">Loading…</h3>
+              <div class="desc" id="set-panel-desc"></div>
+            </div>
+          </div>
+          <div id="settings-root"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SELLERS -->
+    <div class="tc" id="tc-traders">
+      <div class="card">
+        <h2>Sellers / Poolers <button class="btn btn-g" onclick="openTraderAdd()">+ Add Seller</button></h2>
+        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:end">
+          <div class="fg" style="margin:0;flex:1;min-width:180px"><input placeholder="Search sellers..." oninput="searchTraders(this.value)"></div>
+          <button class="btn btn-a" onclick="document.getElementById('imp-traders').click()">Import XLS/XLSX</button>
+          <button class="btn btn-o" onclick="downloadTemplate('traders')">Download Template</button>
+          <input type="file" id="imp-traders" accept=".xlsx,.xls" style="display:none" onchange="importTraders(event)">
+        </div>
+        <div id="trader-import-status" style="display:none;padding:8px 14px;border-radius:6px;font-size:12px;margin-bottom:10px"></div>
+        <div style="overflow-x:auto"><table><thead><tr><th>Name</th><th>CR/GSTIN</th><th>PAN</th><th>Phone</th><th>Place · State</th><th>Bank</th><th>Actions</th></tr></thead><tbody id="traders-list"></tbody></table></div>
+      </div>
+    </div>
+
+    <!-- BUYERS -->
+    <div class="tc" id="tc-buyers">
+      <div class="card">
+        <h2>Buyers / Dealers <button class="btn btn-g" onclick="openBuyerAdd()">+ Add Buyer</button></h2>
+        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:end">
+          <div class="fg" style="margin:0;flex:1;min-width:180px"><input placeholder="Search buyers..." oninput="searchBuyers(this.value)"></div>
+          <button class="btn btn-a" onclick="document.getElementById('imp-buyers').click()">Import XLS/XLSX</button>
+          <button class="btn btn-o" onclick="downloadTemplate('buyers')">Download Template</button>
+          <input type="file" id="imp-buyers" accept=".xlsx,.xls" style="display:none" onchange="importBuyers(event)">
+        </div>
+        <div id="buyer-import-status" style="display:none;padding:8px 14px;border-radius:6px;font-size:12px;margin-bottom:10px"></div>
+        <div style="overflow-x:auto"><table><thead><tr><th>Code</th><th>Trade Name</th><th>GSTIN</th><th>PAN</th><th>Phone</th><th>Place · State</th><th>Sale</th><th>Actions</th></tr></thead><tbody id="buyers-list"></tbody></table></div>
+      </div>
+    </div>
+
+    <!-- AUCTIONS -->
+    <div class="tc" id="tc-auctions">
+      <div class="card">
+        <h2>Auctions / Trades <button class="btn btn-g" onclick="openAuctionAdd()">+ New Auction</button></h2>
+        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+          <button class="btn btn-a" onclick="showModal('import-auction-modal')">Import Lots from XLS/XLSX</button>
+          <button class="btn btn-o" onclick="downloadTemplate('auctions')">Download Template</button>
+        </div>
+        <div id="auction-import-status" style="display:none;padding:8px 14px;border-radius:6px;font-size:12px;margin-bottom:10px"></div>
+        <div style="overflow-x:auto"><table><thead><tr><th>Trade No</th><th>Date</th><th>Type</th><th>Lots</th><th>Actions</th></tr></thead><tbody id="auctions-list"></tbody></table></div>
+      </div>
+    </div>
+
+    <!-- LOTS -->
+    <div class="tc" id="tc-lots">
+      <div class="card">
+        <h2>Lot Data <span style="font-weight:400;font-size:12px;color:var(--text3)">Select an auction from Auctions tab first</span></h2>
+        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+          <select id="lot-auction" onchange="loadLots()" style="padding:6px;border:1px solid var(--border);border-radius:6px"></select>
+          <button class="btn btn-a" onclick="calculateAll()">Calculate All</button>
+          <button class="btn btn-o" onclick="validateLots()">Validate</button>
+        </div>
+        <div style="overflow-x:auto"><table><thead><tr><th>Lot</th><th>Name</th><th>Branch</th><th>Bags</th><th>Qty</th><th>Price</th><th>Amount</th><th>Buyer</th><th>PurAmt</th><th>Payable</th><th>Actions</th></tr></thead><tbody id="lots-list"></tbody></table></div>
+      </div>
+    </div>
+
+    <!-- INVOICES -->
+    <div class="tc" id="tc-invoices">
+      <div class="card">
+        <h2>Sales Invoices</h2>
+        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+          <select id="inv-auction" onchange="loadInvoices();loadInvEligibleBuyers()" style="padding:6px;border:1px solid var(--border);border-radius:6px"></select>
+          <button class="btn btn-g" onclick="openGenInvModal()">+ Generate Invoice</button>
+          <button class="btn btn-a" onclick="openGenAllModal('invoices')">⚡ Generate for All Buyers</button>
+        </div>
+        <div style="overflow-x:auto"><table><thead><tr><th>Sale</th><th>Inv#</th><th>Buyer</th><th>Qty</th><th>Amount</th><th>CGST</th><th>SGST</th><th>IGST</th><th>Total</th><th>Actions</th></tr></thead><tbody id="invoices-list"></tbody></table></div>
+      </div>
+    </div>
+
+    <!-- PURCHASES -->
+    <div class="tc" id="tc-purchases">
+      <div class="card">
+        <h2>Purchase Invoices</h2>
+        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+          <select id="pur-auction" onchange="loadPurchases();loadPurEligibleSellers()" style="padding:6px;border:1px solid var(--border);border-radius:6px"></select>
+          <button class="btn btn-g" onclick="openGenPurModal()">+ Generate Purchase Invoice</button>
+          <button class="btn btn-a" onclick="openGenAllModal('purchases')">⚡ Generate for All Dealers</button>
+        </div>
+        <div style="overflow-x:auto"><table><thead><tr><th>Inv#</th><th>Name</th><th>Qty</th><th>Amount</th><th>CGST</th><th>SGST</th><th>IGST</th><th>TDS</th><th>Total</th><th>Actions</th></tr></thead><tbody id="purchases-list"></tbody></table></div>
+      </div>
+    </div>
+
+    <!-- PAYMENTS -->
+    <div class="tc" id="tc-payments">
+      <div class="card">
+        <h2>Payment Summary</h2>
+        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+          <select id="pay-auction" style="padding:6px;border:1px solid var(--border);border-radius:6px"></select>
+          <button class="btn btn-g" onclick="loadPayments()">Load</button>
+          <button class="btn btn-a" onclick="exportType('bank_payment')">Export Bank Payment</button>
+          <button class="btn btn-a" onclick="exportType('payment')">Export Payment XLSX</button>
+        </div>
+        <div style="overflow-x:auto"><table><thead><tr><th>Seller</th><th>Lots</th><th>Qty</th><th>Amount</th><th>Purchase</th><th>Discount</th><th>Payable</th></tr></thead><tbody id="payments-list"></tbody></table></div>
+      </div>
+    </div>
+
+    <!-- EXPORTS -->
+    <div class="tc" id="tc-exports">
+      <div class="card">
+        <h2>Export Center — XLSX</h2>
+        <div class="fg" style="max-width:300px"><label>Select Auction</label><select id="exp-auction" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px"></select></div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;margin-top:12px" id="export-btns"></div>
+      </div>
+
+      <div class="card">
+        <h2>DBF Exports <span style="font-weight:400;font-size:12px;color:var(--text3)">FoxPro-compatible format for legacy integration</span></h2>
+        <p style="font-size:12px;color:var(--text2);margin-bottom:12px">These exports produce .dbf files that your dad's FoxPro application can read directly. Date format: DD/MM/YYYY. Lot numbers preserve leading zeros.</p>
+        
+        <h3 style="font-size:13px;margin:16px 0 8px 0;color:var(--spice)">Per Auction</h3>
+        <div style="display:flex;gap:8px;align-items:end;margin-bottom:12px;flex-wrap:wrap">
+          <div class="fg" style="margin:0;flex:1;min-width:200px"><label>Auction</label><select id="dbf-auction" style="padding:8px;border:1px solid var(--border);border-radius:6px;width:100%"></select></div>
+          <button class="btn btn-a" onclick="downloadDbf('lots',{auctionId:document.getElementById('dbf-auction').value})">Lots (CPA1.DBF)</button>
+        </div>
+
+        <h3 style="font-size:13px;margin:16px 0 8px 0;color:var(--spice)">Date Range</h3>
+        <div style="display:flex;gap:8px;align-items:end;margin-bottom:10px;flex-wrap:wrap">
+          <div class="fg" style="margin:0"><label>From</label><input type="date" id="dbf-from"></div>
+          <div class="fg" style="margin:0"><label>To</label><input type="date" id="dbf-to"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px">
+          <button class="btn btn-a" onclick="downloadDbfRange('invoices')">Sales Invoices (INV.DBF)</button>
+          <button class="btn btn-a" onclick="downloadDbfRange('purchases')">Purchases (PURCHASE.DBF)</button>
+          <button class="btn btn-a" onclick="downloadDbfRange('bills')">Bills of Supply (BILL.DBF)</button>
+          <button class="btn btn-a" onclick="downloadDbfRange('debit_notes')">Debit Notes</button>
+        </div>
+
+        <h3 style="font-size:13px;margin:16px 0 8px 0;color:var(--spice)">Master Data</h3>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px">
+          <button class="btn btn-a" onclick="downloadDbf('traders')">Sellers (NAM.DBF)</button>
+          <button class="btn btn-a" onclick="downloadDbf('buyers')">Buyers (SBL.DBF)</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- TDS -->
+    <div class="tc" id="tc-tds">
+      <div class="card">
+        <h2>TDS Returns</h2>
+        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:end">
+          <div class="fg" style="margin:0"><label>From</label><input type="date" id="tds-from"></div>
+          <div class="fg" style="margin:0"><label>To</label><input type="date" id="tds-to"></div>
+          <button class="btn btn-g" onclick="loadTDS()">Load</button>
+          <button class="btn btn-a" onclick="exportTDS()">Export XLSX</button>
+        </div>
+        <div style="overflow-x:auto"><table><thead><tr><th>Invoice</th><th>Date</th><th>Name</th><th>PAN</th><th>Assess Value</th><th>TDS</th></tr></thead><tbody id="tds-list"></tbody></table></div>
+      </div>
+    </div>
+
+    <!-- BILLS (Agriculturist Bills of Supply) -->
+    <div class="tc" id="tc-bills">
+      <div class="card">
+        <h2>Bills of Supply <span style="font-weight:400;font-size:12px;color:var(--text3)">For agriculturist sellers without GSTIN</span></h2>
+        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+          <select id="bill-auction" onchange="loadBills();loadEligibleSellers()" style="padding:6px;border:1px solid var(--border);border-radius:6px"></select>
+          <button class="btn btn-g" onclick="showModal('gen-bill-modal')">+ Generate Bill</button>
+          <button class="btn btn-a" onclick="openGenAllModal('bills')">⚡ Generate for All Agri Sellers</button>
+        </div>
+        <div style="overflow-x:auto"><table><thead><tr><th>Bill#</th><th>Date</th><th>Name</th><th>Place</th><th>Qty</th><th>Cost</th><th>Net</th><th>Actions</th></tr></thead><tbody id="bills-list"></tbody></table></div>
+      </div>
+    </div>
+
+    <!-- DEBIT NOTES -->
+    <div class="tc" id="tc-debit">
+      <div class="card">
+        <h2>Debit Notes <span style="font-weight:400;font-size:12px;color:var(--text3)">For discounts/adjustments on sales invoices</span></h2>
+        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+          <button class="btn btn-g" onclick="showModal('gen-debit-modal')">Generate Debit Note</button>
+        </div>
+        <div style="overflow-x:auto"><table><thead><tr><th>Note#</th><th>Date</th><th>Name</th><th>Amount</th><th>CGST</th><th>SGST</th><th>IGST</th><th>Total</th><th>Actions</th></tr></thead><tbody id="debit-list"></tbody></table></div>
+      </div>
+    </div>
+
+    <!-- JOURNALS -->
+    <div class="tc" id="tc-journals">
+      <div class="card">
+        <h2>Journals <span style="font-weight:400;font-size:12px;color:var(--text3)">Sales & Purchase registers</span></h2>
+        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:end">
+          <div class="fg" style="margin:0"><label>Journal Type</label>
+            <select id="jr-type" onchange="loadJournal()">
+              <option value="sales">Sales (JOUR)</option>
+              <option value="dealer">Purchase - Dealer (PUJOUR)</option>
+              <option value="agri">Purchase - Agri (PPUJOUR)</option>
+            </select>
+          </div>
+          <div class="fg" style="margin:0"><label>From</label><input type="date" id="jr-from"></div>
+          <div class="fg" style="margin:0"><label>To</label><input type="date" id="jr-to"></div>
+          <div class="fg" style="margin:0" id="jr-sale-wrap"><label>Sale Type</label>
+            <select id="jr-sale"><option value="">All</option><option value="L">Local (L)</option><option value="I">Inter-state (I)</option><option value="E">Export (E)</option></select>
+          </div>
+          <button class="btn btn-g" onclick="loadJournal()">Load</button>
+          <button class="btn btn-a" onclick="exportJournal()">Export XLSX</button>
+        </div>
+        <div style="overflow-x:auto;max-height:500px"><table id="jr-table"><thead id="jr-head"></thead><tbody id="jr-body"></tbody></table></div>
+      </div>
+    </div>
+  </div>
+  </div>
+</div>
+
+<!-- MODALS -->
+<div class="modal-bg" id="trader-view-modal"><div class="modal" style="max-width:560px">
+  <h2 id="trader-view-title">Seller</h2>
+  <div id="trader-view-body"></div>
+  <div class="actions">
+    <button class="btn btn-o" onclick="hideModal('trader-view-modal')">Close</button>
+    <button class="btn btn-g" id="trader-view-edit-btn">Edit</button>
+  </div>
+</div></div>
+
+<div class="modal-bg" id="trader-modal"><div class="modal">
+  <h2 id="trader-modal-title">Add Seller</h2>
+  <input type="hidden" id="t-id">
+  <div class="sgrid">
+    <div class="fg"><label>Name *</label><input id="t-name"></div>
+    <div class="fg"><label>CR / GSTIN</label><input id="t-cr"></div>
+    <div class="fg"><label>PAN</label><input id="t-pan"></div>
+    <div class="fg"><label>Phone</label><input id="t-tel"></div>
+    <div class="fg"><label>Aadhar</label><input id="t-aadhar"></div>
+    <div class="fg"><label>Address</label><input id="t-padd"></div>
+    <div class="fg"><label>Place</label><input id="t-ppla"></div>
+    <div class="fg"><label>State</label><input id="t-pstate"></div>
+    <div class="fg"><label>State Code</label><input id="t-pstcode"></div>
+    <div class="fg"><label>PIN</label><input id="t-pin"></div>
+    <div class="fg"><label>Account No</label><input id="t-acctnum"></div>
+    <div class="fg"><label>IFSC</label><input id="t-ifsc"></div>
+  </div>
+  <div class="actions"><button class="btn btn-o" onclick="hideModal('trader-modal')">Cancel</button><button class="btn btn-g" id="trader-save-btn" onclick="saveTrader()">Save</button></div>
+</div></div>
+
+<div class="modal-bg" id="buyer-view-modal"><div class="modal" style="max-width:560px">
+  <h2 id="buyer-view-title">Buyer</h2>
+  <div id="buyer-view-body"></div>
+  <div class="actions">
+    <button class="btn btn-o" onclick="hideModal('buyer-view-modal')">Close</button>
+    <button class="btn btn-g" id="buyer-view-edit-btn">Edit</button>
+  </div>
+</div></div>
+
+<div class="modal-bg" id="buyer-modal"><div class="modal">
+  <h2 id="buyer-modal-title">Add Buyer</h2>
+  <input type="hidden" id="b-id">
+  <div class="sgrid">
+    <div class="fg"><label>Buyer Code *</label><input id="b-buyer"></div>
+    <div class="fg"><label>Trade Name</label><input id="b-buyer1"></div>
+    <div class="fg"><label>GSTIN</label><input id="b-gstin"></div>
+    <div class="fg"><label>Address 1</label><input id="b-add1"></div>
+    <div class="fg"><label>Address 2</label><input id="b-add2"></div>
+    <div class="fg"><label>Place</label><input id="b-pla"></div>
+    <div class="fg"><label>PIN</label><input id="b-pin"></div>
+    <div class="fg"><label>State</label><input id="b-state"></div>
+    <div class="fg"><label>State Code</label><input id="b-stcode"></div>
+    <div class="fg"><label>PAN</label><input id="b-pan"></div>
+    <div class="fg"><label>Phone</label><input id="b-tel"></div>
+  </div>
+  <div class="actions"><button class="btn btn-o" onclick="hideModal('buyer-modal')">Cancel</button><button class="btn btn-g" id="buyer-save-btn" onclick="saveBuyer()">Save</button></div>
+</div></div>
+
+<div class="modal-bg" id="auction-modal"><div class="modal">
+  <h2 id="auction-modal-title">New Auction</h2>
+  <input type="hidden" id="a-id">
+  <div class="sgrid">
+    <div class="fg"><label>Trade No *</label><input id="a-ano"></div>
+    <div class="fg"><label>Date *</label><input type="date" id="a-date"></div>
+    <div class="fg"><label>Crop Type</label><input id="a-crpt" value="ASP"></div>
+    <div class="fg"><label>State</label><select id="a-state"><option>TAMIL NADU</option><option>KERALA</option></select></div>
+  </div>
+  <div class="actions"><button class="btn btn-o" onclick="hideModal('auction-modal')">Cancel</button><button class="btn btn-g" id="auction-save-btn" onclick="saveAuction()">Save</button></div>
+</div></div>
+
+<div class="modal-bg" id="lot-modal"><div class="modal" style="max-width:640px">
+  <h2 id="lot-modal-title">Edit Lot</h2>
+  <input type="hidden" id="l-id">
+  <div class="sgrid">
+    <div class="fg"><label>Lot No *</label><input id="l-lotno"></div>
+    <div class="fg"><label>Name</label><input id="l-name"></div>
+    <div class="fg"><label>CR / GSTIN</label><input id="l-cr"></div>
+    <div class="fg"><label>Branch</label><input id="l-branch"></div>
+    <div class="fg"><label>Grade</label><input id="l-grade"></div>
+    <div class="fg"><label>Bags</label><input id="l-bags" type="number"></div>
+    <div class="fg"><label>Litre</label><input id="l-litre"></div>
+    <div class="fg"><label>Qty (kg)</label><input id="l-qty" type="number" step="0.001"></div>
+    <div class="fg"><label>Price (₹)</label><input id="l-price" type="number" step="0.01"></div>
+    <div class="fg"><label>Amount (₹)</label><input id="l-amount" type="number" step="0.01"></div>
+    <div class="fg"><label>Buyer Code</label><input id="l-buyer"></div>
+    <div class="fg"><label>Buyer Name</label><input id="l-buyer1"></div>
+    <div class="fg"><label>Code</label><input id="l-code"></div>
+    <div class="fg"><label>Sale Type</label>
+      <select id="l-sale"><option value=""></option><option value="L">Local (L)</option><option value="I">Inter-state (I)</option><option value="E">Export (E)</option></select>
+    </div>
+  </div>
+  <div class="actions"><button class="btn btn-o" onclick="hideModal('lot-modal')">Cancel</button><button class="btn btn-g" onclick="saveLot()">Save</button></div>
+</div></div>
+
+<div class="modal-bg" id="gen-inv-modal"><div class="modal">
+  <h2>Generate Sales Invoice</h2>
+  <div class="fg"><label>Sale Type</label><select id="gi-sale"><option value="L">Local (L)</option><option value="I">Inter-state (I)</option><option value="E">Export (E)</option></select></div>
+  <div class="fg"><label>Buyer</label>
+    <select id="gi-buyer"><option value="">— Select buyer —</option></select>
+  </div>
+  <div id="gi-hint" style="font-size:11px;color:var(--text3);padding:4px 0"></div>
+  <div class="fg"><label>Invoice No</label><input id="gi-invno" type="number"></div>
+  <div class="actions">
+    <button class="btn btn-o" onclick="hideModal('gen-inv-modal')">Cancel</button>
+    <button class="btn btn-a" onclick="previewInvoice('sales')">Preview</button>
+    <button class="btn btn-g" onclick="generateInvoice()">Generate</button>
+  </div>
+</div></div>
+
+<div class="modal-bg" id="gen-pur-modal"><div class="modal">
+  <h2>Generate Purchase Invoice</h2>
+  <p style="font-size:12px;color:var(--text2);margin-bottom:10px">Only for sellers <strong>with GSTIN</strong> (registered dealers).</p>
+  <div class="fg"><label>Seller</label>
+    <select id="gp-seller"><option value="">— Select seller —</option></select>
+  </div>
+  <div id="gp-hint" style="font-size:11px;color:var(--text3);padding:4px 0"></div>
+  <div class="fg"><label>Invoice No</label><input id="gp-invno" type="number"></div>
+  <div class="actions">
+    <button class="btn btn-o" onclick="hideModal('gen-pur-modal')">Cancel</button>
+    <button class="btn btn-a" onclick="previewInvoice('purchase')">Preview</button>
+    <button class="btn btn-g" onclick="generatePurchase()">Generate</button>
+  </div>
+</div></div>
+
+<div class="modal-bg" id="gen-all-modal"><div class="modal">
+  <h2 id="gen-all-title">Generate All</h2>
+  <p id="gen-all-desc" style="font-size:12px;color:var(--text2);margin-bottom:14px"></p>
+  <div class="fg" id="gen-all-sale-wrap" style="display:none"><label>Sale Type (fallback)</label>
+    <select id="ga-sale"><option value="">Use buyer's default</option><option value="L">Local (L)</option><option value="I">Inter-state (I)</option><option value="E">Export (E)</option></select>
+  </div>
+  <div class="fg"><label>Starting Number</label>
+    <input id="ga-start" type="number" placeholder="e.g. 100">
+    <div style="font-size:11px;color:var(--text3);margin-top:4px">Each generated invoice increments by 1 from here</div>
+  </div>
+  <div id="ga-preview" style="font-size:12px;color:var(--text2);background:var(--green-bg);border:1px solid var(--green-border);border-radius:8px;padding:10px;margin:6px 0;display:none"></div>
+  <div class="actions">
+    <button class="btn btn-o" onclick="hideModal('gen-all-modal')">Cancel</button>
+    <button class="btn btn-g" id="ga-submit" onclick="doGenerateAll()">Generate All</button>
+  </div>
+</div></div>
+
+<div class="modal-bg" id="gen-bill-modal"><div class="modal">
+  <h2>Generate Agriculturist Bill of Supply</h2>
+  <p style="font-size:12px;color:var(--text2);margin-bottom:14px">Only for sellers <strong>without GSTIN</strong> (farmers, agriculturists). No GST is charged. Sellers with GSTIN should use Generate Purchase Invoice instead.</p>
+  <div class="fg"><label>Eligible Seller</label>
+    <select id="gb-seller-dd" onchange="document.getElementById('gb-seller').value=this.value">
+      <option value="">— Select seller —</option>
+    </select>
+  </div>
+  <div class="fg"><label>Or enter seller name manually</label><input id="gb-seller" placeholder="Exact name as in lot"></div>
+  <div class="fg"><label>Bill No</label><input id="gb-billno" type="number"></div>
+  <div id="gb-hint" style="font-size:11px;color:var(--text3);padding:8px 0"></div>
+  <div class="actions">
+    <button class="btn btn-o" onclick="hideModal('gen-bill-modal')">Cancel</button>
+    <button class="btn btn-a" onclick="previewInvoice('agri')">Preview</button>
+    <button class="btn btn-g" onclick="generateBill()">Generate</button>
+  </div>
+</div></div>
+
+<div class="modal-bg" id="gen-debit-modal"><div class="modal">
+  <h2>Generate Debit Note</h2>
+  <p style="font-size:12px;color:var(--text2);margin-bottom:14px">Create a debit note against an existing sales invoice for discounts or adjustments.</p>
+  <div class="fg"><label>Invoice No (existing sales invoice)</label><input id="gd-invno"></div>
+  <div class="fg"><label>Sale Type</label><select id="gd-sale"><option value="L">Local (L)</option><option value="I">Inter-state (I)</option><option value="E">Export (E)</option></select></div>
+  <div class="fg"><label>Discount Amount (₹)</label><input id="gd-discount" type="number" step="0.01"></div>
+  <div class="fg"><label>Debit Note No</label><input id="gd-noteno" type="number"></div>
+  <div class="actions">
+    <button class="btn btn-o" onclick="hideModal('gen-debit-modal')">Cancel</button>
+    <button class="btn btn-g" onclick="generateDebitNote()">Generate</button>
+  </div>
+</div></div>
+
+<!-- Preview modal (shared across sales/purchase/agri) -->
+<div class="modal-bg" id="preview-modal"><div class="modal" style="max-width:750px;max-height:85vh">
+  <h2>Invoice Preview <span style="font-weight:400;font-size:12px;color:var(--text3)">— not yet saved</span></h2>
+  <div id="preview-body" style="max-height:60vh;overflow-y:auto"></div>
+  <div class="actions">
+    <button class="btn btn-o" onclick="hideModal('preview-modal')">Close</button>
+  </div>
+</div></div>
+
+<div class="modal-bg" id="import-auction-modal"><div class="modal">
+  <h2>Import Lots from XLS / XLSX</h2>
+  <p style="font-size:12px;color:var(--text2);margin-bottom:14px">Import lots from an Excel file. The file should have columns like <strong>ANO</strong> (trade no), <strong>DATE</strong>, <strong>LOT</strong>, <strong>NAME</strong>, <strong>BAG</strong>, <strong>QTY</strong>, etc.</p>
+  <p style="font-size:12px;color:var(--green);background:var(--green-bg);border:1px solid var(--green-border);border-radius:6px;padding:8px 10px;margin-bottom:14px">💡 If your file has multiple trade numbers (ANO 1, 2, 3…), leave the override fields below blank — each row goes into its own auction automatically.</p>
+  <div class="sgrid">
+    <div class="fg"><label>Trade No — OVERRIDE (blank = read from each row's ANO)</label><input id="ia-ano" placeholder="Leave blank for multi-auction files"></div>
+    <div class="fg"><label>Date — OVERRIDE (blank = read from each row)</label><input type="date" id="ia-date"></div>
+    <div class="fg"><label>Default Crop Type</label><input id="ia-crpt" value="ASP"></div>
+    <div class="fg"><label>Default State</label><select id="ia-state"><option>TAMIL NADU</option><option>KERALA</option></select></div>
+  </div>
+  <div class="fg" style="margin-top:10px"><label>Import Mode</label>
+    <select id="ia-mode" style="width:100%">
+      <option value="full">Full Import — add new lots (skips duplicates)</option>
+      <option value="price">Price Update — update price, buyer, code on existing lots</option>
+    </select>
+  </div>
+  <div class="fg" style="margin-top:10px"><label>Select File (.xls or .xlsx)</label>
+    <input type="file" id="ia-file" accept=".xls,.xlsx" style="padding:6px">
+  </div>
+  <div class="actions"><button class="btn btn-o" onclick="hideModal('import-auction-modal')">Cancel</button><button class="btn btn-g" onclick="importAuction()">Import</button></div>
+</div></div>
+
+<!-- ═══ EDIT MODALS ═══════════════════════════════════════ -->
+
+<div class="modal-bg" id="inv-edit-modal"><div class="modal" style="max-width:640px">
+  <h2>Edit Sales Invoice</h2>
+  <input type="hidden" id="inv-edit-id">
+  <div class="sgrid">
+    <div class="fg"><label>Trade No</label><input id="ie-ano"></div>
+    <div class="fg"><label>Date</label><input type="date" id="ie-date"></div>
+    <div class="fg"><label>Sale Type</label>
+      <select id="ie-sale"><option value="L">Local</option><option value="I">Inter-state</option><option value="E">Export</option></select>
+    </div>
+    <div class="fg"><label>Invoice No</label><input id="ie-invo"></div>
+    <div class="fg"><label>Buyer Code</label><input id="ie-buyer"></div>
+    <div class="fg"><label>Trade Name</label><input id="ie-buyer1"></div>
+    <div class="fg"><label>GSTIN</label><input id="ie-gstin"></div>
+    <div class="fg"><label>Place</label><input id="ie-place"></div>
+    <div class="fg"><label>Bags</label><input type="number" id="ie-bag" step="1"></div>
+    <div class="fg"><label>Qty (kg)</label><input type="number" id="ie-qty" step="0.001"></div>
+    <div class="fg"><label>Amount</label><input type="number" id="ie-amount" step="0.01"></div>
+    <div class="fg"><label>Gunny</label><input type="number" id="ie-gunny" step="0.01"></div>
+    <div class="fg"><label>Transport</label><input type="number" id="ie-pava_hc" step="0.01"></div>
+    <div class="fg"><label>Insurance</label><input type="number" id="ie-ins" step="0.01"></div>
+    <div class="fg"><label>CGST</label><input type="number" id="ie-cgst" step="0.01"></div>
+    <div class="fg"><label>SGST</label><input type="number" id="ie-sgst" step="0.01"></div>
+    <div class="fg"><label>IGST</label><input type="number" id="ie-igst" step="0.01"></div>
+    <div class="fg"><label>TCS</label><input type="number" id="ie-tcs" step="0.01"></div>
+    <div class="fg"><label>Round</label><input type="number" id="ie-rund" step="0.01"></div>
+    <div class="fg"><label>Grand Total</label><input type="number" id="ie-tot" step="0.01"></div>
+  </div>
+  <div class="actions">
+    <button class="btn btn-o" onclick="hideModal('inv-edit-modal')">Cancel</button>
+    <button class="btn btn-g" onclick="saveInvoiceEdit()">Save Changes</button>
+  </div>
+</div></div>
+
+<div class="modal-bg" id="pur-edit-modal"><div class="modal" style="max-width:640px">
+  <h2>Edit Purchase Invoice</h2>
+  <input type="hidden" id="pur-edit-id">
+  <div class="sgrid">
+    <div class="fg"><label>Trade No</label><input id="pe-ano"></div>
+    <div class="fg"><label>Date</label><input type="date" id="pe-date"></div>
+    <div class="fg"><label>State</label><input id="pe-state"></div>
+    <div class="fg"><label>Branch</label><input id="pe-br"></div>
+    <div class="fg"><label>Seller Name</label><input id="pe-name"></div>
+    <div class="fg"><label>Address</label><input id="pe-add_line"></div>
+    <div class="fg"><label>Place</label><input id="pe-place"></div>
+    <div class="fg"><label>GSTIN/CR</label><input id="pe-gstin"></div>
+    <div class="fg"><label>Invoice No</label><input id="pe-invo"></div>
+    <div class="fg"><label>Qty (kg)</label><input type="number" id="pe-qty" step="0.001"></div>
+    <div class="fg"><label>Amount</label><input type="number" id="pe-amount" step="0.01"></div>
+    <div class="fg"><label>CGST</label><input type="number" id="pe-cgst" step="0.01"></div>
+    <div class="fg"><label>SGST</label><input type="number" id="pe-sgst" step="0.01"></div>
+    <div class="fg"><label>IGST</label><input type="number" id="pe-igst" step="0.01"></div>
+    <div class="fg"><label>Round</label><input type="number" id="pe-rund" step="0.01"></div>
+    <div class="fg"><label>Total</label><input type="number" id="pe-total" step="0.01"></div>
+    <div class="fg"><label>TDS</label><input type="number" id="pe-tds" step="0.01"></div>
+  </div>
+  <div class="actions">
+    <button class="btn btn-o" onclick="hideModal('pur-edit-modal')">Cancel</button>
+    <button class="btn btn-g" onclick="savePurchaseEdit()">Save Changes</button>
+  </div>
+</div></div>
+
+<div class="modal-bg" id="bill-edit-modal"><div class="modal" style="max-width:640px">
+  <h2>Edit Bill of Supply</h2>
+  <input type="hidden" id="bill-edit-id">
+  <div class="sgrid">
+    <div class="fg"><label>Trade No</label><input id="be-ano"></div>
+    <div class="fg"><label>Date</label><input type="date" id="be-date"></div>
+    <div class="fg"><label>State</label><input id="be-state"></div>
+    <div class="fg"><label>Branch</label><input id="be-br"></div>
+    <div class="fg"><label>Bill No</label><input type="number" id="be-bil"></div>
+    <div class="fg"><label>Seller Name</label><input id="be-name"></div>
+    <div class="fg"><label>Address</label><input id="be-add_line"></div>
+    <div class="fg"><label>Place</label><input id="be-pla"></div>
+    <div class="fg"><label>Seller State</label><input id="be-pstate"></div>
+    <div class="fg"><label>State Code</label><input id="be-st_code"></div>
+    <div class="fg"><label>CR No</label><input id="be-crr"></div>
+    <div class="fg"><label>PAN</label><input id="be-pan"></div>
+    <div class="fg"><label>Qty (kg)</label><input type="number" id="be-qty" step="0.001"></div>
+    <div class="fg"><label>Cost</label><input type="number" id="be-cost" step="0.01"></div>
+    <div class="fg"><label>IGST</label><input type="number" id="be-igst" step="0.01"></div>
+    <div class="fg"><label>Net Amount</label><input type="number" id="be-net" step="0.01"></div>
+  </div>
+  <div class="actions">
+    <button class="btn btn-o" onclick="hideModal('bill-edit-modal')">Cancel</button>
+    <button class="btn btn-g" onclick="saveBillEdit()">Save Changes</button>
+  </div>
+</div></div>
+
+<div class="modal-bg" id="dn-edit-modal"><div class="modal" style="max-width:540px">
+  <h2>Edit Debit Note</h2>
+  <input type="hidden" id="dn-edit-id">
+  <div class="sgrid">
+    <div class="fg"><label>Trade No</label><input id="dne-ano"></div>
+    <div class="fg"><label>Date</label><input type="date" id="dne-date"></div>
+    <div class="fg"><label>State</label><input id="dne-state"></div>
+    <div class="fg"><label>Buyer Name</label><input id="dne-name"></div>
+    <div class="fg"><label>Note No</label><input id="dne-note_no"></div>
+    <div class="fg"><label>Amount</label><input type="number" id="dne-amount" step="0.01"></div>
+    <div class="fg"><label>CGST</label><input type="number" id="dne-cgst" step="0.01"></div>
+    <div class="fg"><label>SGST</label><input type="number" id="dne-sgst" step="0.01"></div>
+    <div class="fg"><label>IGST</label><input type="number" id="dne-igst" step="0.01"></div>
+    <div class="fg"><label>Total</label><input type="number" id="dne-total" step="0.01"></div>
+  </div>
+  <div class="actions">
+    <button class="btn btn-o" onclick="hideModal('dn-edit-modal')">Cancel</button>
+    <button class="btn btn-g" onclick="saveDebitEdit()">Save Changes</button>
+  </div>
+</div></div>
+
+<script>
+const B=location.origin;let T='';
+const h=(t,o={})=>fetch(B+t,{...o,headers:{'Content-Type':'application/json','Authorization':'Bearer '+T,...(o.headers||{})}});
+const j=async(t,o)=>{const r=await h(t,o);return r.json()};
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.style.display='block';setTimeout(()=>t.style.display='none',3000)}
+function showModal(id){document.getElementById(id).classList.add('show')}
+function hideModal(id){document.getElementById(id).classList.remove('show')}
+function esc(s){return s?String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'):''}
+
+// ── Icon helpers ──────────────────────────────────────────
+const ICONS={
+  edit:'<svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
+  del:'<svg viewBox="0 0 24 24"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/></svg>',
+  pdf:'<svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M12 18v-6M9 15l3 3 3-3"/></svg>',
+  view:'<svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>'
+};
+function iconBtn(kind,title,onclick){return `<button class="icon-btn i-${kind}" title="${title}" onclick="${onclick}">${ICONS[kind]}</button>`}
+
+// ── Auth ──────────────────────────────────────────────────
+async function login(){
+  const e=document.getElementById('login-err');e.style.display='none';
+  try{const d=await j('/api/login',{method:'POST',body:JSON.stringify({username:document.getElementById('inp-u').value,password:document.getElementById('inp-p').value})});
+  T=d.token;localStorage.setItem('t',T);document.getElementById('user-lbl').textContent=d.username;
+  document.getElementById('login').style.display='none';document.getElementById('app').style.display='block';go('dash');}
+  catch(x){e.textContent='Invalid credentials';e.style.display='block'}}
+function logout(){h('/api/logout',{method:'POST'});T='';localStorage.removeItem('t');
+  document.getElementById('app').style.display='none';document.getElementById('login').style.display='flex'}
+(async()=>{const t=localStorage.getItem('t');if(!t)return;try{const d=await j('/api/me');T=t;
+  document.getElementById('user-lbl').textContent=d.username;document.getElementById('login').style.display='none';
+  document.getElementById('app').style.display='block';go('dash');}catch(e){localStorage.removeItem('t')}})();
+
+// ── Navigation ────────────────────────────────────────────
+function go(tab){
+  document.querySelectorAll('.side-item').forEach(t=>t.classList.toggle('active',t.dataset.tab===tab));
+  document.querySelectorAll('.tc').forEach(t=>t.classList.remove('active'));
+  const el=document.getElementById('tc-'+tab);if(el)el.classList.add('active');
+  const loaders={dash:loadStats,settings:loadSettings,traders:()=>searchTraders(''),buyers:()=>searchBuyers(''),
+    auctions:loadAuctions,lots:loadLotAuctions,invoices:loadInvAuctions,purchases:loadPurAuctions,
+    payments:loadPayAuctions,exports:loadExpAuctions,tds:()=>{},
+    bills:loadBillAuctions,debit:loadDebitNotes,journals:loadJournalDefault};
+  if(loaders[tab])loaders[tab]();
+  // Auto-close sidebar on mobile after selection
+  if(window.innerWidth<=900){const sb=document.getElementById('sidebar');const ov=document.getElementById('sb-overlay');if(sb)sb.classList.remove('open');if(ov)ov.classList.remove('open')}
+}
+function toggleSidebar(){
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('sb-overlay').classList.toggle('open');
+}
+
+// ── Dashboard ─────────────────────────────────────────────
+async function loadStats(){const d=await j('/api/stats');
+  document.getElementById('stats').innerHTML=Object.entries(d).map(([k,v])=>`<div class="stat"><div class="n">${v}</div><div class="l">${k}</div></div>`).join('')}
+
+// ── Settings ──────────────────────────────────────────────
+let _cats={},_sdata={},_activeCat='',_setFilter='';
+async function loadSettings(){
+  const d=await j('/api/company-settings');_cats=d.categories;_sdata=d.settings;
+  renderSettingsNav();
+  // Open first category by default
+  const firstKey=Object.keys(_cats).sort((a,b)=>_cats[a].order-_cats[b].order).find(k=>(_sdata[k]||[]).length);
+  if(firstKey)selectCat(firstKey);
+}
+function renderSettingsNav(){
+  const keys=Object.keys(_cats).sort((a,b)=>_cats[a].order-_cats[b].order);
+  const q=_setFilter.toLowerCase().trim();
+  let html='';
+  for(const ck of keys){
+    const cat=_cats[ck],fields=_sdata[ck]||[];
+    if(!fields.length)continue;
+    // When searching, count matching fields
+    let count=fields.length;
+    if(q){
+      const matches=fields.filter(f=>(f.label||'').toLowerCase().includes(q)||(f.key||'').toLowerCase().includes(q));
+      count=matches.length;
+      if(!count)continue;
+    }
+    const active=ck===_activeCat?' active':'';
+    html+=`<button class="set-nav-item${active}" onclick="selectCat('${ck}')"><span>${cat.icon||''} ${esc(cat.title)}</span><span class="count">${count}</span></button>`;
+  }
+  const nav=document.getElementById('set-nav-items');
+  nav.innerHTML=html||'<div class="set-no-match" style="padding:20px;font-size:12px">No matches</div>';
+}
+function selectCat(ck){
+  // Capture any pending edits in the currently-displayed panel first
+  captureCurrentPanel();
+  _activeCat=ck;
+  renderSettingsNav();
+  renderSettingsPanel();
+}
+function filterSettings(q){
+  captureCurrentPanel();
+  _setFilter=q;
+  renderSettingsNav();
+  renderSettingsPanel();
+}
+function captureCurrentPanel(){
+  // Sync visible inputs back into _sdata so we don't lose edits when switching
+  if(!_activeCat||!_sdata[_activeCat])return;
+  const els=document.querySelectorAll('#settings-root [data-key]');
+  els.forEach(el=>{
+    const key=el.dataset.key;
+    const val=(el.dataset.type==='boolean'||el.type==='checkbox')?(el.checked?'true':'false'):el.value;
+    const f=_sdata[_activeCat].find(x=>x.key===key);
+    if(f)f.value=val;
+  });
+}
+function renderSettingsPanel(){
+  const ck=_activeCat;
+  if(!ck||!_cats[ck]){document.getElementById('settings-root').innerHTML='<div class="set-no-match">Select a category</div>';return}
+  const cat=_cats[ck];
+  document.getElementById('set-panel-title').textContent=`${cat.icon||''} ${cat.title}`;
+  document.getElementById('set-panel-desc').textContent=cat.description||'';
+  let fields=_sdata[ck]||[];
+  const q=_setFilter.toLowerCase().trim();
+  if(q)fields=fields.filter(f=>(f.label||'').toLowerCase().includes(q)||(f.key||'').toLowerCase().includes(q));
+  if(!fields.length){document.getElementById('settings-root').innerHTML='<div class="set-no-match">No matching settings</div>';return}
+  let html='';
+  if(ck==='flags'){
+    // Flags: two-column toggle list
+    html+='<div class="bgrid" style="gap:2px 18px">';
+    for(const f of fields){
+      const ck2=(f.value==='true')?'checked':'';
+      html+=`<div class="flag-row"><label>${esc(f.label)}</label><label class="sw"><input type="checkbox" data-key="${f.key}" data-type="boolean" ${ck2}><span class="sl"></span></label></div>`;
+    }
+    html+='</div>';
+  }else if(ck==='branches'){
+    html+='<div class="bgrid">';
+    const brs=fields.filter(f=>!f.key.includes('_tel')),tels=fields.filter(f=>f.key.includes('_tel'));
+    for(let i=0;i<brs.length;i++){html+=fld(brs[i]);if(tels[i])html+=fld(tels[i])}
+    html+='</div>';
+  }else if(ck==='mode'){
+    html+='<div class="sgrid">';
+    for(const f of fields){
+      if(f.key==='business_mode')html+=`<div class="fg"><label>${f.label}</label><select data-key="${f.key}"><option${f.value==='e-Trade'?' selected':''}>e-Trade</option><option${f.value==='e-Auction'?' selected':''}>e-Auction</option></select></div>`;
+      else if(f.key==='business_state')html+=`<div class="fg"><label>${f.label}</label><select data-key="${f.key}"><option${f.value==='TAMIL NADU'?' selected':''}>TAMIL NADU</option><option${f.value==='KERALA'?' selected':''}>KERALA</option></select></div>`;
+      else html+=fld(f);
+    }
+    html+='</div>';
+  }else{
+    html+='<div class="sgrid">';
+    for(const f of fields)html+=fld(f);
+    html+='</div>';
+  }
+  document.getElementById('settings-root').innerHTML=html;
+}
+function renderSettings(){renderSettingsNav();renderSettingsPanel()}
+function fld(f){const t=f.field_type==='number'?'number':f.field_type==='date'?'date':'text';
+  return`<div class="fg"><label>${esc(f.label)}</label><input type="${t}" data-key="${f.key}" value="${esc(f.value)}"${t==='number'?' step="any"':''}></div>`}
+async function saveSettings(){
+  // Capture what's currently on-screen, then flatten ALL categories
+  captureCurrentPanel();
+  const s={};
+  for(const ck of Object.keys(_sdata)){
+    for(const f of _sdata[ck]||[]){s[f.key]=f.value}
+  }
+  await j('/api/company-settings',{method:'PUT',body:JSON.stringify({settings:s})});
+  toast('Settings saved');
+}
+async function exportSettings(){const d=await j('/api/company-settings/export');const b=new Blob([JSON.stringify(d,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='settings.json';a.click()}
+async function importSettings(e){const f=e.target.files[0];if(!f)return;const t=await f.text();const s=JSON.parse(t);
+  await j('/api/company-settings/import',{method:'POST',body:JSON.stringify({settings:s})});toast('Imported');loadSettings();e.target.value=''}
+
+// ── Traders ───────────────────────────────────────────────
+const T_FIELDS=['name','cr','pan','tel','aadhar','padd','ppla','pstate','pst_code','pin','acctnum','ifsc','holder_name'];
+const T_IDS={name:'t-name',cr:'t-cr',pan:'t-pan',tel:'t-tel',aadhar:'t-aadhar',padd:'t-padd',ppla:'t-ppla',
+  pstate:'t-pstate',pst_code:'t-pstcode',pin:'t-pin',acctnum:'t-acctnum',ifsc:'t-ifsc',holder_name:'t-holder'};
+
+async function searchTraders(q){const d=await j(`/api/traders?search=${encodeURIComponent(q)}&limit=100`);
+  document.getElementById('traders-list').innerHTML=d.map(t=>{
+    const placeState=[t.ppla,t.pstate].filter(Boolean).join(' · ');
+    const bankShort=t.ifsc?`${esc(t.ifsc)}${t.acctnum?' ·· '+String(t.acctnum).slice(-4):''}`:'<span style="color:var(--text3)">—</span>';
+    return `<tr>
+      <td><a href="#" onclick="viewTraderDetails(${JSON.stringify(t).replace(/"/g,'&quot;')});return false" style="color:var(--green);font-weight:600;text-decoration:none">${esc(t.name)}</a></td>
+      <td style="font-size:11px">${esc(t.cr)}</td>
+      <td>${esc(t.pan)}</td>
+      <td>${esc(t.tel)}</td>
+      <td style="font-size:12px">${esc(placeState)||'<span style=\"color:var(--text3)\">—</span>'}</td>
+      <td style="font-size:11px;font-family:monospace">${bankShort}</td>
+      <td style="white-space:nowrap">
+        ${iconBtn('view','View details',`viewTraderDetails(${JSON.stringify(t).replace(/"/g,'&quot;')})`)}
+        ${iconBtn('edit','Edit seller',`openTraderEdit(${JSON.stringify(t).replace(/"/g,'&quot;')})`)}
+        ${iconBtn('del','Delete seller',`delTrader(${t.id})`)}
+      </td></tr>`}).join('')}
+
+function viewTraderDetails(t){
+  const kv=(k,v)=>v?`<tr><td style="padding:6px 10px;color:var(--text2);font-size:12px;width:40%">${k}</td><td style="padding:6px 10px;font-size:13px">${esc(v)}</td></tr>`:'';
+  const section=(title,rows)=>{const filtered=rows.filter(Boolean).join('');return filtered?`<div style="margin-bottom:16px"><h3 style="font-size:13px;color:var(--green);margin:0 0 6px 0;padding-bottom:4px;border-bottom:1.5px solid var(--green-border)">${title}</h3><table style="width:100%">${filtered}</table></div>`:''};
+  let html='';
+  html+=section('Identity',[kv('Name',t.name),kv('PAN',t.pan),kv('Aadhar',t.aadhar)]);
+  html+=section('Registration',[kv('CR / GSTIN',t.cr)]);
+  html+=section('Contact',[kv('Phone',t.tel)]);
+  html+=section('Address',[kv('Address',t.padd),kv('Place',t.ppla),kv('PIN',t.pin),kv('State',t.pstate),kv('State Code',t.pst_code)]);
+  html+=section('Banking',[kv('Holder Name',t.holder_name),kv('IFSC',t.ifsc),kv('Account No',t.acctnum)]);
+  document.getElementById('trader-view-body').innerHTML=html||'<p style="color:var(--text3);text-align:center;padding:20px">No details available</p>';
+  document.getElementById('trader-view-title').textContent=t.name||'Seller';
+  document.getElementById('trader-view-edit-btn').onclick=()=>{hideModal('trader-view-modal');openTraderEdit(t)};
+  showModal('trader-view-modal');
+}
+
+function openTraderAdd(){
+  document.getElementById('trader-modal-title').textContent='Add Seller';
+  document.getElementById('t-id').value='';
+  T_FIELDS.forEach(f=>{const el=document.getElementById(T_IDS[f]);if(el)el.value=''});
+  showModal('trader-modal');
+}
+function openTraderEdit(t){
+  document.getElementById('trader-modal-title').textContent='Edit Seller';
+  document.getElementById('t-id').value=t.id;
+  T_FIELDS.forEach(f=>{const el=document.getElementById(T_IDS[f]);if(el)el.value=t[f]||''});
+  showModal('trader-modal');
+}
+async function saveTrader(){
+  const id=document.getElementById('t-id').value;
+  const body={};T_FIELDS.forEach(f=>{const el=document.getElementById(T_IDS[f]);body[f]=el?el.value:''});
+  if(!body.name){alert('Name is required');return}
+  try{
+    const r=await fetch(B+(id?`/api/traders/${id}`:'/api/traders'),{method:id?'PUT':'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+T},body:JSON.stringify(body)});
+    if(!r.ok){const d=await r.json();throw new Error(d.error||'Save failed')}
+    hideModal('trader-modal');toast(id?'Seller updated':'Seller added');searchTraders('');
+  }catch(e){alert('Error: '+e.message)}
+}
+async function delTrader(id){if(!confirm('Delete?'))return;await j(`/api/traders/${id}`,{method:'DELETE'});searchTraders('')}
+
+async function importTraders(e){
+  const file=e.target.files[0];if(!file)return;e.target.value='';
+  const mode=confirm('Replace ALL existing sellers?\n\nOK = Replace all\nCancel = Append (skip duplicates)')?'replace':'append';
+  const status=document.getElementById('trader-import-status');
+  status.style.display='block';status.style.background='var(--amber-bg)';status.style.color='var(--amber)';
+  status.textContent='Importing... please wait';
+  try{
+    const fd=new FormData();fd.append('file',file);fd.append('mode',mode);
+    const r=await fetch(B+'/api/traders/import',{method:'POST',headers:{'Authorization':'Bearer '+T},body:fd});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.error);
+    status.style.background='var(--green-bg)';status.style.color='var(--green-dk)';
+    status.textContent=`Imported ${d.imported} sellers, ${d.skipped} skipped`;
+    searchTraders('');setTimeout(()=>status.style.display='none',5000);
+  }catch(err){status.style.background='var(--red-bg)';status.style.color='var(--red)';status.textContent='Error: '+err.message}}
+
+async function downloadTemplate(type){
+  const r=await fetch(B+`/api/${type}/template`,{headers:{'Authorization':'Bearer '+T}});
+  const blob=await r.blob();const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);a.download=type+'-template.xlsx';a.click()}
+
+// ── Buyers ────────────────────────────────────────────────
+const B_FIELDS=['buyer','buyer1','add1','add2','pla','pin','state','st_code','gstin','pan','tel','ti','sale'];
+const B_IDS={buyer:'b-buyer',buyer1:'b-buyer1',add1:'b-add1',add2:'b-add2',pla:'b-pla',pin:'b-pin',
+  state:'b-state',st_code:'b-stcode',gstin:'b-gstin',pan:'b-pan',tel:'b-tel',ti:'b-ti',sale:'b-sale'};
+
+async function searchBuyers(q){const d=await j(`/api/buyers?search=${encodeURIComponent(q)}`);
+  document.getElementById('buyers-list').innerHTML=d.map(b=>{
+    const placeState=[b.pla,b.state].filter(Boolean).join(' · ');
+    const saleMap={L:'Local',I:'Inter-state',E:'Export'};
+    const saleBadge=b.sale?`<span style="display:inline-block;padding:2px 8px;background:var(--green-bg);color:var(--green);border-radius:10px;font-size:11px;font-weight:700">${saleMap[b.sale]||b.sale}</span>`:'<span style="color:var(--text3)">—</span>';
+    return `<tr>
+      <td><a href="#" onclick="viewBuyerDetails(${JSON.stringify(b).replace(/"/g,'&quot;')});return false" style="color:var(--green);font-weight:700;text-decoration:none">${esc(b.buyer)}</a></td>
+      <td>${esc(b.buyer1)}</td>
+      <td style="font-size:11px;font-family:monospace">${esc(b.gstin)||'<span style=\"color:var(--text3)\">—</span>'}</td>
+      <td style="font-size:12px">${esc(b.pan)||'—'}</td>
+      <td>${esc(b.tel)||'<span style=\"color:var(--text3)\">—</span>'}</td>
+      <td style="font-size:12px">${esc(placeState)||'<span style=\"color:var(--text3)\">—</span>'}</td>
+      <td>${saleBadge}</td>
+      <td style="white-space:nowrap">
+        ${iconBtn('view','View details',`viewBuyerDetails(${JSON.stringify(b).replace(/"/g,'&quot;')})`)}
+        ${iconBtn('edit','Edit buyer',`openBuyerEdit(${JSON.stringify(b).replace(/"/g,'&quot;')})`)}
+        ${iconBtn('del','Delete buyer',`delBuyer(${b.id})`)}
+      </td></tr>`}).join('')}
+
+function viewBuyerDetails(b){
+  const kv=(k,v)=>v?`<tr><td style="padding:6px 10px;color:var(--text2);font-size:12px;width:40%">${k}</td><td style="padding:6px 10px;font-size:13px">${esc(v)}</td></tr>`:'';
+  const section=(title,rows)=>{const filtered=rows.filter(Boolean).join('');return filtered?`<div style="margin-bottom:16px"><h3 style="font-size:13px;color:var(--green);margin:0 0 6px 0;padding-bottom:4px;border-bottom:1.5px solid var(--green-border)">${title}</h3><table style="width:100%">${filtered}</table></div>`:''};
+  const saleMap={L:'Local',I:'Inter-state',E:'Export'};
+  const fullAddress=[b.add1,b.add2].filter(Boolean).join(', ');
+  const consigneeAddress=[b.cadd1].filter(Boolean).join(', ');
+  let html='';
+  html+=section('Identity',[kv('Buyer Code',b.buyer),kv('Trade Name',b.buyer1),kv('PAN',b.pan)]);
+  html+=section('Registration',[kv('GSTIN',b.gstin),kv('TI',b.ti),kv('Sale Type',saleMap[b.sale]||b.sale)]);
+  html+=section('Contact',[kv('Phone',b.tel)]);
+  html+=section('Billing Address',[kv('Address',fullAddress),kv('Place',b.pla),kv('PIN',b.pin),kv('State',b.state),kv('State Code',b.st_code)]);
+  html+=section('Consignee (Ship-to)',[kv('Name',b.cbuyer1),kv('GSTIN',b.cgstin),kv('Address',consigneeAddress),kv('Place',b.cpla),kv('PIN',b.cpin),kv('State',b.cstate),kv('State Code',b.cst_code)]);
+  document.getElementById('buyer-view-body').innerHTML=html||'<p style="color:var(--text3);text-align:center;padding:20px">No details available</p>';
+  document.getElementById('buyer-view-title').textContent=b.buyer1||b.buyer||'Buyer';
+  document.getElementById('buyer-view-edit-btn').onclick=()=>{hideModal('buyer-view-modal');openBuyerEdit(b)};
+  showModal('buyer-view-modal');
+}
+
+function openBuyerAdd(){
+  document.getElementById('buyer-modal-title').textContent='Add Buyer';
+  document.getElementById('b-id').value='';
+  B_FIELDS.forEach(f=>{const el=document.getElementById(B_IDS[f]);if(el)el.value=''});
+  showModal('buyer-modal');
+}
+function openBuyerEdit(b){
+  document.getElementById('buyer-modal-title').textContent='Edit Buyer';
+  document.getElementById('b-id').value=b.id;
+  B_FIELDS.forEach(f=>{const el=document.getElementById(B_IDS[f]);if(el)el.value=b[f]||''});
+  showModal('buyer-modal');
+}
+async function saveBuyer(){
+  const id=document.getElementById('b-id').value;
+  const body={};B_FIELDS.forEach(f=>{const el=document.getElementById(B_IDS[f]);body[f]=el?el.value:''});
+  if(!body.buyer){alert('Buyer code is required');return}
+  try{
+    const r=await fetch(B+(id?`/api/buyers/${id}`:'/api/buyers'),{method:id?'PUT':'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+T},body:JSON.stringify(body)});
+    if(!r.ok){const d=await r.json();throw new Error(d.error||'Save failed')}
+    hideModal('buyer-modal');toast(id?'Buyer updated':'Buyer added');searchBuyers('');
+  }catch(e){alert('Error: '+e.message)}
+}
+async function delBuyer(id){if(!confirm('Delete?'))return;await j(`/api/buyers/${id}`,{method:'DELETE'});searchBuyers('')}
+
+async function importBuyers(e){
+  const file=e.target.files[0];if(!file)return;e.target.value='';
+  const mode=confirm('Replace ALL existing buyers?\n\nOK = Replace all\nCancel = Append (skip duplicates)')?'replace':'append';
+  const status=document.getElementById('buyer-import-status');
+  status.style.display='block';status.style.background='var(--amber-bg)';status.style.color='var(--amber)';
+  status.textContent='Importing... please wait';
+  try{
+    const fd=new FormData();fd.append('file',file);fd.append('mode',mode);
+    const r=await fetch(B+'/api/buyers/import',{method:'POST',headers:{'Authorization':'Bearer '+T},body:fd});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.error);
+    status.style.background='var(--green-bg)';status.style.color='var(--green-dk)';
+    status.textContent=`Imported ${d.imported} buyers, ${d.skipped} skipped`;
+    searchBuyers('');setTimeout(()=>status.style.display='none',5000);
+  }catch(err){status.style.background='var(--red-bg)';status.style.color='var(--red)';status.textContent='Error: '+err.message}}
+
+// ── Auctions ──────────────────────────────────────────────
+async function loadAuctions(){const d=await j('/api/auctions');
+  document.getElementById('auctions-list').innerHTML=d.map(a=>`<tr><td><b>${esc(a.ano)}</b></td><td>${a.date}</td><td>${esc(a.crop_type)}</td><td class="num">${a.lot_count||0}</td>
+    <td style="white-space:nowrap">
+      ${iconBtn('edit','Edit auction',`openAuctionEdit(${JSON.stringify(a).replace(/"/g,'&quot;')})`)}
+      ${iconBtn('del','Delete auction',`delAuction(${a.id})`)}
+    </td></tr>`).join('')}
+
+function openAuctionAdd(){
+  document.getElementById('auction-modal-title').textContent='New Auction';
+  document.getElementById('a-id').value='';
+  document.getElementById('a-ano').value='';
+  document.getElementById('a-date').value='';
+  document.getElementById('a-crpt').value='ASP';
+  document.getElementById('a-state').value='TAMIL NADU';
+  showModal('auction-modal');
+}
+function openAuctionEdit(a){
+  document.getElementById('auction-modal-title').textContent='Edit Auction';
+  document.getElementById('a-id').value=a.id;
+  document.getElementById('a-ano').value=a.ano||'';
+  document.getElementById('a-date').value=a.date||'';
+  document.getElementById('a-crpt').value=a.crop_type||'ASP';
+  document.getElementById('a-state').value=a.state||'TAMIL NADU';
+  showModal('auction-modal');
+}
+async function saveAuction(){
+  const id=document.getElementById('a-id').value;
+  const body={ano:document.getElementById('a-ano').value,date:document.getElementById('a-date').value,
+    crop_type:document.getElementById('a-crpt').value,state:document.getElementById('a-state').value};
+  if(!body.ano||!body.date){alert('Trade No and Date are required');return}
+  try{
+    const r=await fetch(B+(id?`/api/auctions/${id}`:'/api/auctions'),{method:id?'PUT':'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+T},body:JSON.stringify(body)});
+    if(!r.ok){const d=await r.json();throw new Error(d.error||'Save failed')}
+    hideModal('auction-modal');toast(id?'Auction updated':'Auction created');loadAuctions();
+  }catch(e){alert('Error: '+e.message)}
+}
+async function delAuction(id){if(!confirm('Delete auction and ALL its lots?'))return;await j(`/api/auctions/${id}`,{method:'DELETE'});loadAuctions()}
+
+async function importAuction(){
+  const fileInput=document.getElementById('ia-file');
+  const file=fileInput.files[0];
+  if(!file){alert('Please select a file');return}
+  const status=document.getElementById('auction-import-status');
+  status.style.display='block';status.style.background='var(--amber-bg)';status.style.color='var(--amber)';
+  status.textContent='Importing... please wait';
+  try{
+    const fd=new FormData();
+    fd.append('file',file);
+    fd.append('mode',document.getElementById('ia-mode').value);
+    const ano=document.getElementById('ia-ano').value.trim();
+    const dt=document.getElementById('ia-date').value;
+    if(ano)fd.append('ano',ano);
+    if(dt)fd.append('date',dt);
+    fd.append('crop_type',document.getElementById('ia-crpt').value);
+    fd.append('state',document.getElementById('ia-state').value);
+    const r=await fetch(B+'/api/auctions/import',{method:'POST',headers:{'Authorization':'Bearer '+T},body:fd});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.error);
+    hideModal('import-auction-modal');fileInput.value='';
+    status.style.background='var(--green-bg)';status.style.color='var(--green-dk)';
+    const action=d.updated>0?'Updated':'Imported';
+    const count=d.updated>0?d.updated:d.imported;
+    let html=`<div style="font-weight:700;font-size:14px;margin-bottom:4px">✓ ${action} ${count} lots across ${d.auctionCount||1} auction(s)</div>`;
+    html+=`<div style="font-size:12px">Total rows: ${d.total} · ${d.skipped} skipped</div>`;
+    // Show auction breakdown
+    if(d.auctionBreakdown&&d.auctionBreakdown.length){
+      html+=`<div style="margin-top:8px;background:#fff;border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:12px"><strong>Breakdown:</strong><br>`;
+      html+=d.auctionBreakdown.map(a=>`• Trade <b>${esc(a.ano)}</b>${a.date?' ('+a.date+')':''} — ${a.count} lot(s)`).join('<br>');
+      html+=`</div>`;
+    }
+    if(d.skipped>0&&d.skipReasons&&d.skipReasons.length){
+      // Group reasons by type for a summary
+      const byReason={};
+      d.skipReasons.forEach(r=>{
+        const key=r.reason.split(' ').slice(0,3).join(' ')+' …';
+        if(!byReason[key])byReason[key]={count:0,samples:[]};
+        byReason[key].count++;
+        if(byReason[key].samples.length<3)byReason[key].samples.push(r);
+      });
+      html+=`<details style="margin-top:8px;cursor:pointer"><summary style="font-weight:700;color:var(--amber)">⚠ Why were rows skipped? (click to expand)</summary>`;
+      html+=`<div style="margin-top:6px;max-height:240px;overflow-y:auto;background:#fff;border:1px solid var(--border);border-radius:6px;padding:8px"><table style="width:100%;font-size:11px"><thead><tr style="background:var(--bg)"><th style="text-align:left;padding:4px 8px">Row</th><th style="text-align:left;padding:4px 8px">Lot</th><th style="text-align:left;padding:4px 8px">Reason</th></tr></thead><tbody>`;
+      for(const sk of d.skipReasons.slice(0,50)){
+        html+=`<tr><td style="padding:3px 8px">${sk.row}</td><td style="padding:3px 8px">${esc(sk.lot)||'<em>blank</em>'}</td><td style="padding:3px 8px">${esc(sk.reason)}</td></tr>`;
+      }
+      html+=`</tbody></table>`;
+      if(d.skipReasons.length>50)html+=`<div style="font-size:11px;color:var(--text3);padding:6px 8px">…and ${d.skipReasons.length-50} more skipped rows</div>`;
+      html+=`</div></details>`;
+    }
+    status.innerHTML=html;
+    loadAuctions();
+    // Don't auto-hide if there are skipped rows — user needs time to read
+    if(d.skipped===0)setTimeout(()=>status.style.display='none',5000);
+  }catch(err){status.style.background='var(--red-bg)';status.style.color='var(--red)';status.textContent='Error: '+err.message}}
+
+// ── Auction dropdowns ─────────────────────────────────────
+async function fillAucSelect(selId){const d=await j('/api/auctions');const sel=document.getElementById(selId);
+  sel.innerHTML=d.map(a=>`<option value="${a.id}">${a.ano} — ${a.date} (${a.lot_count} lots)</option>`).join('');return d}
+function loadLotAuctions(){fillAucSelect('lot-auction').then(()=>loadLots())}
+function loadInvAuctions(){fillAucSelect('inv-auction').then(()=>{loadInvoices();loadInvEligibleBuyers()})}
+function loadPurAuctions(){fillAucSelect('pur-auction').then(()=>{loadPurchases();loadPurEligibleSellers()})}
+
+async function loadInvEligibleBuyers(){
+  const aid=document.getElementById('inv-auction').value;
+  const dd=document.getElementById('gi-buyer');if(!dd)return;
+  if(!aid){dd.innerHTML='<option value="">— Select buyer —</option>';return}
+  try{
+    const buyers=await j(`/api/invoices/eligible-buyers/${aid}`);
+    if(!buyers.length){
+      dd.innerHTML='<option value="">— No buyers with lots —</option>';
+      const h=document.getElementById('gi-hint');if(h)h.innerHTML='<span style="color:var(--amber)">⚠ No buyers have lots in this auction.</span>';
+      return;
+    }
+    dd.innerHTML='<option value="">— Select buyer —</option>'+buyers.map(b=>
+      `<option value="${esc(b.buyer)}" data-sale="${esc(b.default_sale||'')}">${esc(b.buyer)} · ${esc(b.buyer1||'')} — ${b.lot_count} lot(s), ₹${(b.total_amount||0).toFixed(2)}</option>`).join('');
+    const h=document.getElementById('gi-hint');if(h)h.textContent=`${buyers.length} buyer(s) with lots`;
+    // Auto-pick sale type when buyer selected
+    dd.onchange=()=>{const opt=dd.options[dd.selectedIndex];const s=opt?.dataset.sale;if(s){document.getElementById('gi-sale').value=s}};
+  }catch(e){console.warn(e)}
+}
+
+async function loadPurEligibleSellers(){
+  const aid=document.getElementById('pur-auction').value;
+  const dd=document.getElementById('gp-seller');if(!dd)return;
+  if(!aid){dd.innerHTML='<option value="">— Select seller —</option>';return}
+  try{
+    const sellers=await j(`/api/purchases/eligible-sellers/${aid}`);
+    if(!sellers.length){
+      dd.innerHTML='<option value="">— No registered dealers —</option>';
+      const h=document.getElementById('gp-hint');if(h)h.innerHTML='<span style="color:var(--amber)">⚠ No sellers with GSTIN in this auction. Use Bills of Supply tab for agriculturists.</span>';
+      return;
+    }
+    dd.innerHTML='<option value="">— Select seller —</option>'+sellers.map(s=>
+      `<option value="${esc(s.name)}">${esc(s.name)} — ${s.lot_count} lot(s), ₹${(s.total_amount||0).toFixed(2)}</option>`).join('');
+    const h=document.getElementById('gp-hint');if(h)h.textContent=`${sellers.length} dealer(s) with GSTIN`;
+  }catch(e){console.warn(e)}
+}
+
+function openGenInvModal(){
+  if(!document.getElementById('inv-auction').value){alert('Select an auction first');return}
+  loadInvEligibleBuyers();showModal('gen-inv-modal');
+}
+function openGenPurModal(){
+  if(!document.getElementById('pur-auction').value){alert('Select an auction first');return}
+  loadPurEligibleSellers();showModal('gen-pur-modal');
+}
+
+// ── Generate All (batch) ─────────────────────────────────
+let _genAllKind='';
+async function openGenAllModal(kind){
+  _genAllKind=kind;
+  const aidMap={invoices:'inv-auction',purchases:'pur-auction',bills:'bill-auction'};
+  const aid=document.getElementById(aidMap[kind])?.value;
+  if(!aid){alert('Select an auction first');return}
+  const titles={invoices:'Generate Sales Invoices for All Buyers',purchases:'Generate Purchase Invoices for All Dealers',bills:'Generate Bills of Supply for All Agriculturists'};
+  const descs={
+    invoices:'Creates one invoice per unique buyer with lots in this auction. Already-invoiced lots are skipped.',
+    purchases:'Creates one purchase invoice per unique dealer (GSTIN holder) with lots in this auction.',
+    bills:'Creates one bill of supply per unique agriculturist (no GSTIN) with lots in this auction.'
+  };
+  document.getElementById('gen-all-title').textContent=titles[kind];
+  document.getElementById('gen-all-desc').textContent=descs[kind];
+  document.getElementById('gen-all-sale-wrap').style.display=kind==='invoices'?'block':'none';
+  document.getElementById('ga-start').value='';
+  document.getElementById('ga-preview').style.display='none';
+  
+  // Show count of eligible entities
+  const endpointMap={invoices:'invoices/eligible-buyers',purchases:'purchases/eligible-sellers',bills:'bills/eligible-sellers'};
+  try{
+    const list=await j(`/api/${endpointMap[kind]}/${aid}`);
+    const labelMap={invoices:'buyer',purchases:'dealer',bills:'agriculturist seller'};
+    const preview=document.getElementById('ga-preview');
+    if(list.length){
+      preview.innerHTML=`<strong>${list.length}</strong> ${labelMap[kind]}(s) eligible:<br>`+
+        list.slice(0,8).map(x=>`• ${esc(x.name||x.buyer||x.buyer1)}${x.total_amount?` — ₹${x.total_amount.toFixed(2)}`:''}`).join('<br>')+
+        (list.length>8?`<br>…and ${list.length-8} more`:'');
+      preview.style.display='block';
+    }else{
+      preview.innerHTML='<span style="color:var(--red)">No eligible records found in this auction.</span>';
+      preview.style.display='block';
+    }
+  }catch(e){console.warn(e)}
+  showModal('gen-all-modal');
+}
+
+async function doGenerateAll(){
+  const kind=_genAllKind;
+  const aidMap={invoices:'inv-auction',purchases:'pur-auction',bills:'bill-auction'};
+  const aid=document.getElementById(aidMap[kind]).value;
+  const start=document.getElementById('ga-start').value.trim();
+  if(!start||parseInt(start)<1){alert('Enter a starting number (positive integer)');return}
+  const body={};
+  if(kind==='bills')body.startBillNo=start;
+  else{body.startInvoiceNo=start;if(kind==='invoices')body.saleType=document.getElementById('ga-sale').value||''}
+  const routeMap={invoices:'invoices/generate-all',purchases:'purchases/generate-all',bills:'bills/generate-all'};
+  const submitBtn=document.getElementById('ga-submit');
+  submitBtn.disabled=true;submitBtn.textContent='Generating…';
+  try{
+    const r=await fetch(B+`/api/${routeMap[kind]}/${aid}`,{method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+T},body:JSON.stringify(body)});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.error||'Batch failed');
+    let msg=`Generated ${d.generated} record(s)`;
+    if(d.errors&&d.errors.length)msg+=` · ${d.errors.length} skipped`;
+    toast(msg);
+    if(d.errors&&d.errors.length)console.warn('Batch errors:',d.errors);
+    hideModal('gen-all-modal');
+    // Reload the right tab
+    if(kind==='invoices')loadInvoices();
+    else if(kind==='purchases')loadPurchases();
+    else loadBills();
+  }catch(e){alert('Error: '+e.message)}
+  finally{submitBtn.disabled=false;submitBtn.textContent='Generate All'}
+}
+function loadPayAuctions(){fillAucSelect('pay-auction')}
+function loadExpAuctions(){
+  fillAucSelect('exp-auction').then(renderExportBtns);
+  fillAucSelect('dbf-auction');
+  // Default DBF date range: current month
+  const today=new Date().toISOString().slice(0,10);
+  const firstOfMonth=today.slice(0,8)+'01';
+  const df=document.getElementById('dbf-from'),dt=document.getElementById('dbf-to');
+  if(df&&!df.value)df.value=firstOfMonth;
+  if(dt&&!dt.value)dt.value=today;
+}
+
+// ── DBF Export Helpers ────────────────────────────────────
+async function downloadDbf(type, extraParams={}){
+  const qs=new URLSearchParams(extraParams).toString();
+  const url=B+`/api/dbf-exports/${type}${qs?'?'+qs:''}`;
+  try{
+    const r=await fetch(url,{headers:{'Authorization':'Bearer '+T}});
+    if(!r.ok){let m='DBF export failed';try{const e=await r.json();if(e.error)m=e.error}catch(x){}throw new Error(m)}
+    const blob=await r.blob();
+    if(blob.size<10){throw new Error('Empty DBF file returned')}
+    const cd=r.headers.get('Content-Disposition')||'';
+    const fnMatch=cd.match(/filename="([^"]+)"/);
+    const fn=fnMatch?fnMatch[1]:`${type}.dbf`;
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=fn;a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+    toast(`Downloaded ${fn}`);
+  }catch(e){alert('Error: '+e.message)}
+}
+
+async function downloadDbfRange(type){
+  const from=document.getElementById('dbf-from').value;
+  const to=document.getElementById('dbf-to').value;
+  if(!from||!to){alert('Select From and To dates');return}
+  await downloadDbf(type,{from,to});
+}
+
+// ── Lots ──────────────────────────────────────────────────
+const L_FIELDS=['lot_no','name','cr','branch','grade','bags','litre','qty','price','amount','buyer','buyer1','code','sale'];
+const L_IDS={lot_no:'l-lotno',name:'l-name',cr:'l-cr',branch:'l-branch',grade:'l-grade',bags:'l-bags',
+  litre:'l-litre',qty:'l-qty',price:'l-price',amount:'l-amount',buyer:'l-buyer',buyer1:'l-buyer1',
+  code:'l-code',sale:'l-sale'};
+
+async function loadLots(){const aid=document.getElementById('lot-auction').value;if(!aid)return;
+  const d=await j(`/api/lots/${aid}`);
+  document.getElementById('lots-list').innerHTML=d.map(l=>`<tr><td>${esc(l.lot_no)}</td><td>${esc(l.name)}</td><td style="font-size:11px">${esc(l.branch)}</td>
+    <td class="num">${l.bags}</td><td class="num">${(l.qty||0).toFixed(3)}</td><td class="num">${(l.price||0).toFixed(2)}</td><td class="num">${(l.amount||0).toFixed(2)}</td>
+    <td style="font-size:11px">${esc(l.buyer)}</td><td class="num">${(l.puramt||0).toFixed(2)}</td><td class="num" style="font-weight:600">${(l.balance||0).toFixed(2)}</td>
+    <td style="white-space:nowrap">
+      ${iconBtn('edit','Edit lot',`openLotEdit(${JSON.stringify(l).replace(/"/g,'&quot;')})`)}
+      ${iconBtn('del','Delete lot',`delLot(${l.id})`)}
+    </td></tr>`).join('')}
+
+function openLotEdit(l){
+  document.getElementById('lot-modal-title').textContent='Edit Lot #'+l.lot_no;
+  document.getElementById('l-id').value=l.id;
+  L_FIELDS.forEach(f=>{const el=document.getElementById(L_IDS[f]);if(el)el.value=l[f]!=null?l[f]:''});
+  showModal('lot-modal');
+}
+async function saveLot(){
+  const id=document.getElementById('l-id').value;
+  if(!id){alert('Lot ID missing');return}
+  const body={};L_FIELDS.forEach(f=>{
+    const el=document.getElementById(L_IDS[f]);
+    if(!el)return;
+    if(['bags','qty','price','amount'].includes(f)) body[f]=parseFloat(el.value)||0;
+    else body[f]=el.value;
+  });
+  try{
+    const r=await fetch(B+`/api/lots/${id}`,{method:'PUT',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+T},body:JSON.stringify(body)});
+    if(!r.ok){const d=await r.json();throw new Error(d.error||'Save failed')}
+    hideModal('lot-modal');toast('Lot updated');loadLots();
+  }catch(e){alert('Error: '+e.message)}
+}
+async function delLot(id){if(!confirm('Delete this lot?'))return;
+  try{await j(`/api/lots/${id}`,{method:'DELETE'});loadLots();toast('Lot deleted')}
+  catch(e){alert('Error: '+e.message)}
+}
+
+async function calculateAll(){const aid=document.getElementById('lot-auction').value;if(!aid)return;
+  const d=await j(`/api/lots/calculate/${aid}`,{method:'POST'});toast(`Calculated ${d.calculated} lots`);loadLots()}
+async function validateLots(){const aid=document.getElementById('lot-auction').value;if(!aid)return;
+  const d=await j(`/api/lots/validate/${aid}`);alert(d.length?`${d.length} lots have issues:\n`+d.map(l=>l.lot_no+': price='+l.price+' amt='+l.amount+' buyer='+l.buyer).join('\n'):'All lots OK')}
+
+// ── Invoices ──────────────────────────────────────────────
+async function generateInvoice(){
+  const aid=document.getElementById('inv-auction').value;
+  if(!aid){alert('Please select an auction first');return}
+  const saleType=document.getElementById('gi-sale').value;
+  const buyerCode=document.getElementById('gi-buyer').value.trim();
+  const invoiceNo=document.getElementById('gi-invno').value.trim();
+  if(!buyerCode){alert('Enter buyer code');return}
+  if(!invoiceNo){alert('Enter invoice number');return}
+  try{
+    const r=await fetch(B+`/api/invoices/generate/${aid}`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+T},
+      body:JSON.stringify({saleType,buyerCode,invoiceNo})});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.error||'Failed to generate invoice');
+    hideModal('gen-inv-modal');
+    toast('Invoice generated — Total: ₹'+Number(d.invoice.grandTotal).toFixed(2));
+    loadInvoices();
+  }catch(e){alert('Error: '+e.message)}}
+
+async function loadInvoices(){
+  const d=await j('/api/invoices');
+  document.getElementById('invoices-list').innerHTML=d.map(i=>`<tr>
+    <td>${esc(i.sale)}</td><td>${esc(i.invo)}</td><td>${esc(i.buyer1||i.buyer)}</td>
+    <td class="num">${(i.qty||0).toFixed(3)}</td><td class="num">${(i.amount||0).toFixed(2)}</td>
+    <td class="num">${(i.cgst||0).toFixed(2)}</td><td class="num">${(i.sgst||0).toFixed(2)}</td>
+    <td class="num">${(i.igst||0).toFixed(2)}</td><td class="num" style="font-weight:600">${(i.tot||0).toFixed(2)}</td>
+    <td style="white-space:nowrap">
+      ${iconBtn('pdf','View / download PDF',`viewInvoicePDF(${i.id})`)}
+      ${iconBtn('edit','Edit invoice',`openInvoiceEdit(${JSON.stringify(i).replace(/"/g,'&quot;')})`)}
+      ${iconBtn('del','Delete invoice',`delInvoice(${i.id})`)}
+    </td>
+  </tr>`).join('')||'<tr><td colspan="10" style="text-align:center;color:var(--text3);padding:20px">No invoices yet</td></tr>'}
+
+async function viewInvoicePDF(id){
+  try{
+    const r=await fetch(B+`/api/invoices/pdf/${id}`,{headers:{'Authorization':'Bearer '+T}});
+    if(!r.ok){let m='PDF failed';try{const e=await r.json();if(e.error)m=e.error}catch(x){}throw new Error(m)}
+    const blob=await r.blob();
+    const url=URL.createObjectURL(blob);
+    const w=window.open(url,'_blank');
+    if(!w||w.closed){const a=document.createElement('a');a.href=url;a.download=`Invoice_${id}.pdf`;a.click()}
+    setTimeout(()=>URL.revokeObjectURL(url),30000);
+  }catch(e){alert('Error: '+e.message)}
+}
+
+function openInvoiceEdit(i){
+  document.getElementById('inv-edit-id').value=i.id;
+  const fields=['ano','date','sale','invo','buyer','buyer1','gstin','place','bag','qty','amount','gunny','pava_hc','ins','cgst','sgst','igst','tcs','rund','tot'];
+  for(const f of fields){const el=document.getElementById('ie-'+f);if(el)el.value=i[f]!=null?i[f]:''}
+  showModal('inv-edit-modal');
+}
+async function saveInvoiceEdit(){
+  const id=document.getElementById('inv-edit-id').value;
+  const body={};
+  const nums=['bag','qty','amount','gunny','pava_hc','ins','cgst','sgst','igst','tcs','rund','tot'];
+  const fields=['ano','date','sale','invo','buyer','buyer1','gstin','place',...nums];
+  for(const f of fields){
+    const el=document.getElementById('ie-'+f);if(!el)continue;
+    body[f]=nums.includes(f)?(parseFloat(el.value)||0):el.value;
+  }
+  try{
+    const r=await fetch(B+`/api/invoices/${id}`,{method:'PUT',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+T},body:JSON.stringify(body)});
+    if(!r.ok){const d=await r.json();throw new Error(d.error||'Save failed')}
+    hideModal('inv-edit-modal');toast('Invoice updated');loadInvoices();
+  }catch(e){alert('Error: '+e.message)}}
+async function delInvoice(id){if(!confirm('Delete this invoice? Related lots will be unlinked.'))return;
+  try{await j(`/api/invoices/${id}`,{method:'DELETE'});loadInvoices();toast('Invoice deleted')}
+  catch(e){alert('Error: '+e.message)}}
+
+// ── Purchases ─────────────────────────────────────────────
+async function generatePurchase(){
+  const aid=document.getElementById('pur-auction').value;
+  if(!aid){alert('Please select an auction first');return}
+  const sellerName=document.getElementById('gp-seller').value.trim();
+  const invoiceNo=document.getElementById('gp-invno').value.trim();
+  if(!sellerName){alert('Enter seller name');return}
+  if(!invoiceNo){alert('Enter invoice number');return}
+  try{
+    const r=await fetch(B+`/api/purchases/generate/${aid}`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+T},
+      body:JSON.stringify({sellerName,invoiceNo})});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.error||'Failed to generate purchase invoice');
+    hideModal('gen-pur-modal');
+    toast('Purchase invoice generated — Total: ₹'+Number(d.invoice.grandTotal).toFixed(2));
+    loadPurchases();
+  }catch(e){alert('Error: '+e.message)}}
+
+async function loadPurchases(){
+  const d=await j('/api/purchases');
+  document.getElementById('purchases-list').innerHTML=d.map(p=>`<tr>
+    <td>${esc(p.invo)}</td><td>${esc(p.name)}</td>
+    <td class="num">${(p.qty||0).toFixed(3)}</td><td class="num">${(p.amount||0).toFixed(2)}</td>
+    <td class="num">${(p.cgst||0).toFixed(2)}</td><td class="num">${(p.sgst||0).toFixed(2)}</td>
+    <td class="num">${(p.igst||0).toFixed(2)}</td><td class="num">${(p.tds||0).toFixed(2)}</td>
+    <td class="num" style="font-weight:600">${(p.total||0).toFixed(2)}</td>
+    <td style="white-space:nowrap">
+      ${iconBtn('pdf','View PDF',`viewPurchasePDF(${p.auction_id},'${encodeURIComponent(p.name)}','${encodeURIComponent(p.invo)}')`)}
+      ${iconBtn('edit','Edit purchase',`openPurchaseEdit(${JSON.stringify(p).replace(/"/g,'&quot;')})`)}
+      ${iconBtn('del','Delete purchase',`delPurchase(${p.id})`)}
+    </td>
+  </tr>`).join('')||'<tr><td colspan="10" style="text-align:center;color:var(--text3);padding:20px">No purchase invoices yet</td></tr>'}
+
+function openPurchaseEdit(p){
+  document.getElementById('pur-edit-id').value=p.id;
+  const fields=['ano','date','state','br','name','add_line','place','gstin','invo','qty','amount','cgst','sgst','igst','rund','total','tds'];
+  for(const f of fields){const el=document.getElementById('pe-'+f);if(el)el.value=p[f]!=null?p[f]:''}
+  showModal('pur-edit-modal');
+}
+async function savePurchaseEdit(){
+  const id=document.getElementById('pur-edit-id').value;
+  const body={};
+  const nums=['qty','amount','cgst','sgst','igst','rund','total','tds'];
+  const fields=['ano','date','state','br','name','add_line','place','gstin','invo',...nums];
+  for(const f of fields){
+    const el=document.getElementById('pe-'+f);if(!el)continue;
+    body[f]=nums.includes(f)?(parseFloat(el.value)||0):el.value;
+  }
+  try{
+    const r=await fetch(B+`/api/purchases/${id}`,{method:'PUT',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+T},body:JSON.stringify(body)});
+    if(!r.ok){const d=await r.json();throw new Error(d.error||'Save failed')}
+    hideModal('pur-edit-modal');toast('Purchase updated');loadPurchases();
+  }catch(e){alert('Error: '+e.message)}}
+async function delPurchase(id){if(!confirm('Delete this purchase invoice?'))return;
+  try{await j(`/api/purchases/${id}`,{method:'DELETE'});loadPurchases();toast('Purchase deleted')}
+  catch(e){alert('Error: '+e.message)}}
+
+async function viewPurchasePDF(auctionId,sellerName,invNo){
+  try{
+    const r=await fetch(B+`/api/purchases/pdf/${auctionId}/${sellerName}?invoiceNo=${invNo}`,{headers:{'Authorization':'Bearer '+T}});
+    if(!r.ok){
+      // Try to surface server error message
+      let msg='PDF generation failed (status '+r.status+')';
+      try{const err=await r.json();if(err.error)msg=err.error}catch(e){}
+      throw new Error(msg);
+    }
+    const blob=await r.blob();
+    if(blob.size<100){throw new Error('PDF returned empty')}
+    
+    // Download via anchor tag (avoids popup blocker)
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;
+    a.target='_blank';
+    a.rel='noopener';
+    // Try opening in new tab; if blocked, trigger download
+    const w=window.open(url,'_blank');
+    if(!w||w.closed||typeof w.closed==='undefined'){
+      // Popup blocked — download instead
+      a.download=`PurchaseInvoice_${decodeURIComponent(sellerName)}_${invNo}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      toast('Popup blocked — downloading PDF instead');
+    }
+    setTimeout(()=>URL.revokeObjectURL(url),30000);
+  }catch(e){alert('Error: '+e.message)}}
+
+// ── Payments ──────────────────────────────────────────────
+async function loadPayments(){const aid=document.getElementById('pay-auction').value;if(!aid)return;
+  const d=await j(`/api/payments/${aid}`);let tPur=0,tPay=0;
+  document.getElementById('payments-list').innerHTML=d.map(p=>{tPur+=p.total_puramt||0;tPay+=p.total_payable||0;
+    return`<tr><td>${esc(p.name)}</td><td class="num">${p.lot_count}</td><td class="num">${(p.total_qty||0).toFixed(3)}</td>
+    <td class="num">${(p.total_amount||0).toFixed(2)}</td><td class="num">${(p.total_puramt||0).toFixed(2)}</td>
+    <td class="num">${(p.total_discount||0).toFixed(2)}</td><td class="num" style="font-weight:600">${(p.total_payable||0).toFixed(2)}</td></tr>`}).join('')
+    +`<tr style="font-weight:700;background:var(--spice-lt)"><td colspan="4">TOTAL</td><td class="num">${tPur.toFixed(2)}</td><td></td><td class="num">${tPay.toFixed(2)}</td></tr>`}
+
+// ── Exports ───────────────────────────────────────────────
+const EXP_LABELS={lot_slip:'Lot Slip',lot_slip_after:'Lot Slip (After)',price_list:'Price List',bank_payment:'Bank Payment (RTGS/NEFT)',
+  pooler_register:'Pooler Register',full_file:'Full File',collection:'Collection/Lorry',dealer_list:'Dealer List',
+  sales_taxes:'Sales & Taxes',payment:'Payment Summary',tally_purchase:'Tally Purchase'};
+function renderExportBtns(){document.getElementById('export-btns').innerHTML=Object.entries(EXP_LABELS).map(([k,v])=>
+  `<button class="btn btn-a" onclick="exportType('${k}')" style="text-align:left;padding:10px 14px">${v}</button>`).join('')}
+async function exportType(type){const aid=document.getElementById('exp-auction')?.value||document.getElementById('pay-auction')?.value;
+  if(!aid){alert('Select an auction first');return}
+  const r=await fetch(B+`/api/exports/${type}/${aid}`,{headers:{'Authorization':'Bearer '+T}});
+  if(!r.ok){alert('Export failed');return}const blob=await r.blob();
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`${type}_${aid}.xlsx`;a.click()}
+
+// ── TDS ───────────────────────────────────────────────────
+async function loadTDS(){const f=document.getElementById('tds-from').value,t=document.getElementById('tds-to').value;
+  if(!f||!t){alert('Select date range');return}const d=await j(`/api/tds-return?from=${f}&to=${t}`);
+  document.getElementById('tds-list').innerHTML=d.map(r=>`<tr><td>${esc(r.invoice)}</td><td>${r.date}</td><td>${esc(r.name)}</td><td>${esc(r.pan)}</td>
+    <td class="num">${(r.assess_value||0).toFixed(2)}</td><td class="num">${(r.tds||0).toFixed(2)}</td></tr>`).join('')}
+async function exportTDS(){const f=document.getElementById('tds-from').value,t=document.getElementById('tds-to').value;
+  if(!f||!t){alert('Select date range');return}
+  const r=await fetch(B+`/api/exports/tds-return?from=${f}&to=${t}`,{headers:{'Authorization':'Bearer '+T}});
+  const blob=await r.blob();const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='TDSReturn.xlsx';a.click()}
+
+// ── Bills (Agriculturist) ──────────────────────────────────
+function loadBillAuctions(){fillAucSelect('bill-auction').then(()=>{loadBills();loadEligibleSellers()})}
+async function loadEligibleSellers(){
+  const aid=document.getElementById('bill-auction').value;
+  if(!aid){document.getElementById('gb-hint').textContent='';return}
+  try{
+    const sellers=await j(`/api/bills/eligible-sellers/${aid}`);
+    const dd=document.getElementById('gb-seller-dd');
+    if(!dd)return;
+    if(!sellers.length){
+      dd.innerHTML='<option value="">— No eligible sellers in this auction —</option>';
+      document.getElementById('gb-hint').innerHTML='<span style="color:var(--amber)">⚠ No agriculturist sellers (without GSTIN) found in this auction. Check if lots have been calculated or if all sellers have GSTIN.</span>';
+      return;
+    }
+    dd.innerHTML='<option value="">— Select seller —</option>'+sellers.map(s=>
+      `<option value="${esc(s.name)}">${esc(s.name)} — ${s.lot_count} lot(s), ₹${(s.total_amount||0).toFixed(2)}</option>`).join('');
+    document.getElementById('gb-hint').textContent=`${sellers.length} eligible seller(s) available`;
+  }catch(e){console.warn(e)}}
+async function loadBills(){
+  const d=await j('/api/bills');
+  document.getElementById('bills-list').innerHTML=d.map(b=>`<tr>
+    <td>${esc(b.bil)}</td><td>${b.date}</td><td>${esc(b.name)}</td><td>${esc(b.pla)}</td>
+    <td class="num">${(b.qty||0).toFixed(3)}</td><td class="num">${(b.cost||0).toFixed(2)}</td>
+    <td class="num" style="font-weight:600">${(b.net||0).toFixed(2)}</td>
+    <td style="white-space:nowrap">
+      ${iconBtn('pdf','View PDF',`viewBillPDF('${b.auction_id||1}','${encodeURIComponent(b.name)}','${b.bil}')`)}
+      ${iconBtn('edit','Edit bill',`openBillEdit(${JSON.stringify(b).replace(/"/g,'&quot;')})`)}
+      ${iconBtn('del','Delete bill',`delBill(${b.id})`)}
+    </td></tr>`).join('')||'<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:20px">No bills yet</td></tr>'}
+
+function openBillEdit(b){
+  document.getElementById('bill-edit-id').value=b.id;
+  const fields=['ano','date','state','br','bil','name','add_line','pla','pstate','st_code','crr','pan','qty','cost','igst','net'];
+  for(const f of fields){const el=document.getElementById('be-'+f);if(el)el.value=b[f]!=null?b[f]:''}
+  showModal('bill-edit-modal');
+}
+async function saveBillEdit(){
+  const id=document.getElementById('bill-edit-id').value;
+  const body={};
+  const nums=['bil','qty','cost','igst','net'];
+  const fields=['ano','date','state','br','name','add_line','pla','pstate','st_code','crr','pan',...nums];
+  for(const f of fields){
+    const el=document.getElementById('be-'+f);if(!el)continue;
+    body[f]=nums.includes(f)?(parseFloat(el.value)||0):el.value;
+  }
+  try{
+    const r=await fetch(B+`/api/bills/${id}`,{method:'PUT',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+T},body:JSON.stringify(body)});
+    if(!r.ok){const d=await r.json();throw new Error(d.error||'Save failed')}
+    hideModal('bill-edit-modal');toast('Bill updated');loadBills();
+  }catch(e){alert('Error: '+e.message)}}
+async function generateBill(){
+  const aid=document.getElementById('bill-auction').value;if(!aid){alert('Select auction');return}
+  const sellerName=document.getElementById('gb-seller').value.trim();
+  const billNo=document.getElementById('gb-billno').value.trim();
+  if(!sellerName||!billNo){alert('Enter seller name and bill no');return}
+  try{
+    const r=await fetch(B+`/api/bills/generate/${aid}`,{method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+T},
+      body:JSON.stringify({sellerName,billNo})});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.error||'Failed');
+    hideModal('gen-bill-modal');
+    toast('Bill generated — Net: ₹'+Number(d.bill.netAmount).toFixed(2));
+    loadBills();
+  }catch(e){alert('Error: '+e.message)}}
+async function viewBillPDF(auctionId,sellerName,billNo){
+  try{
+    const r=await fetch(B+`/api/bills/pdf/${auctionId}/${sellerName}?billNo=${billNo}`,{headers:{'Authorization':'Bearer '+T}});
+    if(!r.ok){let m='PDF failed';try{const e=await r.json();if(e.error)m=e.error}catch(x){}throw new Error(m)}
+    const blob=await r.blob();
+    const url=URL.createObjectURL(blob);
+    const w=window.open(url,'_blank');
+    if(!w||w.closed){const a=document.createElement('a');a.href=url;a.download=`BillOfSupply_${decodeURIComponent(sellerName)}_${billNo}.pdf`;a.click()}
+    setTimeout(()=>URL.revokeObjectURL(url),30000);
+  }catch(e){alert('Error: '+e.message)}}
+async function delBill(id){if(!confirm('Delete bill?'))return;await j(`/api/bills/${id}`,{method:'DELETE'});loadBills()}
+
+// ── Debit Notes ────────────────────────────────────────────
+async function loadDebitNotes(){
+  const d=await j('/api/debit-notes');
+  document.getElementById('debit-list').innerHTML=d.map(n=>`<tr>
+    <td>${esc(n.note_no)}</td><td>${n.date}</td><td>${esc(n.name)}</td>
+    <td class="num">${(n.amount||0).toFixed(2)}</td>
+    <td class="num">${(n.cgst||0).toFixed(2)}</td><td class="num">${(n.sgst||0).toFixed(2)}</td>
+    <td class="num">${(n.igst||0).toFixed(2)}</td>
+    <td class="num" style="font-weight:600">${(n.total||0).toFixed(2)}</td>
+    <td style="white-space:nowrap">
+      ${iconBtn('edit','Edit debit note',`openDebitEdit(${JSON.stringify(n).replace(/"/g,'&quot;')})`)}
+      ${iconBtn('del','Delete debit note',`delDebitNote(${n.id})`)}
+    </td></tr>`).join('')||'<tr><td colspan="9" style="text-align:center;color:var(--text3);padding:20px">No debit notes yet</td></tr>'}
+
+function openDebitEdit(n){
+  document.getElementById('dn-edit-id').value=n.id;
+  const fields=['ano','date','state','name','note_no','amount','cgst','sgst','igst','total'];
+  for(const f of fields){const el=document.getElementById('dne-'+f);if(el)el.value=n[f]!=null?n[f]:''}
+  showModal('dn-edit-modal');
+}
+async function saveDebitEdit(){
+  const id=document.getElementById('dn-edit-id').value;
+  const body={};
+  const nums=['amount','cgst','sgst','igst','total'];
+  const fields=['ano','date','state','name','note_no',...nums];
+  for(const f of fields){
+    const el=document.getElementById('dne-'+f);if(!el)continue;
+    body[f]=nums.includes(f)?(parseFloat(el.value)||0):el.value;
+  }
+  try{
+    const r=await fetch(B+`/api/debit-notes/${id}`,{method:'PUT',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+T},body:JSON.stringify(body)});
+    if(!r.ok){const d=await r.json();throw new Error(d.error||'Save failed')}
+    hideModal('dn-edit-modal');toast('Debit note updated');loadDebitNotes();
+  }catch(e){alert('Error: '+e.message)}}
+async function generateDebitNote(){
+  const invoiceNo=document.getElementById('gd-invno').value.trim();
+  const saleType=document.getElementById('gd-sale').value;
+  const discount=document.getElementById('gd-discount').value.trim();
+  const noteNo=document.getElementById('gd-noteno').value.trim();
+  if(!invoiceNo||!discount||!noteNo){alert('Fill all fields');return}
+  try{
+    const r=await fetch(B+'/api/debit-notes/generate',{method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+T},
+      body:JSON.stringify({invoiceNo,saleType,discount,noteNo})});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.error||'Failed');
+    hideModal('gen-debit-modal');
+    toast('Debit note created — Total: ₹'+Number(d.note.total).toFixed(2));
+    loadDebitNotes();
+  }catch(e){alert('Error: '+e.message)}}
+async function delDebitNote(id){if(!confirm('Delete debit note?'))return;await j(`/api/debit-notes/${id}`,{method:'DELETE'});loadDebitNotes()}
+
+// ── Journals ───────────────────────────────────────────────
+function loadJournalDefault(){
+  const today=new Date().toISOString().slice(0,10);
+  const firstOfMonth=today.slice(0,8)+'01';
+  if(!document.getElementById('jr-from').value)document.getElementById('jr-from').value=firstOfMonth;
+  if(!document.getElementById('jr-to').value)document.getElementById('jr-to').value=today;
+  updateJournalSaleVisibility();
+}
+function updateJournalSaleVisibility(){
+  document.getElementById('jr-sale-wrap').style.display=document.getElementById('jr-type').value==='sales'?'block':'none';
+}
+document.addEventListener('change',e=>{if(e.target.id==='jr-type')updateJournalSaleVisibility()});
+
+async function loadJournal(){
+  const type=document.getElementById('jr-type').value;
+  const from=document.getElementById('jr-from').value,to=document.getElementById('jr-to').value;
+  if(!from||!to){alert('Select date range');return}
+  let url,cols;
+  if(type==='sales'){
+    const saleType=document.getElementById('jr-sale').value;
+    url=`/api/journals/sales?from=${from}&to=${to}${saleType?'&saleType='+saleType:''}`;
+    cols=[['Date','date'],['Sale','sale'],['Inv#','invo'],['Buyer','buyer'],['Trade Name','buyer1'],['GSTIN','gstin'],['Bags','bag',1],['Qty','qty',3],['Cardamom','cardamom',2],['Gunny','gunny',2],['CGST','cgst',2],['SGST','sgst',2],['IGST','igst',2],['Total','total',2]];
+  }else if(type==='dealer'){
+    url=`/api/journals/purchase?from=${from}&to=${to}&type=dealer`;
+    cols=[['Date','date'],['Inv#','invoice_no'],['Name','name'],['Place','place'],['GSTIN','gstin'],['Qty','qty',3],['Amount','amount',2],['CGST','cgst',2],['SGST','sgst',2],['IGST','igst',2],['Total','total',2],['TDS','tds',2]];
+  }else{
+    url=`/api/journals/purchase?from=${from}&to=${to}&type=agri`;
+    cols=[['Date','date'],['Bill#','bill_no'],['Name','name'],['Place','place'],['State','state'],['CR','cr'],['PAN','pan'],['Qty','qty',3],['Cost','cost',2],['Net','net',2]];
+  }
+  const d=await j(url);
+  document.getElementById('jr-head').innerHTML='<tr>'+cols.map(c=>`<th${c[2]?' class="num"':''}>${c[0]}</th>`).join('')+'</tr>';
+  document.getElementById('jr-body').innerHTML=d.map(r=>'<tr>'+cols.map(c=>{
+    const v=r[c[1]];
+    if(c[2]!==undefined)return`<td class="num">${(v||0).toFixed(c[2])}</td>`;
+    return`<td>${esc(v)}</td>`;
+  }).join('')+'</tr>').join('')||'<tr><td colspan="'+cols.length+'" style="text-align:center;color:var(--text3);padding:20px">No records in this range</td></tr>';
+}
+async function exportJournal(){
+  const type=document.getElementById('jr-type').value;
+  const from=document.getElementById('jr-from').value,to=document.getElementById('jr-to').value;
+  if(!from||!to){alert('Select date range');return}
+  let url,name;
+  if(type==='sales'){
+    const saleType=document.getElementById('jr-sale').value;
+    url=`/api/exports/sales-journal?from=${from}&to=${to}${saleType?'&saleType='+saleType:''}`;
+    name='SalesJournal.xlsx';
+  }else{
+    url=`/api/exports/purchase-journal?from=${from}&to=${to}&type=${type}`;
+    name=(type==='agri'?'AgriBillJournal':'PurchaseJournal')+'.xlsx';
+  }
+  const r=await fetch(B+url,{headers:{'Authorization':'Bearer '+T}});
+  const blob=await r.blob();const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click()}
+
+// ── Preview (shared across Sales / Purchase / Agri) ────────
+async function previewInvoice(type){
+  let aid,body;
+  if(type==='sales'){
+    aid=document.getElementById('inv-auction').value;
+    body={saleType:document.getElementById('gi-sale').value,buyerCode:document.getElementById('gi-buyer').value.trim(),type:'sales'};
+    if(!body.buyerCode){alert('Enter buyer code');return}
+  }else if(type==='purchase'){
+    aid=document.getElementById('pur-auction').value;
+    body={buyerCode:document.getElementById('gp-seller').value.trim(),type:'purchase'};
+    if(!body.buyerCode){alert('Enter seller name');return}
+  }else{
+    aid=document.getElementById('bill-auction').value;
+    body={buyerCode:document.getElementById('gb-seller').value.trim(),type:'agri'};
+    if(!body.buyerCode){alert('Enter seller name');return}
+  }
+  if(!aid){alert('Select auction');return}
+  try{
+    const r=await fetch(B+`/api/invoices/preview/${aid}`,{method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+T},body:JSON.stringify(body)});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.error||'Preview failed');
+    renderPreview(d.invoice,type);
+    showModal('preview-modal');
+  }catch(e){alert('Error: '+e.message)}}
+
+function renderPreview(inv,type){
+  const s=inv.summary;
+  const who=type==='sales'?(inv.buyer||{}):(inv.seller||{});
+  const whoName=who.buyer1||who.name||'(unknown)';
+  const whoAddr=[who.add1,who.address,who.pla,who.place].filter(Boolean).join(', ');
+  const whoGst=who.gstin||who.cr||'';
+  let html=`<div style="background:var(--bg);padding:12px;border-radius:8px;margin-bottom:12px">
+    <div style="font-weight:600;font-size:14px;margin-bottom:4px">${esc(whoName)}</div>
+    <div style="font-size:11px;color:var(--text2)">${esc(whoAddr)}</div>
+    ${whoGst?`<div style="font-size:11px;color:var(--text2);margin-top:2px">GSTIN/CR: ${esc(whoGst)}</div>`:''}
+  </div>`;
+  
+  html+=`<table style="width:100%;font-size:12px;margin-bottom:12px"><thead><tr>
+    <th>Lot</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Amount</th>
+    ${type!=='sales'?'<th class="num">Pur.Amt</th>':''}
+    ${type!=='agri'?'<th class="num">Tax</th>':''}
+  </tr></thead><tbody>`;
+  for(const li of inv.lineItems){
+    const tax=(li.cgst||0)+(li.sgst||0)+(li.igst||0);
+    html+=`<tr><td>${esc(li.lot)}</td><td class="num">${(li.qty||li.pqty||0).toFixed(3)}</td>
+      <td class="num">${(li.price||li.prate||0).toFixed(2)}</td>
+      <td class="num">${(li.amount||0).toFixed(2)}</td>
+      ${type!=='sales'?`<td class="num">${(li.puramt||0).toFixed(2)}</td>`:''}
+      ${type!=='agri'?`<td class="num">${tax.toFixed(2)}</td>`:''}
+    </tr>`;
+  }
+  html+='</tbody></table>';
+  
+  html+=`<div style="background:var(--spice-lt);padding:12px;border-radius:8px">`;
+  if(type==='sales'){
+    html+=`<div style="display:flex;justify-content:space-between;padding:3px 0"><span>Total Amount:</span><span>₹${(s.totalAmount||0).toFixed(2)}</span></div>
+      ${s.gunnyCost?`<div style="display:flex;justify-content:space-between;padding:3px 0"><span>Gunny:</span><span>₹${s.gunnyCost.toFixed(2)}</span></div>`:''}
+      ${s.transportCost?`<div style="display:flex;justify-content:space-between;padding:3px 0"><span>Transport:</span><span>₹${s.transportCost.toFixed(2)}</span></div>`:''}
+      ${s.insuranceCost?`<div style="display:flex;justify-content:space-between;padding:3px 0"><span>Insurance:</span><span>₹${s.insuranceCost.toFixed(2)}</span></div>`:''}
+      <div style="display:flex;justify-content:space-between;padding:3px 0"><span>Taxable Value:</span><span>₹${(s.taxableValue||0).toFixed(2)}</span></div>
+      ${s.cgst?`<div style="display:flex;justify-content:space-between;padding:3px 0"><span>CGST:</span><span>₹${s.cgst.toFixed(2)}</span></div>`:''}
+      ${s.sgst?`<div style="display:flex;justify-content:space-between;padding:3px 0"><span>SGST:</span><span>₹${s.sgst.toFixed(2)}</span></div>`:''}
+      ${s.igst?`<div style="display:flex;justify-content:space-between;padding:3px 0"><span>IGST:</span><span>₹${s.igst.toFixed(2)}</span></div>`:''}`;
+  }else if(type==='purchase'){
+    html+=`<div style="display:flex;justify-content:space-between;padding:3px 0"><span>Total Purchase:</span><span>₹${(s.totalPuramt||0).toFixed(2)}</span></div>
+      ${s.totalCgst?`<div style="display:flex;justify-content:space-between;padding:3px 0"><span>CGST:</span><span>₹${s.totalCgst.toFixed(2)}</span></div>`:''}
+      ${s.totalSgst?`<div style="display:flex;justify-content:space-between;padding:3px 0"><span>SGST:</span><span>₹${s.totalSgst.toFixed(2)}</span></div>`:''}
+      ${s.totalIgst?`<div style="display:flex;justify-content:space-between;padding:3px 0"><span>IGST:</span><span>₹${s.totalIgst.toFixed(2)}</span></div>`:''}
+      ${s.tdsAmount?`<div style="display:flex;justify-content:space-between;padding:3px 0;color:var(--red)"><span>TDS Deduction:</span><span>-₹${s.tdsAmount.toFixed(2)}</span></div>`:''}`;
+  }else{
+    html+=`<div style="display:flex;justify-content:space-between;padding:3px 0"><span>Total Purchase:</span><span>₹${(s.totalPuramt||0).toFixed(2)}</span></div>
+      <div style="font-size:11px;color:var(--text2);padding:6px 0">No GST — Agricultural produce from unregistered seller (exempt)</div>`;
+  }
+  html+=`<hr style="margin:8px 0;border:none;border-top:1px solid var(--border)">
+    <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:14px;font-weight:700;color:var(--spice)">
+      <span>${type==='purchase'&&s.tdsAmount?'Invoice Amount':type==='agri'?'Net Amount':'Grand Total'}:</span>
+      <span>₹${(s.invoiceAmount||s.netAmount||s.grandTotal||0).toFixed(2)}</span>
+    </div></div>`;
+  
+  document.getElementById('preview-body').innerHTML=html;
+}
+
+</script>
+</body>
+</html>
