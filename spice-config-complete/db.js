@@ -13,6 +13,17 @@ async function initDb() {
   rawDb = fs.existsSync(DB_PATH) ? new SQL.Database(fs.readFileSync(DB_PATH)) : new SQL.Database();
   wrapped = makeWrapper();
 
+  // ── SESSIONS ───────────────────────────────────────────────
+  // One row per active login (supports the same user signed in on multiple devices)
+  wrapped.exec(`CREATE TABLE IF NOT EXISTS sessions (
+    token TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    created_at TEXT DEFAULT (datetime('now','localtime')),
+    last_used_at TEXT DEFAULT (datetime('now','localtime')),
+    device_label TEXT DEFAULT '',
+    FOREIGN KEY(user_id) REFERENCES users(id)
+  )`);
+
   // ── USERS ──────────────────────────────────────────────────
   wrapped.exec(`CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -59,6 +70,8 @@ async function initDb() {
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     buyer TEXT NOT NULL,
     buyer1 TEXT DEFAULT '',
+    code TEXT DEFAULT '',
+    sbl TEXT DEFAULT '',
     add1 TEXT DEFAULT '',
     add2 TEXT DEFAULT '',
     pla TEXT DEFAULT '',
@@ -70,8 +83,11 @@ async function initDb() {
     tel TEXT DEFAULT '',
     ti TEXT DEFAULT '',
     sale TEXT DEFAULT 'L',
+    email TEXT DEFAULT '',
+    tdsq TEXT DEFAULT '',
     cbuyer1 TEXT DEFAULT '',
     cadd1 TEXT DEFAULT '',
+    cadd2 TEXT DEFAULT '',
     cpla TEXT DEFAULT '',
     cpin TEXT DEFAULT '',
     cstate TEXT DEFAULT '',
@@ -275,6 +291,12 @@ async function initDb() {
     'ALTER TABLE invoices ADD COLUMN auction_id INTEGER',
     'ALTER TABLE bills ADD COLUMN auction_id INTEGER',
     'ALTER TABLE debit_notes ADD COLUMN auction_id INTEGER',
+    // Buyer short alias (CODE column in XLSX — used in price import to match lots to buyers)
+    "ALTER TABLE buyers ADD COLUMN code TEXT DEFAULT ''",
+    "ALTER TABLE buyers ADD COLUMN cadd2 TEXT DEFAULT ''",
+    "ALTER TABLE buyers ADD COLUMN email TEXT DEFAULT ''",
+    "ALTER TABLE buyers ADD COLUMN tdsq TEXT DEFAULT ''",
+    "ALTER TABLE buyers ADD COLUMN sbl TEXT DEFAULT ''",
   ];
   for (const m of migrations) {
     try { wrapped.exec(m); console.log('Migration applied:', m); }

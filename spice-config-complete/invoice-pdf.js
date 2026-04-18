@@ -70,16 +70,18 @@ function generatePurchaseInvoicePDF(invoiceData, cfg, invoiceNo) {
   y += 14;
   doc.moveTo(x, y).lineTo(x + w, y).stroke(); y += 4;
 
-  // Table header
+  // Table header — LOT, BAGS, GR, QTY, PRICE, VALUE, TAXABLE, CGST, SGST, IGST
   const cols = [
-    { label: 'LOT', x: x, w: 35 },
-    { label: 'QTY', x: x+35, w: 55 },
-    { label: 'PRICE', x: x+90, w: 50 },
-    { label: 'VALUE', x: x+140, w: 65 },
-    { label: 'TAXABLE', x: x+205, w: 70 },
-    { label: 'CGST', x: x+275, w: 55 },
-    { label: 'SGST', x: x+330, w: 55 },
-    { label: 'IGST', x: x+385, w: 55 },
+    { label: 'LOT',     x: x,        w: 30 },
+    { label: 'BAGS',    x: x+30,     w: 28 },
+    { label: 'GR',      x: x+58,     w: 20 },
+    { label: 'QTY',     x: x+78,     w: 48 },
+    { label: 'PRICE',   x: x+126,    w: 44 },
+    { label: 'VALUE',   x: x+170,    w: 58 },
+    { label: 'TAXABLE', x: x+228,    w: 62 },
+    { label: 'CGST',    x: x+290,    w: 50 },
+    { label: 'SGST',    x: x+340,    w: 50 },
+    { label: 'IGST',    x: x+390,    w: 50 },
   ];
 
   doc.font('Helvetica-Bold').fontSize(7);
@@ -92,13 +94,15 @@ function generatePurchaseInvoicePDF(invoiceData, cfg, invoiceNo) {
   for (const li of lineItems) {
     if (y > 680) { doc.addPage(); y = 30; }
     doc.text(li.lot, cols[0].x, y, { width: cols[0].w, align: 'right' });
-    doc.text((li.pqty || li.qty).toFixed(3), cols[1].x, y, { width: cols[1].w, align: 'right' });
-    doc.text((li.prate || li.price).toFixed(2), cols[2].x, y, { width: cols[2].w, align: 'right' });
-    doc.text(li.amount.toFixed(2), cols[3].x, y, { width: cols[3].w, align: 'right' });
-    doc.text(li.puramt.toFixed(2), cols[4].x, y, { width: cols[4].w, align: 'right' });
-    doc.text(li.cgst ? li.cgst.toFixed(2) : '', cols[5].x, y, { width: cols[5].w, align: 'right' });
-    doc.text(li.sgst ? li.sgst.toFixed(2) : '', cols[6].x, y, { width: cols[6].w, align: 'right' });
-    doc.text(li.igst ? li.igst.toFixed(2) : '', cols[7].x, y, { width: cols[7].w, align: 'right' });
+    doc.text(String(li.bags || 0), cols[1].x, y, { width: cols[1].w, align: 'right' });
+    doc.text(String(li.grade || ''), cols[2].x, y, { width: cols[2].w, align: 'right' });
+    doc.text((li.pqty || li.qty).toFixed(3), cols[3].x, y, { width: cols[3].w, align: 'right' });
+    doc.text((li.prate || li.price).toFixed(2), cols[4].x, y, { width: cols[4].w, align: 'right' });
+    doc.text(li.amount.toFixed(2), cols[5].x, y, { width: cols[5].w, align: 'right' });
+    doc.text(li.puramt.toFixed(2), cols[6].x, y, { width: cols[6].w, align: 'right' });
+    doc.text(li.cgst ? li.cgst.toFixed(2) : '-', cols[7].x, y, { width: cols[7].w, align: 'right' });
+    doc.text(li.sgst ? li.sgst.toFixed(2) : '-', cols[8].x, y, { width: cols[8].w, align: 'right' });
+    doc.text(li.igst ? li.igst.toFixed(2) : '-', cols[9].x, y, { width: cols[9].w, align: 'right' });
     y += 11;
   }
 
@@ -108,11 +112,12 @@ function generatePurchaseInvoicePDF(invoiceData, cfg, invoiceNo) {
   // Totals
   doc.font('Helvetica-Bold').fontSize(7);
   doc.text('TOTAL', cols[0].x, y, { width: cols[0].w, align: 'right' });
-  doc.text(summary.totalQty.toFixed(3), cols[1].x, y, { width: cols[1].w, align: 'right' });
-  doc.text(summary.totalPuramt.toFixed(2), cols[4].x, y, { width: cols[4].w, align: 'right' });
-  doc.text(summary.totalCgst ? summary.totalCgst.toFixed(2) : '', cols[5].x, y, { width: cols[5].w, align: 'right' });
-  doc.text(summary.totalSgst ? summary.totalSgst.toFixed(2) : '', cols[6].x, y, { width: cols[6].w, align: 'right' });
-  doc.text(summary.totalIgst ? summary.totalIgst.toFixed(2) : '', cols[7].x, y, { width: cols[7].w, align: 'right' });
+  doc.text(String(summary.totalBags || 0), cols[1].x, y, { width: cols[1].w, align: 'right' });
+  doc.text(summary.totalQty.toFixed(3), cols[3].x, y, { width: cols[3].w, align: 'right' });
+  doc.text(summary.totalPuramt.toFixed(2), cols[6].x, y, { width: cols[6].w, align: 'right' });
+  doc.text(summary.totalCgst ? summary.totalCgst.toFixed(2) : '', cols[7].x, y, { width: cols[7].w, align: 'right' });
+  doc.text(summary.totalSgst ? summary.totalSgst.toFixed(2) : '', cols[8].x, y, { width: cols[8].w, align: 'right' });
+  doc.text(summary.totalIgst ? summary.totalIgst.toFixed(2) : '', cols[9].x, y, { width: cols[9].w, align: 'right' });
   y += 14;
   doc.moveTo(x, y).lineTo(x + w, y).stroke(); y += 6;
 
@@ -291,22 +296,62 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
   y += 12;
   doc.moveTo(x, y).lineTo(x + w, y).stroke(); y += 6;
 
-  // Buyer (bill-to)
-  doc.font('Helvetica-Bold').fontSize(9).text('BILL TO:', x, y);
-  y += 12;
-  doc.font('Helvetica').fontSize(9).text(buyer.buyer1 || buyer.buyer || '', x, y);
-  y += 11;
-  if (buyer.add1 || buyer.add2) {
-    doc.fontSize(8).text([buyer.add1, buyer.add2].filter(Boolean).join(', '), x, y, { width: w });
-    y += 10;
+  // Buyer: BILL TO (left) / SHIPPED TO (right) — two-column layout
+  const halfW = w / 2 - 6;
+  const rightX = x + w / 2 + 6;
+  const billStartY = y;
+
+  // Consignee = buyer's consignee fields if present, else same as bill-to (drop-ship default)
+  const hasConsignee = !!(buyer.cbuyer1 || buyer.cadd1 || buyer.cpla || buyer.cgstin);
+  const ship = hasConsignee ? {
+    name:   buyer.cbuyer1 || buyer.buyer1 || buyer.buyer || '',
+    addr:   buyer.cadd1 || '',
+    pla:    buyer.cpla || '',
+    pin:    buyer.cpin || '',
+    state:  buyer.cstate || '',
+    stCode: buyer.cst_code || '',
+    gstin:  buyer.cgstin || '',
+  } : {
+    name:   buyer.buyer1 || buyer.buyer || '',
+    addr:   [buyer.add1, buyer.add2].filter(Boolean).join(', '),
+    pla:    buyer.pla || '',
+    pin:    buyer.pin || '',
+    state:  buyer.state || '',
+    stCode: buyer.st_code || '',
+    gstin:  buyer.gstin || '',
+  };
+
+  // Left: BILL TO
+  let leftY = billStartY;
+  doc.font('Helvetica-Bold').fontSize(9).text('BILL TO:', x, leftY); leftY += 12;
+  const billName = buyer.buyer1 || buyer.buyer || '';
+  if (billName) {
+    doc.font('Helvetica').fontSize(9).text(billName, x, leftY, { width: halfW }); leftY += 11;
+  } else {
+    doc.font('Helvetica-Oblique').fontSize(8).fillColor('#888').text('(buyer details not available)', x, leftY, { width: halfW });
+    doc.fillColor('#000');
+    leftY += 11;
   }
   doc.fontSize(8);
-  if (buyer.pla) { doc.text(`${buyer.pla}${buyer.pin ? ' - ' + buyer.pin : ''}`, x, y); y += 10; }
-  if (buyer.state) { doc.text(`State: ${buyer.state}${buyer.st_code ? ' (Code: ' + buyer.st_code + ')' : ''}`, x, y); y += 10; }
-  if (buyer.gstin) { doc.text(`GSTIN: ${buyer.gstin}`, x, y); y += 10; }
-  if (buyer.pan) { doc.text(`PAN: ${buyer.pan}`, x, y); y += 10; }
+  const billAddr = [buyer.add1, buyer.add2].filter(Boolean).join(', ');
+  if (billAddr) { doc.text(billAddr, x, leftY, { width: halfW }); leftY += 10; }
+  if (buyer.pla) { doc.text(`${buyer.pla}${buyer.pin ? ' - ' + buyer.pin : ''}`, x, leftY, { width: halfW }); leftY += 10; }
+  if (buyer.state) { doc.text(`State: ${buyer.state}${buyer.st_code ? ' (Code: ' + buyer.st_code + ')' : ''}`, x, leftY, { width: halfW }); leftY += 10; }
+  if (buyer.gstin) { doc.text(`GSTIN: ${buyer.gstin}`, x, leftY, { width: halfW }); leftY += 10; }
+  if (buyer.pan) { doc.text(`PAN: ${buyer.pan}`, x, leftY, { width: halfW }); leftY += 10; }
 
-  y += 6;
+  // Right: SHIPPED TO
+  let rightY = billStartY;
+  doc.font('Helvetica-Bold').fontSize(9).text('SHIPPED TO:', rightX, rightY); rightY += 12;
+  doc.font('Helvetica').fontSize(9).text(ship.name, rightX, rightY, { width: halfW }); rightY += 11;
+  doc.fontSize(8);
+  if (ship.addr)  { doc.text(ship.addr, rightX, rightY, { width: halfW }); rightY += 10; }
+  if (ship.pla)   { doc.text(`${ship.pla}${ship.pin ? ' - ' + ship.pin : ''}`, rightX, rightY, { width: halfW }); rightY += 10; }
+  if (ship.state) { doc.text(`State: ${ship.state}${ship.stCode ? ' (Code: ' + ship.stCode + ')' : ''}`, rightX, rightY, { width: halfW }); rightY += 10; }
+  if (ship.gstin) { doc.text(`GSTIN: ${ship.gstin}`, rightX, rightY, { width: halfW }); rightY += 10; }
+  if (!hasConsignee) { doc.font('Helvetica-Oblique').fontSize(7).text('(same as Bill To)', rightX, rightY, { width: halfW }); rightY += 10; doc.font('Helvetica'); }
+
+  y = Math.max(leftY, rightY) + 6;
   doc.moveTo(x, y).lineTo(x + w, y).stroke(); y += 4;
 
   // HSN
@@ -315,39 +360,70 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
   y += 14;
   doc.moveTo(x, y).lineTo(x + w, y).stroke(); y += 4;
 
-  // Table
-  const cols = [
-    { label: 'LOT',    x: x,        w: 45,  align: 'left' },
-    { label: 'GRADE',  x: x + 45,   w: 50,  align: 'left' },
-    { label: 'BAGS',   x: x + 95,   w: 45,  align: 'right' },
-    { label: 'QTY(KG)', x: x + 140, w: 70,  align: 'right' },
-    { label: 'RATE',   x: x + 210,  w: 70,  align: 'right' },
-    { label: 'AMOUNT (Rs.)', x: x + 280, w: 100, align: 'right' },
-  ];
-  doc.font('Helvetica-Bold').fontSize(8);
-  cols.forEach(c => doc.text(c.label, c.x, y, { width: c.w, align: c.align }));
-  y += 12;
-  doc.moveTo(x, y).lineTo(x + w, y).stroke(); y += 4;
+  // ── Per-line tax computation (Item 7) ──
+  // Pre-tax overhead (gunny + transport + insurance) is allocated proportionally
+  // to each line so per-line CGST/SGST/IGST = per-line taxable × rate
+  const preTax   = summary.totalAmount || 0;
+  const overhead = (summary.gunnyCost || 0) + (summary.transportCost || 0) + (summary.insuranceCost || 0);
+  const gstPct   = cfg.gst_goods || 5;
+  const halfPct  = gstPct / 2;
+  const inter    = summary.isInterState;
 
-  doc.font('Helvetica').fontSize(8);
-  for (const li of lineItems) {
+  const lineItemsWithTax = lineItems.map(li => {
+    const share     = preTax > 0 ? (li.amount || 0) / preTax : 0;
+    const taxable   = (li.amount || 0) + overhead * share;
+    const cgstL     = inter ? 0 : Math.round(taxable * halfPct) / 100;
+    const sgstL     = inter ? 0 : Math.round(taxable * halfPct) / 100;
+    const igstL     = inter ? Math.round(taxable * gstPct) / 100 : 0;
+    return { ...li, taxable, cgstL, sgstL, igstL };
+  });
+
+  // Table — now with CGST/SGST/IGST columns
+  const cols = [
+    { label: 'LOT',     x: x,        w: 38,  align: 'left'  },
+    { label: 'GR',      x: x + 38,   w: 22,  align: 'left'  },
+    { label: 'BAGS',    x: x + 60,   w: 32,  align: 'right' },
+    { label: 'QTY(KG)', x: x + 92,   w: 50,  align: 'right' },
+    { label: 'RATE',    x: x + 142,  w: 46,  align: 'right' },
+    { label: 'TAXABLE', x: x + 188,  w: 62,  align: 'right' },
+    { label: 'CGST',    x: x + 250,  w: 50,  align: 'right' },
+    { label: 'SGST',    x: x + 300,  w: 50,  align: 'right' },
+    { label: 'IGST',    x: x + 350,  w: 50,  align: 'right' },
+    { label: 'AMOUNT',  x: x + 400,  w: w - 400, align: 'right' },
+  ];
+  doc.font('Helvetica-Bold').fontSize(7);
+  cols.forEach(c => doc.text(c.label, c.x, y, { width: c.w, align: c.align }));
+  y += 11;
+  doc.moveTo(x, y).lineTo(x + w, y).stroke(); y += 3;
+
+  doc.font('Helvetica').fontSize(7);
+  for (const li of lineItemsWithTax) {
     if (y > 680) { doc.addPage(); y = 30; }
+    const lineAmt = (li.amount || 0) + (li.cgstL || 0) + (li.sgstL || 0) + (li.igstL || 0);
     doc.text(li.lot || '', cols[0].x, y, { width: cols[0].w });
     doc.text(String(li.grade || ''), cols[1].x, y, { width: cols[1].w });
     doc.text(String(li.bags || 0), cols[2].x, y, { width: cols[2].w, align: 'right' });
     doc.text((li.qty || 0).toFixed(3), cols[3].x, y, { width: cols[3].w, align: 'right' });
     doc.text((li.price || 0).toFixed(2), cols[4].x, y, { width: cols[4].w, align: 'right' });
-    doc.text((li.amount || 0).toFixed(2), cols[5].x, y, { width: cols[5].w, align: 'right' });
-    y += 11;
+    doc.text((li.taxable || 0).toFixed(2), cols[5].x, y, { width: cols[5].w, align: 'right' });
+    doc.text(li.cgstL ? li.cgstL.toFixed(2) : '-', cols[6].x, y, { width: cols[6].w, align: 'right' });
+    doc.text(li.sgstL ? li.sgstL.toFixed(2) : '-', cols[7].x, y, { width: cols[7].w, align: 'right' });
+    doc.text(li.igstL ? li.igstL.toFixed(2) : '-', cols[8].x, y, { width: cols[8].w, align: 'right' });
+    doc.text(lineAmt.toFixed(2), cols[9].x, y, { width: cols[9].w, align: 'right' });
+    y += 10;
   }
-  y += 4;
-  doc.moveTo(x, y).lineTo(x + w, y).stroke(); y += 4;
+  y += 3;
+  doc.moveTo(x, y).lineTo(x + w, y).stroke(); y += 3;
 
-  doc.font('Helvetica-Bold').fontSize(8);
+  doc.font('Helvetica-Bold').fontSize(7);
   doc.text('TOTAL', cols[0].x, y);
   doc.text(String(summary.totalBags || 0), cols[2].x, y, { width: cols[2].w, align: 'right' });
   doc.text((summary.totalQty || 0).toFixed(3), cols[3].x, y, { width: cols[3].w, align: 'right' });
-  doc.text((summary.totalAmount || 0).toFixed(2), cols[5].x, y, { width: cols[5].w, align: 'right' });
+  doc.text(((summary.totalAmount || 0) + (summary.gunnyCost||0) + (summary.transportCost||0) + (summary.insuranceCost||0)).toFixed(2),
+           cols[5].x, y, { width: cols[5].w, align: 'right' });
+  doc.text((summary.cgst || 0).toFixed(2), cols[6].x, y, { width: cols[6].w, align: 'right' });
+  doc.text((summary.sgst || 0).toFixed(2), cols[7].x, y, { width: cols[7].w, align: 'right' });
+  doc.text((summary.igst || 0).toFixed(2), cols[8].x, y, { width: cols[8].w, align: 'right' });
   y += 16;
 
   // Summary block (right-aligned)

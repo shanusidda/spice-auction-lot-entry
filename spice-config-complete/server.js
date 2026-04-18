@@ -10,6 +10,7 @@ const { initCompanySettings, CATEGORIES, getAllSettings, updateSettings, getSett
 const { calculateLot, buildSalesInvoice, buildPurchaseInvoice, buildAgriBill, buildDebitNote, listAgriSellers, getPaymentSummary, getBankPaymentData, getTDSReturnData, getSalesJournal, getPurchaseJournal } = require('./calculations');
 const { generatePurchaseInvoicePDF, generateCropReceiptPDF, generateAgriBillPDF, generateSalesInvoicePDF } = require('./invoice-pdf');
 const { EXPORT_TYPES } = require('./exports');
+const { exportPdf: exportAnyPdf } = require('./exports-pdf');
 const { DBF_EXPORTS } = require('./dbf-exports');
 
 const app = express();
@@ -23,32 +24,193 @@ const upload = multer({ dest: uploadDir, limits: { fileSize: 20 * 1024 * 1024 } 
 
 const hash = pw => crypto.createHash('sha256').update(pw).digest('hex');
 
+// ── Date helpers ──
+// Convert any date-ish input (Date object, Excel serial number, dd/mm/yyyy,
+// yyyy-mm-dd, etc.) to canonical ISO yyyy-mm-dd for storage.
+function normalizeDate(v) {
+  if (v === null || v === undefined || v === '') return '';
+  // Date object
+  if (v instanceof Date && !isNaN(v)) {
+    return v.toISOString().slice(0, 10);
+  }
+  // Number = Excel serial (days since 1900-01-01, with the famous 1900 leap-year bug)
+  if (typeof v === 'number' && v > 0 && v < 80000) {
+    // Excel epoch: 1899-12-30 (accounts for the 1900 leap-year bug)
+    const ms = (v - 25569) * 86400 * 1000;
+    const d = new Date(ms);
+    if (!isNaN(d)) return d.toISOString().slice(0, 10);
+  }
+  const s = String(v).trim();
+  // ISO yyyy-mm-dd (or yyyy-mm-dd HH:MM:SS)
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.substring(0, 10);
+  // dd/mm/yyyy or dd-mm-yyyy
+  const m1 = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+  if (m1) return `${m1[3]}-${m1[2].padStart(2, '0')}-${m1[1].padStart(2, '0')}`;
+  // Pure numeric string Excel serial
+  if (/^\d+(\.\d+)?$/.test(s)) {
+    const n = Number(s);
+    if (n > 0 && n < 80000) {
+      const ms = (n - 25569) * 86400 * 1000;
+      const d = new Date(ms);
+      if (!isNaN(d)) return d.toISOString().slice(0, 10);
+    }
+  }
+  // Last resort: try Date parsing
+  const d = new Date(s);
+  if (!isNaN(d)) return d.toISOString().slice(0, 10);
+  return s;
+}
+
+// Display: yyyy-mm-dd → dd/mm/yyyy (handles Excel serials defensively too)
+function fmtDate(d) {
+  if (!d && d !== 0) return '';
+  const iso = normalizeDate(d);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+    const [y, m, day] = iso.split('-');
+    return `${day}/${m}/${y}`;
+  }
+  return String(d);
+}
+
+function withFmtDate(rows, field = 'date') {
+  if (!Array.isArray(rows)) return rows;
+  return rows.map(r => ({ ...r, date_fmt: fmtDate(r[field]) }));
+}
+
 function requireAdmin(req, res, next) {
   const token = (req.headers.authorization || '').replace('Bearer ', '');
   if (!token) return res.status(401).json({ error: 'No token' });
-  const user = getDb().get('SELECT * FROM users WHERE token = ? AND role = ?', [token, 'admin']);
+  const db = getDb();
+  const session = db.get('SELECT * FROM sessions WHERE token = ?', [token]);
+  if (!session) return res.status(403).json({ error: 'Session expired — please sign in again' });
+  const user = db.get('SELECT * FROM users WHERE id = ? AND role = ?', [session.user_id, 'admin']);
   if (!user) return res.status(403).json({ error: 'Unauthorized' });
-  req.user = user; next();
+  // Touch last_used_at for cleanup / activity display
+  db.run(`UPDATE sessions SET last_used_at = datetime('now','localtime') WHERE token = ?`, [token]);
+  req.user = user;
+  req.session = session;
+  next();
 }
 
 // ══════════════════════════════════════════════════════════════
 // AUTH
 // ══════════════════════════════════════════════════════════════
 app.post('/api/login', (req, res) => {
-  const { username, password } = req.body;
+  const { username, password, device_label } = req.body;
   if (!username || !password) return res.status(400).json({ error: 'Missing credentials' });
-  const user = getDb().get('SELECT * FROM users WHERE username = ?', [username]);
+  const db = getDb();
+  const user = db.get('SELECT * FROM users WHERE username = ?', [username]);
   if (!user || user.password_hash !== hash(password)) return res.status(401).json({ error: 'Invalid credentials' });
   const token = crypto.randomBytes(32).toString('hex');
-  getDb().run('UPDATE users SET token = ? WHERE id = ?', [token, user.id]);
+  // Create a new session row WITHOUT deleting any existing sessions —
+  // this lets the same user stay logged in on multiple devices simultaneously.
+  db.run('INSERT INTO sessions (token, user_id, device_label) VALUES (?, ?, ?)', [token, user.id, device_label || '']);
+  // Clean up very old sessions (> 30 days) so the table doesn't grow forever
+  db.run(`DELETE FROM sessions WHERE last_used_at < datetime('now','-30 days')`);
   res.json({ token, role: user.role, username: user.username });
 });
 app.post('/api/logout', (req, res) => {
   const t = (req.headers.authorization||'').replace('Bearer ','');
-  if (t) getDb().run('UPDATE users SET token = NULL WHERE token = ?', [t]);
+  if (t) getDb().run('DELETE FROM sessions WHERE token = ?', [t]);
   res.json({ success: true });
 });
 app.get('/api/me', requireAdmin, (req, res) => res.json({ username: req.user.username, role: req.user.role }));
+
+// ══════════════════════════════════════════════════════════════
+// USER MANAGEMENT (admin-only)
+// ══════════════════════════════════════════════════════════════
+app.get('/api/users', requireAdmin, (req, res) => {
+  const db = getDb();
+  const users = db.all(`
+    SELECT u.id, u.username, u.role, u.created_at,
+      (SELECT COUNT(*) FROM sessions s WHERE s.user_id = u.id) as active_sessions,
+      (SELECT MAX(last_used_at) FROM sessions s WHERE s.user_id = u.id) as last_active
+    FROM users u ORDER BY u.id ASC
+  `);
+  res.json(users);
+});
+
+app.post('/api/users', requireAdmin, (req, res) => {
+  const { username, password, role } = req.body || {};
+  if (!username || !password) return res.status(400).json({ error: 'username and password are required' });
+  if (password.length < 4) return res.status(400).json({ error: 'Password must be at least 4 characters' });
+  if (!/^[a-zA-Z0-9_.-]{3,30}$/.test(username)) return res.status(400).json({ error: 'Username: 3–30 chars, letters/digits/._- only' });
+  const db = getDb();
+  const existing = db.get('SELECT id FROM users WHERE username = ?', [username]);
+  if (existing) return res.status(400).json({ error: 'Username already exists' });
+  db.run(
+    'INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)',
+    [username, hash(password), role === 'admin' ? 'admin' : 'admin']  // all users are admin in this app
+  );
+  const created = db.get('SELECT id, username FROM users WHERE username = ?', [username]);
+  res.json({ success: true, id: created ? created.id : null, username });
+});
+
+app.put('/api/users/:id/password', requireAdmin, (req, res) => {
+  const { password } = req.body || {};
+  if (!password || password.length < 4) return res.status(400).json({ error: 'Password must be at least 4 characters' });
+  const db = getDb();
+  const user = db.get('SELECT id, username FROM users WHERE id = ?', [req.params.id]);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  db.run('UPDATE users SET password_hash = ? WHERE id = ?', [hash(password), user.id]);
+  // Invalidate all sessions of that user (force re-login after password change)
+  db.run('DELETE FROM sessions WHERE user_id = ?', [user.id]);
+  res.json({ success: true, username: user.username });
+});
+
+app.delete('/api/users/:id', requireAdmin, (req, res) => {
+  const db = getDb();
+  const target = db.get('SELECT id, username, role FROM users WHERE id = ?', [req.params.id]);
+  if (!target) return res.status(404).json({ error: 'User not found' });
+  // Safety: don't let admin delete themselves
+  if (target.id === req.user.id) return res.status(400).json({ error: 'You cannot delete your own account while signed in' });
+  // Safety: never allow deleting the last remaining user
+  const total = db.get('SELECT COUNT(*) as c FROM users').c;
+  if (total <= 1) return res.status(400).json({ error: 'Cannot delete the last remaining user' });
+  db.run('DELETE FROM sessions WHERE user_id = ?', [target.id]);
+  db.run('DELETE FROM users WHERE id = ?', [target.id]);
+  res.json({ success: true, username: target.username });
+});
+
+// Change own password — shortcut that doesn't require user id
+app.put('/api/me/password', requireAdmin, (req, res) => {
+  const { current_password, new_password } = req.body || {};
+  if (!current_password || !new_password) return res.status(400).json({ error: 'Both current and new password required' });
+  if (new_password.length < 4) return res.status(400).json({ error: 'New password must be at least 4 characters' });
+  const db = getDb();
+  const user = db.get('SELECT * FROM users WHERE id = ?', [req.user.id]);
+  if (!user || user.password_hash !== hash(current_password)) return res.status(401).json({ error: 'Current password is incorrect' });
+  db.run('UPDATE users SET password_hash = ? WHERE id = ?', [hash(new_password), user.id]);
+  // Kill all OTHER sessions (keep current one)
+  db.run('DELETE FROM sessions WHERE user_id = ? AND token != ?', [user.id, req.session.token]);
+  res.json({ success: true });
+});
+
+// See my active sessions (all devices signed in as me)
+app.get('/api/me/sessions', requireAdmin, (req, res) => {
+  const db = getDb();
+  const sessions = db.all(
+    `SELECT token, device_label, created_at, last_used_at,
+            CASE WHEN token = ? THEN 1 ELSE 0 END as is_current
+     FROM sessions WHERE user_id = ? ORDER BY last_used_at DESC`,
+    [req.session.token, req.user.id]
+  );
+  // Mask tokens — only show last 8 chars
+  res.json(sessions.map(s => ({ ...s, token: '…' + (s.token || '').slice(-8) })));
+});
+
+// Revoke (log out) another session I own
+app.delete('/api/me/sessions/:tokenSuffix', requireAdmin, (req, res) => {
+  const suffix = req.params.tokenSuffix;
+  const db = getDb();
+  // Find session by matching suffix, for THIS user only
+  const sessions = db.all('SELECT token FROM sessions WHERE user_id = ?', [req.user.id]);
+  const match = sessions.find(s => (s.token || '').endsWith(suffix));
+  if (!match) return res.status(404).json({ error: 'Session not found' });
+  if (match.token === req.session.token) return res.status(400).json({ error: 'Use Logout to end your current session' });
+  db.run('DELETE FROM sessions WHERE token = ?', [match.token]);
+  res.json({ success: true });
+});
 
 // ══════════════════════════════════════════════════════════════
 // COMPANY SETTINGS
@@ -71,13 +233,115 @@ app.post('/api/company-settings/import', requireAdmin, (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════
+// BULK DELETE ROUTES (DELETE ALL records from a given table)
+// ══════════════════════════════════════════════════════════════
+function makeDeleteAll(table) {
+  return (req, res) => {
+    try {
+      const db = getDb();
+      const before = db.get(`SELECT COUNT(*) as c FROM ${table}`).c;
+      db.run(`DELETE FROM ${table}`);
+      try { db.exec(`DELETE FROM sqlite_sequence WHERE name = '${table}'`); } catch(_) {}
+      res.json({ success: true, deleted: before });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  };
+}
+app.delete('/api/traders/delete-all',     requireAdmin, makeDeleteAll('traders'));
+app.delete('/api/buyers/delete-all',      requireAdmin, makeDeleteAll('buyers'));
+app.delete('/api/invoices/delete-all',    requireAdmin, makeDeleteAll('invoices'));
+app.delete('/api/purchases/delete-all',   requireAdmin, makeDeleteAll('purchases'));
+app.delete('/api/bills/delete-all',       requireAdmin, makeDeleteAll('bills'));
+app.delete('/api/debit-notes/delete-all', requireAdmin, makeDeleteAll('debit_notes'));
+
+// ══════════════════════════════════════════════════════════════
+// GST LOOKUP — fetch trade name/address/state from GSTIN
+// Uses gstincheck.co.in if an API key is configured in settings
+// (company-config: gst_api_key). Falls back to structural validation.
+// ══════════════════════════════════════════════════════════════
+const STATE_CODES = {
+  '01':'JAMMU AND KASHMIR','02':'HIMACHAL PRADESH','03':'PUNJAB','04':'CHANDIGARH','05':'UTTARAKHAND',
+  '06':'HARYANA','07':'DELHI','08':'RAJASTHAN','09':'UTTAR PRADESH','10':'BIHAR','11':'SIKKIM',
+  '12':'ARUNACHAL PRADESH','13':'NAGALAND','14':'MANIPUR','15':'MIZORAM','16':'TRIPURA','17':'MEGHALAYA',
+  '18':'ASSAM','19':'WEST BENGAL','20':'JHARKHAND','21':'ODISHA','22':'CHATTISGARH','23':'MADHYA PRADESH',
+  '24':'GUJARAT','25':'DAMAN AND DIU','26':'DADRA AND NAGAR HAVELI','27':'MAHARASHTRA','28':'ANDHRA PRADESH',
+  '29':'KARNATAKA','30':'GOA','31':'LAKSHADWEEP','32':'KERALA','33':'TAMIL NADU','34':'PUDUCHERRY',
+  '35':'ANDAMAN AND NICOBAR ISLANDS','36':'TELANGANA','37':'ANDHRA PRADESH','38':'LADAKH'
+};
+const GSTIN_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
+
+app.get('/api/gst-lookup/:gstin', requireAdmin, async (req, res) => {
+  const gstin = String(req.params.gstin || '').toUpperCase().trim();
+  if (!GSTIN_RE.test(gstin)) {
+    return res.status(400).json({ valid: false, error: 'Invalid GSTIN format' });
+  }
+  const stCode = gstin.substring(0, 2);
+  const pan    = gstin.substring(2, 12);
+  const state  = STATE_CODES[stCode] || '';
+
+  const cfg = getSettingsFlat(getDb());
+  const apiKey = cfg.gst_api_key || '';
+
+  // No API key → return structural details only
+  if (!apiKey) {
+    return res.json({
+      valid: true, gstin, pan, st_code: stCode, state,
+      source: 'structural',
+      note: 'Set "gst_api_key" in settings to auto-fetch trade name/address.'
+    });
+  }
+
+  // With API key → attempt live lookup
+  try {
+    const url = `https://sheet.gstincheck.co.in/check/${apiKey}/${gstin}`;
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const body = await r.json();
+    if (body && body.flag && body.data) {
+      const d = body.data;
+      const addr = (d.pradr && d.pradr.addr) || {};
+      return res.json({
+        valid: true, gstin, pan, st_code: stCode,
+        name:     d.lgnm || d.tradeNam || '',
+        tradeName:d.tradeNam || d.lgnm || '',
+        address:  [addr.bno, addr.bnm, addr.st, addr.loc].filter(Boolean).join(', '),
+        place:    addr.dst || addr.loc || '',
+        pin:      addr.pncd || '',
+        state:    addr.stcd || state,
+        status:   d.sts || '',
+        regDate:  d.rgdt || '',
+        source:   'live'
+      });
+    }
+    return res.json({
+      valid: true, gstin, pan, st_code: stCode, state,
+      source: 'structural',
+      note: body && body.message ? body.message : 'GST portal returned no data'
+    });
+  } catch (e) {
+    return res.json({
+      valid: true, gstin, pan, st_code: stCode, state,
+      source: 'structural',
+      note: 'GST lookup failed: ' + e.message
+    });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════
 // TRADERS (NAM.DBF — sellers/poolers)
 // ══════════════════════════════════════════════════════════════
 app.get('/api/traders', requireAdmin, (req, res) => {
   const { search, limit } = req.query;
   const db = getDb();
   if (search) {
-    const rows = db.all('SELECT * FROM traders WHERE name LIKE ? ORDER BY name LIMIT ?', [`%${search}%`, parseInt(limit)||50]);
+    const q = `%${search}%`;
+    const rows = db.all(
+      `SELECT * FROM traders 
+       WHERE name LIKE ? OR tel LIKE ? OR cr LIKE ? OR pan LIKE ? OR ppla LIKE ? OR aadhar LIKE ?
+       ORDER BY name LIMIT ?`,
+      [q, q, q, q, q, q, parseInt(limit)||50]
+    );
     return res.json(rows);
   }
   res.json(db.all('SELECT * FROM traders ORDER BY name LIMIT 500'));
@@ -191,19 +455,40 @@ app.get('/api/traders/template', requireAdmin, async (req, res) => {
 app.get('/api/buyers', requireAdmin, (req, res) => {
   const { search } = req.query;
   const db = getDb();
-  if (search) return res.json(db.all('SELECT * FROM buyers WHERE buyer LIKE ? OR buyer1 LIKE ? ORDER BY buyer1 LIMIT 50', [`%${search}%`,`%${search}%`]));
+  if (search) {
+    const q = `%${search}%`;
+    return res.json(db.all(
+      `SELECT * FROM buyers 
+       WHERE buyer LIKE ? OR buyer1 LIKE ? OR tel LIKE ? OR gstin LIKE ? OR pan LIKE ? OR pla LIKE ? OR ti LIKE ? OR code LIKE ?
+       ORDER BY buyer1 LIMIT 50`,
+      [q, q, q, q, q, q, q, q]
+    ));
+  }
   res.json(db.all('SELECT * FROM buyers ORDER BY buyer1 LIMIT 500'));
 });
 app.post('/api/buyers', requireAdmin, (req, res) => {
   const b = req.body;
-  getDb().run(`INSERT INTO buyers (buyer,buyer1,add1,add2,pla,pin,state,st_code,gstin,pan,tel,ti,sale) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-    [b.buyer,b.buyer1||'',b.add1||'',b.add2||'',b.pla||'',b.pin||'',b.state||'',b.st_code||'',b.gstin||'',b.pan||'',b.tel||'',b.ti||'',b.sale||'L']);
+  getDb().run(`INSERT INTO buyers (
+      buyer, buyer1, code, sbl, add1, add2, pla, pin, state, st_code,
+      gstin, pan, tel, ti, sale, email, tdsq,
+      cbuyer1, cadd1, cadd2, cpla, cpin, cstate, cst_code, cgstin
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [b.buyer, b.buyer1||'', b.code||'', b.sbl||'', b.add1||'', b.add2||'', b.pla||'', b.pin||'', b.state||'', b.st_code||'',
+     b.gstin||'', b.pan||'', b.tel||'', b.ti||'', b.sale||'L', b.email||'', b.tdsq||'',
+     b.cbuyer1||'', b.cadd1||'', b.cadd2||'', b.cpla||'', b.cpin||'', b.cstate||'', b.cst_code||'', b.cgstin||'']);
   res.json({ success: true });
 });
 app.put('/api/buyers/:id', requireAdmin, (req, res) => {
   const b = req.body;
-  getDb().run(`UPDATE buyers SET buyer=?,buyer1=?,add1=?,add2=?,pla=?,pin=?,state=?,st_code=?,gstin=?,pan=?,tel=?,ti=?,sale=? WHERE id=?`,
-    [b.buyer,b.buyer1||'',b.add1||'',b.add2||'',b.pla||'',b.pin||'',b.state||'',b.st_code||'',b.gstin||'',b.pan||'',b.tel||'',b.ti||'',b.sale||'L',req.params.id]);
+  getDb().run(`UPDATE buyers SET
+      buyer=?, buyer1=?, code=?, sbl=?, add1=?, add2=?, pla=?, pin=?, state=?, st_code=?,
+      gstin=?, pan=?, tel=?, ti=?, sale=?, email=?, tdsq=?,
+      cbuyer1=?, cadd1=?, cadd2=?, cpla=?, cpin=?, cstate=?, cst_code=?, cgstin=?
+    WHERE id=?`,
+    [b.buyer, b.buyer1||'', b.code||'', b.sbl||'', b.add1||'', b.add2||'', b.pla||'', b.pin||'', b.state||'', b.st_code||'',
+     b.gstin||'', b.pan||'', b.tel||'', b.ti||'', b.sale||'L', b.email||'', b.tdsq||'',
+     b.cbuyer1||'', b.cadd1||'', b.cadd2||'', b.cpla||'', b.cpin||'', b.cstate||'', b.cst_code||'', b.cgstin||'',
+     req.params.id]);
   res.json({ success: true });
 });
 app.delete('/api/buyers/:id', requireAdmin, (req, res) => {
@@ -236,17 +521,30 @@ app.post('/api/buyers/import', requireAdmin, upload.single('file'), async (req, 
 
     let imported = 0, skipped = 0;
     for (const row of rows) {
-      const buyer = mapCol(row, 'BUYER', 'CODE', 'BUYER_CODE', 'BUYERCODE') || mapCol(row, 'BUYER1', 'TRADE_NAME', 'TRADENAME', 'NAME');
-      if (!buyer) { skipped++; continue; }
+      // BUYER = full buyer code (primary key in lot.buyer → matches invoice lookup)
+      // CODE  = short alias printed on tags (e.g. RSH, TE, SL) — used by post-auction price files
+      // The two may be the same value in some files, or different. Treat them as distinct columns.
+      const buyer = mapCol(row, 'BUYER', 'BUYER_CODE', 'BUYERCODE');
+      const code  = mapCol(row, 'CODE', 'SHORT_CODE', 'ALIAS');
+      if (!buyer && !code) { skipped++; continue; }
+      // If BUYER column missing, fall back to CODE, then trade name
+      const buyerVal = buyer || code || mapCol(row, 'BUYER1', 'TRADE_NAME', 'TRADENAME', 'NAME');
+      if (!buyerVal) { skipped++; continue; }
 
       if (mode === 'append') {
-        const existing = db.get('SELECT id FROM buyers WHERE buyer = ?', [buyer]);
+        const existing = db.get('SELECT id FROM buyers WHERE buyer = ?', [buyerVal]);
         if (existing) { skipped++; continue; }
       }
 
-      db.run(`INSERT INTO buyers (buyer,buyer1,add1,add2,pla,pin,state,st_code,gstin,pan,tel,ti,sale) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-        [buyer,
+      db.run(`INSERT INTO buyers (
+        buyer, buyer1, code, sbl, add1, add2, pla, pin, state, st_code,
+        gstin, pan, tel, ti, sale, email, tdsq,
+        cbuyer1, cadd1, cadd2, cpla, cpin, cstate, cst_code, cgstin
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        [buyerVal,
          mapCol(row, 'BUYER1', 'TRADE_NAME', 'TRADENAME', 'NAME'),
+         code,
+         mapCol(row, 'SBL', 'SBLNO'),
          mapCol(row, 'ADD1', 'ADDRESS1', 'ADDRESS'),
          mapCol(row, 'ADD2', 'ADDRESS2'),
          mapCol(row, 'PLA', 'PLACE', 'CITY'),
@@ -256,8 +554,19 @@ app.post('/api/buyers/import', requireAdmin, upload.single('file'), async (req, 
          mapCol(row, 'GSTIN', 'GST', 'GSTNO', 'GST_NO'),
          mapCol(row, 'PAN', 'PAN_NO'),
          mapCol(row, 'TEL', 'PHONE', 'MOBILE', 'CONTACT'),
-         mapCol(row, 'TI', 'SBL', 'SBLNO'),
-         mapCol(row, 'SALE', 'SALE_TYPE') || 'L']);
+         mapCol(row, 'TI'),
+         mapCol(row, 'SALE', 'SALE_TYPE') || 'L',
+         mapCol(row, 'EMAIL', 'E_MAIL', 'MAIL'),
+         mapCol(row, 'TDSQ', 'TDS_Q', 'TDS'),
+         // Consignee (ship-to) details
+         mapCol(row, 'CBUYER1', 'CONSIGNEE', 'CONSIGNEE_NAME'),
+         mapCol(row, 'CADD1', 'CONS_ADD1', 'CONSIGNEE_ADDRESS1'),
+         mapCol(row, 'CADD2', 'CONS_ADD2', 'CONSIGNEE_ADDRESS2'),
+         mapCol(row, 'CPLA', 'CONS_PLA', 'CONSIGNEE_PLACE'),
+         mapCol(row, 'CPIN', 'CONS_PIN', 'CONSIGNEE_PIN'),
+         mapCol(row, 'CSTATE', 'CONS_STATE'),
+         mapCol(row, 'CST_CODE', 'CONS_ST_CODE'),
+         mapCol(row, 'CGSTIN', 'CONS_GSTIN')]);
       imported++;
     }
 
@@ -289,17 +598,21 @@ app.get('/api/buyers/template', requireAdmin, async (req, res) => {
 // AUCTIONS
 // ══════════════════════════════════════════════════════════════
 app.get('/api/auctions', requireAdmin, (req, res) => {
-  res.json(getDb().all('SELECT *, (SELECT COUNT(*) FROM lots WHERE auction_id=auctions.id) as lot_count FROM auctions ORDER BY date DESC, ano DESC LIMIT 100'));
+  const rows = getDb().all('SELECT *, (SELECT COUNT(*) FROM lots WHERE auction_id=auctions.id) as lot_count FROM auctions ORDER BY date DESC, ano DESC LIMIT 100');
+  res.json(withFmtDate(rows));
 });
 app.post('/api/auctions', requireAdmin, (req, res) => {
   const { ano, date, crop_type, state } = req.body;
-  getDb().run('INSERT INTO auctions (ano,date,crop_type,state) VALUES (?,?,?,?)', [ano,date,crop_type||'ASP',state||'TAMIL NADU']);
-  res.json({ success: true });
+  const db = getDb();
+  const d = normalizeDate(date);
+  db.run('INSERT INTO auctions (ano,date,crop_type,state) VALUES (?,?,?,?)', [ano, d, crop_type||'ASP', state||'TAMIL NADU']);
+  const created = db.get('SELECT id FROM auctions WHERE ano = ? AND date = ? ORDER BY id DESC LIMIT 1', [ano, d]);
+  res.json({ success: true, id: created ? created.id : null });
 });
 app.put('/api/auctions/:id', requireAdmin, (req, res) => {
   const { ano, date, crop_type, state } = req.body;
   getDb().run('UPDATE auctions SET ano=?, date=?, crop_type=?, state=? WHERE id=?',
-    [ano, date, crop_type||'ASP', state||'TAMIL NADU', req.params.id]);
+    [ano, normalizeDate(date), crop_type||'ASP', state||'TAMIL NADU', req.params.id]);
   res.json({ success: true });
 });
 app.delete('/api/auctions/:id', requireAdmin, (req, res) => {
@@ -336,7 +649,7 @@ app.post('/api/auctions/import', requireAdmin, upload.single('file'), async (req
     // If user specified ano/date in the form → that OVERRIDES every row (single-auction import)
     // Otherwise → resolve auction per row from its own ANO/DATE columns (multi-auction import)
     const overrideAno = req.body.ano;
-    const overrideDate = req.body.date;
+    const overrideDate = normalizeDate(req.body.date);
     const cropType = req.body.crop_type || mapCol(rows[0], 'CRPT', 'CROP_TYPE', 'CROPTYPE') || 'ASP';
     const state = req.body.state || mapCol(rows[0], 'STATE') || 'TAMIL NADU';
 
@@ -357,7 +670,7 @@ app.post('/api/auctions/import', requireAdmin, upload.single('file'), async (req
 
     // Pre-validate: if no form override AND no ANO column anywhere, bail early with a clear message
     if (!overrideAno) {
-      const firstAno = rows.length ? mapCol(rows[0], 'ANO', 'TRADE', 'TRADE_NO', 'TRADENO') : '';
+      const firstAno = rows.length ? mapCol(rows[0], 'ANO', 'TNO', 'TRADE', 'TRADE_NO', 'TRADENO') : '';
       if (!firstAno) throw new Error('No ANO column found in file. Add ANO/TRADE/TRADE_NO column, or specify Trade No in the form to override.');
     }
 
@@ -379,8 +692,13 @@ app.post('/api/auctions/import', requireAdmin, upload.single('file'), async (req
         if (isBlankRow(row)) continue; // truly empty rows — don't count as skipped
         
         // Resolve this row's auction (form override OR read from row's ANO/DATE columns)
-        const rowAno = overrideAno || mapCol(row, 'ANO', 'TRADE', 'TRADE_NO', 'TRADENO');
-        const rowDate = overrideDate || mapCol(row, 'DATE', 'TRADE_DATE');
+        const rowAno = overrideAno || mapCol(row, 'ANO', 'TNO', 'TRADE', 'TRADE_NO', 'TRADENO');
+        // Read raw (un-stringified) DATE cell so Excel Date objects / serial numbers normalize correctly
+        const rawDate = row.DATE !== undefined ? row.DATE
+                      : row.date !== undefined ? row.date
+                      : row.TRADE_DATE !== undefined ? row.TRADE_DATE
+                      : '';
+        const rowDate = overrideDate || normalizeDate(rawDate);
         if (!rowAno) { skipped++; skipReasons.push({row: rowNum, lot: '', reason: 'Missing ANO/TRADE_NO for this row'}); continue; }
         const auc = resolveAuction(rowAno, rowDate);
         const auctionId = auc.id;
@@ -388,17 +706,67 @@ app.post('/api/auctions/import', requireAdmin, upload.single('file'), async (req
         const lotNo = mapCol(row, 'LOT', 'LOT_NO', 'LOTNO');
         if (!lotNo) { skipped++; skipReasons.push({row: rowNum, lot: '', reason: 'Missing LOT / LOT_NO column value'}); continue; }
         
+        // (price mode continues below in original code)
         const existing = db.get('SELECT id FROM lots WHERE auction_id = ? AND lot_no = ?', [auctionId, lotNo]);
         if (!existing) { skipped++; skipReasons.push({row: rowNum, lot: lotNo, reason: `Lot ${lotNo} does not exist in Trade ${rowAno} (price-update requires existing lot)`}); continue; }
 
         try {
-          db.run(`UPDATE lots SET price=?, amount=?, code=?, buyer=?, buyer1=?, sale=? WHERE id=?`,
-            [mapNum(row, 'PRICE'), mapNum(row, 'AMOUNT'),
-             mapCol(row, 'CODE', 'BUYER_CODE'),
-             mapCol(row, 'BUYER', 'BIDDER', 'BUYER_NAME'),
-             mapCol(row, 'BUYER1', 'TRADE_NAME', 'TRADENAME'),
-             mapCol(row, 'SALE', 'SALE_TYPE'),
-             existing.id]);
+          // Parse each field from the row using generous synonyms so different XLSX layouts work
+          const price = mapNum(row, 'PRICE');
+          const qty   = mapNum(row, 'QTY', 'QUANTITY', 'WEIGHT', 'WT');
+          const bag   = mapNum(row, 'BAG', 'BAGS', 'NO_OF_BAGS');
+          // If file didn't provide AMOUNT, compute qty × price (common in post-auction price sheets)
+          let amount  = mapNum(row, 'AMOUNT', 'AMT', 'VALUE', 'TOTAL');
+          if (!amount && qty && price) amount = qty * price;
+
+          // Build UPDATE dynamically — only touch fields the file provided, so a sparse "price-only"
+          // file doesn't wipe pre-existing bag/qty/buyer values
+          const sets = []; const vals = [];
+          if (row.PRICE !== undefined || row.price !== undefined) { sets.push('price=?');  vals.push(price); }
+          if (amount)                                              { sets.push('amount=?'); vals.push(amount); }
+          if (row.QTY !== undefined || row.qty !== undefined)      { sets.push('qty=?');    vals.push(qty); }
+          if (row.BAG !== undefined || row.bag !== undefined ||
+              row.BAGS !== undefined || row.bags !== undefined)    { sets.push('bags=?');   vals.push(bag); }
+          const codeVal  = mapCol(row, 'CODE', 'BUYER_CODE');
+          if (codeVal)                                             { sets.push('code=?');   vals.push(codeVal); }
+
+          // Auto-resolve short CODE (e.g. RSH, TE, SL) to the full buyer record.
+          // Priority: explicit BUYER/BIDDER column in file → matching buyers.code → matching buyers.ti → matching buyers.buyer
+          let resolvedBuyer  = mapCol(row, 'BUYER', 'BIDDER', 'BUYER_NAME');
+          let resolvedBuyer1 = mapCol(row, 'BUYER1', 'TRADE_NAME', 'TRADENAME');
+          let resolvedSale   = mapCol(row, 'SALE', 'SALE_TYPE');
+
+          if (codeVal && (!resolvedBuyer || !resolvedBuyer1)) {
+            // Look the code up in the buyers master (case-insensitive match on code, ti, or buyer)
+            const match = db.get(
+              `SELECT buyer, buyer1, sale FROM buyers
+               WHERE UPPER(TRIM(code))  = UPPER(TRIM(?))
+                  OR UPPER(TRIM(ti))    = UPPER(TRIM(?))
+                  OR UPPER(TRIM(buyer)) = UPPER(TRIM(?))
+               LIMIT 1`,
+              [codeVal, codeVal, codeVal]
+            );
+            if (match) {
+              if (!resolvedBuyer)  resolvedBuyer  = match.buyer  || '';
+              if (!resolvedBuyer1) resolvedBuyer1 = match.buyer1 || '';
+              if (!resolvedSale)   resolvedSale   = match.sale   || '';
+            } else {
+              // Not found — record a warning but DON'T fail the row (we still update price/qty/bag)
+              skipReasons.push({
+                row: rowNum, lot: lotNo,
+                reason: `Warning: CODE "${codeVal}" not found in Buyers master — price updated but buyer NOT assigned. Add this code to Buyers to enable invoicing.`
+              });
+            }
+          }
+
+          if (resolvedBuyer)  { sets.push('buyer=?');  vals.push(resolvedBuyer); }
+          if (resolvedBuyer1) { sets.push('buyer1=?'); vals.push(resolvedBuyer1); }
+          if (resolvedSale)   { sets.push('sale=?');   vals.push(resolvedSale); }
+
+          if (!sets.length) { skipped++; skipReasons.push({row: rowNum, lot: lotNo, reason: 'Row has no updatable fields (price/qty/bag/code/buyer/sale)'}); continue; }
+
+          vals.push(existing.id);
+          db.run(`UPDATE lots SET ${sets.join(', ')} WHERE id=?`, vals);
           updated++;
           const key = `${rowAno}|${rowDate}`;
           auctionStats.set(key, (auctionStats.get(key) || 0) + 1);
@@ -415,8 +783,13 @@ app.post('/api/auctions/import', requireAdmin, upload.single('file'), async (req
         if (isBlankRow(row)) continue;
         
         // Resolve this row's auction (form override OR read from row's ANO/DATE columns)
-        const rowAno = overrideAno || mapCol(row, 'ANO', 'TRADE', 'TRADE_NO', 'TRADENO');
-        const rowDate = overrideDate || mapCol(row, 'DATE', 'TRADE_DATE');
+        const rowAno = overrideAno || mapCol(row, 'ANO', 'TNO', 'TRADE', 'TRADE_NO', 'TRADENO');
+        // Read raw DATE cell (may be Date object or Excel serial number) and normalize
+        const rawDate = row.DATE !== undefined ? row.DATE
+                      : row.date !== undefined ? row.date
+                      : row.TRADE_DATE !== undefined ? row.TRADE_DATE
+                      : '';
+        const rowDate = overrideDate || normalizeDate(rawDate);
         if (!rowAno) { skipped++; skipReasons.push({row: rowNum, lot: '', reason: 'Missing ANO/TRADE_NO for this row'}); continue; }
         const auc = resolveAuction(rowAno, rowDate);
         const auctionId = auc.id;
@@ -595,8 +968,9 @@ app.get('/api/lots/validate/:auctionId', requireAdmin, (req, res) => {
 // INVOICES — Sales (GSTIN.PRG / KGSTIN.PRG)
 // ══════════════════════════════════════════════════════════════
 app.get('/api/invoices', requireAdmin, (req, res) => {
-  const { ano, from, to } = req.query;
+  const { ano, auction_id, from, to } = req.query;
   let q = 'SELECT * FROM invoices WHERE 1=1'; const p = [];
+  if (auction_id) { q += ' AND auction_id = ?'; p.push(parseInt(auction_id)); }
   if (ano) { q += ' AND ano = ?'; p.push(ano); }
   if (from && to) { q += ' AND date BETWEEN ? AND ?'; p.push(from, to); }
   q += ' ORDER BY date DESC, invo DESC LIMIT 500';
@@ -640,17 +1014,97 @@ app.post('/api/invoices/generate/:auctionId', requireAdmin, (req, res) => {
 
 // List eligible buyers for an auction (distinct buyers with lots in amount > 0)
 app.get('/api/invoices/eligible-buyers/:auctionId', requireAdmin, (req, res) => {
-  res.json(getDb().all(
+  const { saleType } = req.query;
+  const db = getDb();
+  const params = [req.params.auctionId];
+
+  // Match buyers by sale type via their default (b.sale) when a type is specified.
+  // A buyer is eligible when any of their lots in this auction isn't yet invoiced
+  // (so user can always see/regenerate; server endpoint has stricter filter).
+  let saleClause = '';
+  if (saleType) {
+    saleClause = ` AND (COALESCE(NULLIF(l.sale,''), b.sale, 'L') = ?)`;
+    params.push(saleType);
+  }
+
+  res.json(db.all(
     `SELECT l.buyer, COALESCE(b.buyer1, MAX(l.buyer1), l.buyer) as buyer1,
         COUNT(*) as lot_count, SUM(l.qty) as total_qty, SUM(l.amount) as total_amount,
         b.gstin, b.sale as default_sale
      FROM lots l
      LEFT JOIN buyers b ON b.buyer = l.buyer
-     WHERE l.auction_id = ? AND l.buyer IS NOT NULL AND l.buyer != '' AND l.amount > 0
+     WHERE l.auction_id = ?
+       AND l.buyer IS NOT NULL AND l.buyer != ''
+       ${saleClause}
      GROUP BY l.buyer
+     HAVING COUNT(CASE WHEN l.invo IS NULL OR l.invo = '' THEN 1 END) > 0
      ORDER BY l.buyer`,
-    [req.params.auctionId]
+    params
   ));
+});
+
+// ── Diagnostic: show EVERYTHING about buyers in an auction ──
+// Helps troubleshoot why eligible-buyers returns an unexpected count.
+app.get('/api/invoices/eligibility-debug/:auctionId', requireAdmin, (req, res) => {
+  const db = getDb();
+  const aid = req.params.auctionId;
+  const auction = db.get('SELECT * FROM auctions WHERE id = ?', [aid]);
+  if (!auction) return res.status(404).json({ error: 'Auction not found' });
+
+  // Every distinct value in lots.buyer (including blanks), with counts
+  const allBuyerGroups = db.all(
+    `SELECT
+       COALESCE(NULLIF(TRIM(l.buyer),''), '<BLANK>') as buyer_raw,
+       COUNT(*) as total_lots,
+       COUNT(CASE WHEN l.invo IS NULL OR l.invo = '' THEN 1 END) as uninvoiced_lots,
+       COUNT(CASE WHEN l.amount > 0 THEN 1 END) as priced_lots,
+       SUM(l.amount) as total_amount,
+       MAX(l.buyer1) as lot_buyer1,
+       (SELECT buyer1 FROM buyers WHERE buyer = l.buyer LIMIT 1) as master_buyer1,
+       (SELECT sale    FROM buyers WHERE buyer = l.buyer LIMIT 1) as master_sale,
+       (SELECT gstin   FROM buyers WHERE buyer = l.buyer LIMIT 1) as master_gstin,
+       (SELECT id      FROM buyers WHERE buyer = l.buyer LIMIT 1) as master_id
+     FROM lots l
+     WHERE l.auction_id = ?
+     GROUP BY TRIM(l.buyer)
+     ORDER BY total_lots DESC`,
+    [aid]
+  );
+
+  const total_lots      = db.get('SELECT COUNT(*) as c FROM lots WHERE auction_id = ?', [aid]).c;
+  const lots_no_buyer   = db.get(`SELECT COUNT(*) as c FROM lots WHERE auction_id = ? AND (buyer IS NULL OR TRIM(buyer) = '')`, [aid]).c;
+  const lots_invoiced   = db.get(`SELECT COUNT(*) as c FROM lots WHERE auction_id = ? AND invo IS NOT NULL AND invo != ''`, [aid]).c;
+  const distinct_buyers_in_lots = db.get(
+    `SELECT COUNT(*) as c FROM (
+       SELECT DISTINCT TRIM(buyer) as b FROM lots
+       WHERE auction_id = ? AND buyer IS NOT NULL AND TRIM(buyer) != ''
+     )`, [aid]).c;
+
+  res.json({
+    auction: { id: auction.id, ano: auction.ano, date: auction.date, crop_type: auction.crop_type },
+    totals: {
+      total_lots,
+      lots_with_blank_buyer: lots_no_buyer,
+      lots_already_invoiced: lots_invoiced,
+      distinct_buyer_codes_in_lots: distinct_buyers_in_lots,
+      buyers_table_total: db.get('SELECT COUNT(*) as c FROM buyers').c,
+    },
+    breakdown: allBuyerGroups.map(r => ({
+      buyer_code: r.buyer_raw,
+      master_match: r.master_id ? 'yes' : 'NO — not in buyers table',
+      master_buyer1: r.master_buyer1 || null,
+      lot_buyer1:    r.lot_buyer1 || null,
+      master_sale:   r.master_sale || null,
+      total_lots:      r.total_lots,
+      uninvoiced_lots: r.uninvoiced_lots,
+      priced_lots:     r.priced_lots,
+      total_amount:    r.total_amount,
+      eligible: r.buyer_raw !== '<BLANK>' && r.uninvoiced_lots > 0 ? 'yes' : 'NO',
+      eligibility_reason: r.buyer_raw === '<BLANK>' ? 'buyer code is blank'
+        : r.uninvoiced_lots === 0 ? 'all lots already invoiced'
+        : 'eligible'
+    }))
+  });
 });
 
 // Batch: generate sales invoice for ALL buyers in an auction
@@ -669,16 +1123,24 @@ app.post('/api/invoices/generate-all/:auctionId', requireAdmin, (req, res) => {
       [c.pqty,c.prate,c.puramt,c.com,c.sertax,c.cgst,c.sgst,c.igst,c.advance,c.balance,c.bilamt,c.refud||0,lot.id]);
   }
   
-  // Get distinct buyers
+  // Get distinct buyers. When saleType filter is set, only buyers whose
+  // default sale matches (or whose lots already have that sale assigned) are included.
+  const params = [req.params.auctionId];
+  let saleClause = '';
+  if (saleType) {
+    saleClause = ` AND (COALESCE(NULLIF(l.sale,''), b.sale, 'L') = ?)`;
+    params.push(saleType);
+  }
   const buyers = db.all(
     `SELECT DISTINCT l.buyer, b.sale as default_sale
      FROM lots l LEFT JOIN buyers b ON b.buyer = l.buyer
      WHERE l.auction_id = ? AND l.buyer IS NOT NULL AND l.buyer != '' AND l.amount > 0
-       AND (l.invo IS NULL OR l.invo = '')`,
-    [req.params.auctionId]
+       AND (l.invo IS NULL OR l.invo = '')
+       ${saleClause}`,
+    params
   );
   
-  if (!buyers.length) return res.status(404).json({ error: 'No un-invoiced buyers with lots in this auction' });
+  if (!buyers.length) return res.status(404).json({ error: saleType ? `No un-invoiced buyers for sale type ${saleType}` : 'No un-invoiced buyers with lots in this auction' });
   
   const auction = db.get('SELECT * FROM auctions WHERE id = ?', [req.params.auctionId]);
   const results = [];
@@ -726,14 +1188,70 @@ app.put('/api/invoices/:id', requireAdmin, (req, res) => {
 // Delete invoice
 app.delete('/api/invoices/:id', requireAdmin, (req, res) => {
   const db = getDb();
-  // Also clear sale/invo from the related lots
   const inv = db.get('SELECT * FROM invoices WHERE id=?', [req.params.id]);
-  if (inv && inv.auction_id) {
-    db.run(`UPDATE lots SET sale='', invo='' WHERE auction_id=? AND sale=? AND invo=?`,
-      [inv.auction_id, inv.sale, inv.invo]);
+  if (!inv) return res.status(404).json({ error: 'Invoice not found' });
+  // Clear sale/invo from the related lots so they're eligible again
+  let lotsFreed = 0;
+  if (inv.auction_id) {
+    const before = db.get('SELECT COUNT(*) as c FROM lots WHERE auction_id=? AND sale=? AND invo=? AND buyer=?',
+      [inv.auction_id, inv.sale, inv.invo, inv.buyer]).c;
+    db.run(`UPDATE lots SET sale='', invo='' WHERE auction_id=? AND sale=? AND invo=? AND buyer=?`,
+      [inv.auction_id, inv.sale, inv.invo, inv.buyer]);
+    lotsFreed = before;
   }
   db.run('DELETE FROM invoices WHERE id=?', [req.params.id]);
-  res.json({ success: true });
+  res.json({ success: true, invoiceId: Number(req.params.id), lotsFreed });
+});
+
+// Explicit revert route (same effect as DELETE but returns richer info)
+app.post('/api/invoices/:id/revert', requireAdmin, (req, res) => {
+  const db = getDb();
+  const inv = db.get('SELECT * FROM invoices WHERE id=?', [req.params.id]);
+  if (!inv) return res.status(404).json({ error: 'Invoice not found' });
+  let lotsFreed = 0;
+  if (inv.auction_id) {
+    const affected = db.all(
+      'SELECT lot_no FROM lots WHERE auction_id=? AND sale=? AND invo=? AND buyer=?',
+      [inv.auction_id, inv.sale, inv.invo, inv.buyer]
+    );
+    lotsFreed = affected.length;
+    db.run(`UPDATE lots SET sale='', invo='' WHERE auction_id=? AND sale=? AND invo=? AND buyer=?`,
+      [inv.auction_id, inv.sale, inv.invo, inv.buyer]);
+    db.run('DELETE FROM invoices WHERE id=?', [req.params.id]);
+    return res.json({
+      success: true,
+      invoice: { sale: inv.sale, invo: inv.invo, buyer: inv.buyer, buyer1: inv.buyer1 },
+      lotsFreed,
+      lots: affected.map(r => r.lot_no),
+    });
+  }
+  db.run('DELETE FROM invoices WHERE id=?', [req.params.id]);
+  res.json({ success: true, lotsFreed: 0 });
+});
+
+// Bulk revert: revert ALL invoices in an auction
+app.post('/api/invoices/revert-all/:auctionId', requireAdmin, (req, res) => {
+  const db = getDb();
+  const aid = req.params.auctionId;
+  const invoices = db.all('SELECT * FROM invoices WHERE auction_id = ?', [aid]);
+  let lotsFreed = 0;
+  for (const inv of invoices) {
+    const n = db.get('SELECT COUNT(*) as c FROM lots WHERE auction_id=? AND sale=? AND invo=? AND buyer=?',
+      [inv.auction_id, inv.sale, inv.invo, inv.buyer]).c;
+    lotsFreed += n;
+    db.run(`UPDATE lots SET sale='', invo='' WHERE auction_id=? AND sale=? AND invo=? AND buyer=?`,
+      [inv.auction_id, inv.sale, inv.invo, inv.buyer]);
+  }
+  db.run('DELETE FROM invoices WHERE auction_id = ?', [aid]);
+  // Safety net: clear any orphan invo values from lots in this auction
+  const orphan = db.get(
+    `SELECT COUNT(*) as c FROM lots WHERE auction_id = ? AND invo IS NOT NULL AND invo != ''`, [aid]
+  ).c;
+  if (orphan) {
+    db.run(`UPDATE lots SET sale='', invo='' WHERE auction_id = ?`, [aid]);
+    lotsFreed += orphan;
+  }
+  res.json({ success: true, invoicesReverted: invoices.length, lotsFreed });
 });
 
 // Sales Invoice PDF
@@ -749,11 +1267,32 @@ app.get('/api/invoices/pdf/:id', requireAdmin, async (req, res) => {
       ? buildSalesInvoice(db, stored.auction_id, stored.buyer, stored.sale, cfg)
       : null;
 
-    if (!invoice) {
+    // Defensive: even when lots exist, if buyer lookup missed, enrich from stored invoice fields
+    // so BILL TO / SHIPPED TO isn't blank.
+    const enrichBuyer = (buyer) => {
+      if (!buyer) buyer = {};
+      // If buyer has no recognizable display field, try several fallbacks
+      if (!buyer.buyer1 && !buyer.buyer) {
+        const looked = db.get('SELECT * FROM buyers WHERE buyer=? OR buyer1=? LIMIT 1',
+          [stored.buyer, stored.buyer1 || stored.tradername || '']);
+        if (looked) buyer = looked;
+      }
+      // Last-resort fill from stored invoice row
+      if (!buyer.buyer1 && stored.buyer1)   buyer.buyer1   = stored.buyer1;
+      if (!buyer.buyer1 && stored.tradername) buyer.buyer1 = stored.tradername;
+      if (!buyer.buyer  && stored.buyer)    buyer.buyer    = stored.buyer;
+      if (!buyer.gstin  && stored.gstin)    buyer.gstin    = stored.gstin;
+      if (!buyer.pla    && stored.place)    buyer.pla      = stored.place;
+      if (!buyer.state  && stored.state)    buyer.state    = stored.state;
+      if (!buyer.add1   && stored.add_line) buyer.add1     = stored.add_line;
+      return buyer;
+    };
+
+    if (invoice) {
+      invoice.buyer = enrichBuyer(invoice.buyer);
+    } else {
       // Build a minimal invoice object from stored fields (lots may have been deleted)
-      const buyer = db.get('SELECT * FROM buyers WHERE buyer=? LIMIT 1', [stored.buyer]) || {
-        buyer: stored.buyer, buyer1: stored.buyer1, gstin: stored.gstin, pla: stored.place
-      };
+      const buyer = enrichBuyer(db.get('SELECT * FROM buyers WHERE buyer=? LIMIT 1', [stored.buyer]));
       invoice = {
         buyer,
         lineItems: [{ lot: '—', grade: '', bags: stored.bag || 0, qty: stored.qty || 0, price: 0, amount: stored.amount || 0 }],
@@ -770,6 +1309,7 @@ app.get('/api/invoices/pdf/:id', requireAdmin, async (req, res) => {
           tcs: stored.tcs || 0,
           roundDiff: stored.rund || 0,
           grandTotal: stored.tot || 0,
+          isInterState: stored.sale === 'I',
         }
       };
     }
@@ -788,8 +1328,10 @@ app.get('/api/invoices/pdf/:id', requireAdmin, async (req, res) => {
 // PURCHASES (GSTKBILT.PRG — registered dealer invoices)
 // ══════════════════════════════════════════════════════════════
 app.get('/api/purchases', requireAdmin, (req, res) => {
-  const { from, to } = req.query;
+  const { auction_id, ano, from, to } = req.query;
   let q = 'SELECT * FROM purchases WHERE 1=1'; const p = [];
+  if (auction_id) { q += ' AND auction_id = ?'; p.push(parseInt(auction_id)); }
+  if (ano) { q += ' AND ano = ?'; p.push(ano); }
   if (from && to) { q += ' AND date BETWEEN ? AND ?'; p.push(from, to); }
   q += ' ORDER BY date DESC LIMIT 500';
   res.json(getDb().all(q, p));
@@ -950,12 +1492,13 @@ app.get('/api/purchases/pdf/:auctionId/:sellerName', requireAdmin, async (req, r
 // BILLS — Agriculturist Bills of Supply (GSTKBILP/GSTBILP)
 // ══════════════════════════════════════════════════════════════
 app.get('/api/bills', requireAdmin, (req, res) => {
-  const { ano, from, to } = req.query;
+  const { auction_id, ano, from, to } = req.query;
   let q = 'SELECT * FROM bills WHERE 1=1'; const p = [];
+  if (auction_id) { q += ' AND auction_id = ?'; p.push(parseInt(auction_id)); }
   if (ano) { q += ' AND ano = ?'; p.push(ano); }
   if (from && to) { q += ' AND date BETWEEN ? AND ?'; p.push(from, to); }
   q += ' ORDER BY date DESC, bil DESC LIMIT 500';
-  res.json(getDb().all(q, p));
+  res.json(withFmtDate(getDb().all(q, p)));
 });
 
 // Generate agri bill for a seller
@@ -1091,11 +1634,13 @@ app.put('/api/bills/:id', requireAdmin, (req, res) => {
 // DEBIT NOTES (for discounts/adjustments)
 // ══════════════════════════════════════════════════════════════
 app.get('/api/debit-notes', requireAdmin, (req, res) => {
-  const { from, to } = req.query;
+  const { auction_id, ano, from, to } = req.query;
   let q = 'SELECT * FROM debit_notes WHERE 1=1'; const p = [];
+  if (auction_id) { q += ' AND auction_id = ?'; p.push(parseInt(auction_id)); }
+  if (ano) { q += ' AND ano = ?'; p.push(ano); }
   if (from && to) { q += ' AND date BETWEEN ? AND ?'; p.push(from, to); }
   q += ' ORDER BY date DESC, note_no DESC LIMIT 500';
-  res.json(getDb().all(q, p));
+  res.json(withFmtDate(getDb().all(q, p)));
 });
 
 app.post('/api/debit-notes/generate', requireAdmin, (req, res) => {
@@ -1152,7 +1697,7 @@ app.get('/api/journals/purchase', requireAdmin, (req, res) => {
   res.json(getPurchaseJournal(getDb(), from, to, type || 'dealer'));
 });
 
-// Journal exports
+// Journal exports (XLSX only)
 app.get('/api/exports/sales-journal', requireAdmin, async (req, res) => {
   const { from, to, saleType } = req.query;
   if (!from || !to) return res.status(400).json({ error: 'from/to required' });
@@ -1166,11 +1711,11 @@ app.get('/api/exports/sales-journal', requireAdmin, async (req, res) => {
 app.get('/api/exports/purchase-journal', requireAdmin, async (req, res) => {
   const { from, to, type } = req.query;
   if (!from || !to) return res.status(400).json({ error: 'from/to required' });
+  const baseName = type === 'agri' ? 'AgriBillJournal' : 'PurchaseJournal';
   const { exportPurchaseJournal } = require('./exports');
   const buffer = await exportPurchaseJournal(getDb(), from, to, type || 'dealer');
-  const name = (type === 'agri' ? 'AgriBillJournal' : 'PurchaseJournal') + '.xlsx';
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  res.setHeader('Content-Disposition', `attachment; filename="${name}"`);
+  res.setHeader('Content-Disposition', `attachment; filename="${baseName}.xlsx"`);
   res.send(Buffer.from(buffer));
 });
 
@@ -1233,9 +1778,25 @@ app.get('/api/tds-return', requireAdmin, (req, res) => {
 // ══════════════════════════════════════════════════════════════
 app.get('/api/exports/:type/:auctionId', requireAdmin, async (req, res) => {
   const { type, auctionId } = req.params;
+  const format = (req.query.format || 'xlsx').toLowerCase();
+
+  if (format === 'pdf') {
+    try {
+      const db = getDb();
+      const cfg = getSettingsFlat(db);
+      const buffer = await exportAnyPdf(db, type, auctionId, cfg, { state: req.query.state });
+      const niceName = (EXPORT_TYPES[type] && EXPORT_TYPES[type].name) || type;
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${niceName}_${auctionId}.pdf"`);
+      return res.send(buffer);
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
   const exportDef = EXPORT_TYPES[type];
   if (!exportDef) return res.status(400).json({ error: 'Unknown export type', available: Object.keys(EXPORT_TYPES) });
-  
+
   try {
     const db = getDb();
     let buffer;
@@ -1253,10 +1814,17 @@ app.get('/api/exports/:type/:auctionId', requireAdmin, async (req, res) => {
   }
 });
 
-// TDS export
+// TDS export (supports ?format=pdf)
 app.get('/api/exports/tds-return', requireAdmin, async (req, res) => {
   const { from, to } = req.query;
+  const format = (req.query.format || 'xlsx').toLowerCase();
   if (!from || !to) return res.status(400).json({ error: 'from/to required' });
+  if (format === 'pdf') {
+    const buffer = await exportAnyPdf(getDb(), 'tds_return', null, null, { from, to });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename="TDSReturn.pdf"');
+    return res.send(buffer);
+  }
   const { exportTDSReturn } = require('./exports');
   const buffer = await exportTDSReturn(getDb(), from, to);
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -1337,25 +1905,140 @@ app.get('/api/receipt/:lotId', requireAdmin, async (req, res) => {
 // ══════════════════════════════════════════════════════════════
 app.get('/api/stats', requireAdmin, (req, res) => {
   const db = getDb();
+
+  // Counts
+  const counts = {
+    traders:    (db.get('SELECT COUNT(*) as c FROM traders') || {}).c || 0,
+    buyers:     (db.get('SELECT COUNT(*) as c FROM buyers') || {}).c || 0,
+    auctions:   (db.get('SELECT COUNT(*) as c FROM auctions') || {}).c || 0,
+    lots:       (db.get('SELECT COUNT(*) as c FROM lots') || {}).c || 0,
+    invoices:   (db.get('SELECT COUNT(*) as c FROM invoices') || {}).c || 0,
+    purchases:  (db.get('SELECT COUNT(*) as c FROM purchases') || {}).c || 0,
+    bills:      (db.get('SELECT COUNT(*) as c FROM bills') || {}).c || 0,
+    debit_notes:(db.get('SELECT COUNT(*) as c FROM debit_notes') || {}).c || 0,
+  };
+
+  // All auctions (for the dashboard picker)
+  const allAuctions = db.all(
+    `SELECT id, ano, date, crop_type FROM auctions ORDER BY id DESC LIMIT 50`
+  );
+
+  // Pick: ?auction_id=N if provided, else most recent
+  let currentAuction = null;
+  const requestedId = parseInt(req.query.auction_id);
+  if (requestedId) {
+    currentAuction = db.get('SELECT * FROM auctions WHERE id = ?', [requestedId]);
+  }
+  if (!currentAuction) {
+    currentAuction = db.get('SELECT * FROM auctions ORDER BY id DESC LIMIT 1');
+  }
+
+  let auctionStats = null;
+  if (currentAuction) {
+    const totalLots  = (db.get('SELECT COUNT(*) as c FROM lots WHERE auction_id = ?', [currentAuction.id]) || {}).c || 0;
+    const priced     = (db.get('SELECT COUNT(*) as c FROM lots WHERE auction_id = ? AND amount > 0', [currentAuction.id]) || {}).c || 0;
+    const invoiced   = (db.get(`SELECT COUNT(*) as c FROM lots WHERE auction_id = ? AND invo IS NOT NULL AND invo != ''`, [currentAuction.id]) || {}).c || 0;
+    const totalQty   = (db.get('SELECT COALESCE(SUM(qty),0) as s FROM lots WHERE auction_id = ?', [currentAuction.id]) || {}).s || 0;
+    const totalAmt   = (db.get('SELECT COALESCE(SUM(amount),0) as s FROM lots WHERE auction_id = ?', [currentAuction.id]) || {}).s || 0;
+    auctionStats = { ...currentAuction, totalLots, priced, invoiced, totalQty, totalAmt };
+  }
+
+  // Top sellers (this week — by total amount in auctions dated within last 7 days)
+  const topSellers = db.all(
+    `SELECT l.name as name, COUNT(*) as lots, COALESCE(SUM(l.qty),0) as qty, COALESCE(SUM(l.amount),0) as amount
+     FROM lots l JOIN auctions a ON a.id = l.auction_id
+     WHERE a.date >= date('now','-7 days') AND l.name IS NOT NULL AND l.name != ''
+     GROUP BY l.name
+     ORDER BY amount DESC
+     LIMIT 5`
+  );
+
+  // Recent invoices (last 5)
+  const recentInvoices = db.all(
+    `SELECT i.id, i.sale, i.invo, i.buyer, i.buyer1, i.tot, i.date,
+            i.place
+     FROM invoices i
+     ORDER BY i.id DESC LIMIT 5`
+  );
+
+  // Today's trade totals (active auction lots)
+  const todayQty = auctionStats ? auctionStats.totalQty : 0;
+  const todayAmt = auctionStats ? auctionStats.totalAmt : 0;
+
+  // Revenue this month (sum of invoice totals in current month)
+  const monthTot = (db.get(
+    `SELECT COALESCE(SUM(tot),0) as s FROM invoices
+     WHERE date >= date('now','start of month')`
+  ) || {}).s || 0;
+  // Revenue last month (for comparison)
+  const lastMonthTot = (db.get(
+    `SELECT COALESCE(SUM(tot),0) as s FROM invoices
+     WHERE date >= date('now','start of month','-1 month')
+       AND date <  date('now','start of month')`
+  ) || {}).s || 0;
+
+  // Pending invoices = un-invoiced priced lots in current auction
+  let pendingInvoices = 0;
+  if (currentAuction) {
+    pendingInvoices = (db.get(
+      `SELECT COUNT(DISTINCT buyer) as c FROM lots
+       WHERE auction_id = ? AND amount > 0 AND buyer IS NOT NULL AND buyer != ''
+         AND (invo IS NULL OR invo = '')`, [currentAuction.id]
+    ) || {}).c || 0;
+  }
+
   res.json({
-    traders: (db.get('SELECT COUNT(*) as c FROM traders') || {}).c || 0,
-    buyers: (db.get('SELECT COUNT(*) as c FROM buyers') || {}).c || 0,
-    auctions: (db.get('SELECT COUNT(*) as c FROM auctions') || {}).c || 0,
-    lots: (db.get('SELECT COUNT(*) as c FROM lots') || {}).c || 0,
-    invoices: (db.get('SELECT COUNT(*) as c FROM invoices') || {}).c || 0,
-    purchases: (db.get('SELECT COUNT(*) as c FROM purchases') || {}).c || 0,
-    bills: (db.get('SELECT COUNT(*) as c FROM bills') || {}).c || 0,
-    debit_notes: (db.get('SELECT COUNT(*) as c FROM debit_notes') || {}).c || 0,
+    counts,
+    currentAuction: auctionStats,
+    allAuctions,
+    topSellers,
+    recentInvoices,
+    kpi: {
+      todayQty, todayAmt,
+      activeLots: auctionStats ? auctionStats.totalLots : 0,
+      pendingInvoices,
+      monthRevenue: monthTot,
+      lastMonthRevenue: lastMonthTot,
+    }
   });
 });
 
 // ══════════════════════════════════════════════════════════════
 // START
 // ══════════════════════════════════════════════════════════════
+function repairBadDates(db) {
+  // Fix rows where date is an Excel serial number stored as string, or Date-object-toString garbage
+  const tables = ['auctions', 'bills', 'debit_notes', 'invoices', 'purchases', 'lots'];
+  let totalFixed = 0;
+  for (const tbl of tables) {
+    try {
+      // Only tables that have a `date` column
+      const hasDate = db.all(`PRAGMA table_info(${tbl})`).some(c => c.name === 'date');
+      if (!hasDate) continue;
+      const rows = db.all(`SELECT rowid, date FROM ${tbl} WHERE date IS NOT NULL AND date != ''`);
+      let fixed = 0;
+      for (const r of rows) {
+        const current = String(r.date);
+        // Skip if already ISO yyyy-mm-dd
+        if (/^\d{4}-\d{2}-\d{2}$/.test(current)) continue;
+        const iso = normalizeDate(r.date);
+        if (iso && /^\d{4}-\d{2}-\d{2}$/.test(iso) && iso !== current) {
+          db.run(`UPDATE ${tbl} SET date = ? WHERE rowid = ?`, [iso, r.rowid]);
+          fixed++;
+        }
+      }
+      if (fixed > 0) console.log(`  Date repair: ${tbl} — fixed ${fixed} row(s)`);
+      totalFixed += fixed;
+    } catch (_) { /* table may not exist yet */ }
+  }
+  if (totalFixed > 0) console.log(`  Date repair: ${totalFixed} total row(s) normalized to yyyy-mm-dd`);
+}
+
 const PORT = process.env.PORT || 3001;
 (async () => {
   const db = await initDb();
   initCompanySettings(db);
+  repairBadDates(db);
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`\n  Spice Config running at http://localhost:${PORT}\n`);
   });

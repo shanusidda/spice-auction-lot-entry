@@ -135,6 +135,9 @@ const DEFAULTS = [
   // ── BUSINESS MODE ──────────────────────────────────────────
   { key: 'business_mode',   value: 'e-Trade',        category: 'mode',      label: 'Business Mode',            type: 'select' },
   { key: 'business_state',  value: 'TAMIL NADU',     category: 'mode',      label: 'Business State',           type: 'select' },
+
+  // ── INTEGRATIONS ───────────────────────────────────────────
+  { key: 'gst_api_key',     value: '',               category: 'integrations', label: 'GST Lookup API Key (gstincheck.co.in)', type: 'text' },
 ];
 
 const CATEGORIES = {
@@ -150,6 +153,7 @@ const CATEGORIES = {
   season:     { order: 9, title: 'Season / Financial Year', icon: '📅' },
   invoice:    { order: 10, title: 'Invoice Settings',     icon: '📄' },
   flags:      { order: 11, title: 'Feature Flags',        icon: '🔧' },
+  integrations: { order: 12, title: 'Integrations',       icon: '🔌', description: 'Optional third-party services. The GST API key enables auto-fetching trade name and address when you enter a GSTIN. Get a free key at gstincheck.co.in — sign up, copy the key from your dashboard, paste here.' },
 };
 
 function initCompanySettings(db) {

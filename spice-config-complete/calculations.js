@@ -130,7 +130,7 @@ function buildSalesInvoice(db, auctionId, buyerCode, saleType, cfg) {
     totalBags += lot.bags;
     totalAmount += lot.amount;
     lineItems.push({
-      lot: lot.lot_no, bags: lot.bags, qty: lot.qty,
+      lot: lot.lot_no, grade: lot.grade, bags: lot.bags, qty: lot.qty,
       price: lot.price, amount: lot.amount
     });
   }
@@ -185,7 +185,7 @@ function buildPurchaseInvoice(db, auctionId, sellerName, cfg) {
   const gstGoods = cfg.gst_goods || 5;
   const companyState = cfg.business_state === 'KERALA' ? '32' : '33';
 
-  let totalQty = 0, totalPuramt = 0;
+  let totalQty = 0, totalPuramt = 0, totalBags = 0;
   const lineItems = [];
 
   for (const lot of lots) {
@@ -199,9 +199,11 @@ function buildPurchaseInvoice(db, auctionId, sellerName, cfg) {
 
     totalQty += lot.pqty || lot.qty;
     totalPuramt += puramt;
+    totalBags += lot.bags || 0;
 
     lineItems.push({
-      lot: lot.lot_no, qty: lot.qty, pqty: lot.pqty,
+      lot: lot.lot_no, bags: lot.bags, grade: lot.grade,
+      qty: lot.qty, pqty: lot.pqty,
       price: lot.price, prate: lot.prate,
       amount: lot.amount, puramt, 
       com: lot.com, sertax: lot.sertax,
@@ -235,7 +237,7 @@ function buildPurchaseInvoice(db, auctionId, sellerName, cfg) {
               cr: firstLot.cr, pan: firstLot.pan, state: firstLot.pstate },
     lineItems,
     summary: {
-      totalQty, totalPuramt, totalCgst, totalSgst, totalIgst,
+      totalQty, totalBags, totalPuramt, totalCgst, totalSgst, totalIgst,
       roundDiff, grandTotal, tdsAmount, invoiceAmount, isInter
     }
   };
