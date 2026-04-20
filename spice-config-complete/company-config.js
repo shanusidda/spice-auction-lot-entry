@@ -66,7 +66,7 @@ const DEFAULTS = [
 
   // ── RATES ──────────────────────────────────────────────────
   { key: 'commission',      value: '1',              category: 'rates',     label: 'Commission %',             type: 'number' },
-  { key: 'hpc',             value: '0',              category: 'rates',     label: 'Handling/Processing %',    type: 'number' },
+  { key: 'hpc',             value: '10',             category: 'rates',     label: 'Handling %',               type: 'number' },
   { key: 'deduction1',      value: '1.25',           category: 'rates',     label: 'Deduction (Pooler)',       type: 'number' },
   { key: 'deduction2',      value: '1.25',           category: 'rates',     label: 'Deduction (Dealer)',       type: 'number' },
   { key: 'asp_profit',      value: '0.75',           category: 'rates',     label: 'ASP Profit Ratio',         type: 'number' },
@@ -81,7 +81,8 @@ const DEFAULTS = [
   { key: 'insurance',       value: '0.75',           category: 'rates',     label: 'Insurance (₹/kg)',         type: 'number' },
   { key: 'local_transport', value: '2.5',            category: 'rates',     label: 'Local Transport (₹/kg)',   type: 'number' },
   { key: 'local_insurance', value: '0.75',           category: 'rates',     label: 'Local Insurance (₹/kg)',   type: 'number' },
-  { key: 'discount_pct',    value: '26',             category: 'rates',     label: 'Discount %',               type: 'number' },
+  { key: 'discount_pct',    value: '0',              category: 'rates',     label: 'Discount %',               type: 'number' },
+  { key: 'discount_days',   value: '0',              category: 'rates',     label: 'No. of Days for Discount', type: 'number' },
 
   // ── HSN / SAC CODES ────────────────────────────────────────
   { key: 'hsn_cardamom',    value: '09083120',       category: 'hsn',       label: 'Cardamom HSN',             type: 'text' },
@@ -106,7 +107,12 @@ const DEFAULTS = [
 
   // ── INVOICE SETTINGS ───────────────────────────────────────
   { key: 'inv_prefix',      value: 'ISP',            category: 'invoice',   label: 'Invoice Prefix',           type: 'text' },
+  { key: 'inv_prefix_sister', value: 'ASP',          category: 'invoice',   label: 'Sister Invoice Prefix (Other Ref.)', type: 'text' },
   { key: 'separator',       value: '-',              category: 'invoice',   label: 'Separator Symbol',         type: 'text' },
+  { key: 'hsn_cardamom',    value: '09083120',       category: 'invoice',   label: 'HSN/SAC — Cardamom',       type: 'text' },
+  { key: 'hsn_gunny',       value: '63051040',       category: 'invoice',   label: 'HSN/SAC — Gunny',          type: 'text' },
+  { key: 'dispatched_through', value: 'JEEP',        category: 'invoice',   label: 'Dispatched Through',       type: 'text' },
+  { key: 'dispatch_destination', value: 'NEDUMKANDAM', category: 'invoice', label: 'Dispatch Destination',     type: 'text' },
   { key: 'duplicate_text',  value: 'DUMMY INVOICE',  category: 'invoice',   label: 'Dummy Invoice Text',       type: 'text' },
   { key: 'commission_bill', value: 'COMMISSION BILL', category: 'invoice',  label: 'Commission Bill Name',     type: 'text' },
   { key: 'memorandum_text', value: 'MEMORANDAM OF CARDAMOM SOLD THROUGH', category: 'invoice', label: 'Memorandum Text', type: 'text' },
@@ -127,6 +133,7 @@ const DEFAULTS = [
   { key: 'flag_wgst',       value: 'false',          category: 'flags',     label: 'TDS on Full Invoice Amount', type: 'boolean' },
   { key: 'flag_disc_gst',   value: 'false',          category: 'flags',     label: 'Discount includes GST',    type: 'boolean' },
   { key: 'flag_debit_note', value: 'false',          category: 'flags',     label: 'Debit Note for Discount',  type: 'boolean' },
+  { key: 'flag_invoice_stripe', value: 'true',       category: 'flags',     label: 'Alternate Row Stripe in Invoice', type: 'boolean' },
   { key: 'flag_dummy',      value: 'true',           category: 'flags',     label: 'Allow Dummy Invoices',     type: 'boolean' },
   { key: 'flag_round',      value: 'true',           category: 'flags',     label: 'Round Invoice Amounts',    type: 'boolean' },
   { key: 'flag_eway',       value: 'false',          category: 'flags',     label: 'ASP eWay Bill / Transport', type: 'boolean' },

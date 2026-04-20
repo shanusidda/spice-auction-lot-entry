@@ -8,30 +8,29 @@
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
-  /* ── SPICE THEME ─────────────────────────────────────────
-     Warm saffron / cardamom / turmeric palette. Big buttons,
-     generous whitespace, designed for older users & touch. */
-  --spice-saffron: #E87722;
-  --spice-saffron-lt: #FFF1E6;
-  --spice-saffron-md: #FFD4AA;
-  --spice-saffron-dk: #D66A15;
-  --spice-turmeric: #D4A017;
-  --spice-turmeric-lt: #FFF7D6;
-  --spice-cardamom: #2F7A4D;
-  --spice-cardamom-lt: #E3F4E9;
-  --spice-cardamom-dk: #1D5E3A;
-  --spice-pepper: #1F1915;
-  --spice-clove: #6B3410;
-  --spice-chili: #C1272D;
-  --spice-chili-lt: #FCE6E7;
-  --spice-cumin: #8B5A2B;
-  --spice-cream: #FAF5EC;
+  /* ═══ DEFAULT (Emerald) — overridden by body[data-theme] rules below ═══ */
+  --spice-saffron: #10B981;
+  --spice-saffron-lt: #ECFDF5;
+  --spice-saffron-md: #6EE7B7;
+  --spice-saffron-dk: #047857;
+  --spice-turmeric: #F59E0B;
+  --spice-turmeric-lt: #FEF3C7;
+  --spice-cardamom: #166534;
+  --spice-cardamom-lt: #DCFCE7;
+  --spice-cardamom-dk: #14532D;
+  --spice-pepper: var(--spice-text-main);
+  --spice-clove: #047857;
+  --spice-chili: #DC2626;
+  --spice-chili-lt: #FEE2E2;
+  --spice-chili-dk: #991B1B;
+  --spice-cumin: #64748B;
+  --spice-cream: #F8FAFC;
   --spice-paper: #FFFFFF;
-  --spice-line: #E8DFD1;
-  --spice-line-strong: #C9BDA8;
-  --spice-text-main: #1F1915;
-  --spice-text-mute: #5C5348;
-  --spice-text-hint: #8A8172;
+  --spice-line: #E2E8F0;
+  --spice-line-strong: #CBD5E1;
+  --spice-text-main: #0F172A;
+  --spice-text-mute: #475569;
+  --spice-text-hint: #94A3B8;
 
   /* ── Legacy aliases (keep old class names working) ──── */
   --bg:            var(--spice-cream);
@@ -44,32 +43,162 @@
   --green:         var(--spice-cardamom);
   --green-dk:      var(--spice-cardamom-dk);
   --green-bg:      var(--spice-cardamom-lt);
-  --green-border:  #C5E3D2;
-  --orange:        var(--spice-saffron);
-  --orange-bg:     var(--spice-saffron-lt);
+  --green-border:  #BBF7D0;
+  --orange:        var(--spice-turmeric);
+  --orange-bg:     var(--spice-turmeric-lt);
   --red:           var(--spice-chili);
   --red-bg:        var(--spice-chili-lt);
-  --blue:          #378ADD;
-  --tab-bg:        #EDE6D6;
-  --spice:         var(--spice-cardamom);
-  --spice-lt:      var(--spice-cardamom-lt);
-  --amber:         var(--spice-saffron);
-  --amber-bg:      var(--spice-saffron-lt);
+  --blue:          var(--spice-saffron);
+  --tab-bg:        #E2E8F0;
+  --spice:         var(--spice-saffron);
+  --spice-lt:      var(--spice-saffron-lt);
+  --amber:         var(--spice-turmeric);
+  --amber-bg:      var(--spice-turmeric-lt);
 
   font-family:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
   letter-spacing:-.01em;
 }
+
+/* ═══ THEME: Coral sunset — warm pink/coral primary, peach accents ═══ */
+body[data-theme="coral"]{
+  --spice-saffron:    #F43F5E;   /* rose-500 — vibrant coral pink */
+  --spice-saffron-lt: #FFF1F2;
+  --spice-saffron-md: #FDA4AF;
+  --spice-saffron-dk: #BE123C;
+  --spice-turmeric:   #F59E0B;   /* amber accent stays */
+  --spice-turmeric-lt:#FEF3C7;
+  --spice-cream:      #FFFBFB;   /* faint warm off-white — less flat than slate */
+}
+
+/* ═══ THEME: Violet — bright purple primary, magenta accents ═══ */
+body[data-theme="violet"]{
+  --spice-saffron:    #8B5CF6;   /* violet-500 */
+  --spice-saffron-lt: #F5F3FF;
+  --spice-saffron-md: #C4B5FD;
+  --spice-saffron-dk: #6D28D9;
+  --spice-turmeric:   #F59E0B;
+  --spice-turmeric-lt:#FEF3C7;
+  --spice-cream:      #FBF9FF;
+}
+
+/* ═══ THEME: Sunshine — bright yellow-gold primary + lime ═══ */
+body[data-theme="sunshine"]{
+  --spice-saffron:    #EAB308;   /* yellow-500 */
+  --spice-saffron-lt: #FEFCE8;
+  --spice-saffron-md: #FDE047;
+  --spice-saffron-dk: #A16207;
+  --spice-turmeric:   #84CC16;   /* lime accent */
+  --spice-turmeric-lt:#ECFCCB;
+  --spice-cream:      #FFFEF5;
+}
+
+/* ═══ THEME: Electric — vivid magenta primary, cyan accents ═══ */
+body[data-theme="electric"]{
+  --spice-saffron:    #EC4899;   /* pink-500 */
+  --spice-saffron-lt: #FDF2F8;
+  --spice-saffron-md: #F9A8D4;
+  --spice-saffron-dk: #BE185D;
+  --spice-turmeric:   #06B6D4;   /* cyan accent */
+  --spice-turmeric-lt:#CFFAFE;
+  --spice-cream:      #FFF9FC;
+}
+
+/* ═══ THEME: Ocean — bright sky blue primary + sunset amber ═══ */
+body[data-theme="ocean"]{
+  --spice-saffron:    #0EA5E9;   /* sky-500 */
+  --spice-saffron-lt: #F0F9FF;
+  --spice-saffron-md: #7DD3FC;
+  --spice-saffron-dk: #0369A1;
+  --spice-turmeric:   #FB923C;   /* bright orange accent */
+  --spice-turmeric-lt:#FFEDD5;
+  --spice-cream:      #F8FCFF;
+}
+
+/* ═══ THEME: Emerald (current default, explicit) ═══ */
+body[data-theme="emerald"]{
+  --spice-saffron:    #10B981;
+  --spice-saffron-lt: #ECFDF5;
+  --spice-saffron-md: #6EE7B7;
+  --spice-saffron-dk: #047857;
+  --spice-turmeric:   #F59E0B;
+  --spice-turmeric-lt:#FEF3C7;
+  --spice-cream:      #F8FAFC;
+}
+
+/* ═══ THEME: Tech — Charcoal + Electric Blue + Emerald (analytics-feel) ═══ */
+body[data-theme="tech"]{
+  --spice-saffron:    #007BFF;   /* electric blue primary */
+  --spice-saffron-lt: #E6F2FF;
+  --spice-saffron-md: #66AFFF;
+  --spice-saffron-dk: #0056B3;
+  --spice-turmeric:   #28A745;   /* emerald green accent */
+  --spice-turmeric-lt:#D4EDDA;
+  --spice-cream:      #F5F6F7;   /* cool near-white */
+  --spice-text-main:  #333333;   /* charcoal */
+}
+
+/* ═══ THEME: Minimal — Black / White / Soft Gray / Mint Teal ═══ */
+body[data-theme="minimal"]{
+  --spice-saffron:    #4FD1C5;   /* mint teal primary */
+  --spice-saffron-lt: #E8F9F7;
+  --spice-saffron-md: #9FE5DE;
+  --spice-saffron-dk: #319795;
+  --spice-turmeric:   #1A202C;   /* near-black accent */
+  --spice-turmeric-lt:#E0E0E0;   /* soft gray */
+  --spice-cream:      #FAFAFA;
+  --spice-text-main:  #000000;
+  --spice-line:       #E0E0E0;
+}
+
+/* ═══ THEME: Trust — Deep Blue + Sky Blue (banking/reliability feel) ═══ */
+body[data-theme="trust"]{
+  --spice-saffron:    #003366;   /* deep navy primary */
+  --spice-saffron-lt: #E6EFF8;
+  --spice-saffron-md: #6691BF;
+  --spice-saffron-dk: #001F3D;
+  --spice-turmeric:   #00A3E0;   /* sky blue accent */
+  --spice-turmeric-lt:#D6F0FA;
+  --spice-cream:      #F4F4F4;   /* light gray bg */
+}
+
+/* Small floating theme switcher at bottom-right */
+#theme-switcher{
+  position:fixed;bottom:16px;right:16px;z-index:999;
+  background:#fff;border:1.5px solid var(--spice-line);
+  border-radius:24px;padding:6px;display:flex;gap:4px;flex-wrap:wrap;
+  max-width:232px;justify-content:flex-end;align-items:center;
+  box-shadow:0 4px 16px rgba(0,0,0,.12)
+}
+body[data-dark="1"] #theme-switcher{
+  background:var(--spice-paper);border-color:var(--spice-line-strong)
+}
+.theme-chip{
+  width:28px;height:28px;border-radius:50%;cursor:pointer;
+  border:2px solid #fff;box-shadow:0 0 0 1.5px var(--spice-line);
+  transition:transform .15s
+}
+.theme-chip:hover{transform:scale(1.15)}
+.theme-chip.active{box-shadow:0 0 0 2.5px var(--spice-text-main)}
+.theme-chip[data-t="emerald"]{background:linear-gradient(135deg,#10B981,#84CC16)}
+.theme-chip[data-t="coral"]{background:linear-gradient(135deg,#F43F5E,#FB7185)}
+.theme-chip[data-t="violet"]{background:linear-gradient(135deg,#8B5CF6,#EC4899)}
+.theme-chip[data-t="sunshine"]{background:linear-gradient(135deg,#EAB308,#84CC16)}
+.theme-chip[data-t="electric"]{background:linear-gradient(135deg,#EC4899,#06B6D4)}
+.theme-chip[data-t="ocean"]{background:linear-gradient(135deg,#0EA5E9,#FB923C)}
+.theme-chip[data-t="tech"]{background:linear-gradient(135deg,#007BFF,#28A745)}
+.theme-chip[data-t="minimal"]{background:linear-gradient(135deg,#000000,#4FD1C5)}
+.theme-chip[data-t="trust"]{background:linear-gradient(135deg,#003366,#00A3E0)}
 body{background:var(--bg);color:var(--text);min-height:100vh;font-size:14px}
 
 /* ── Login ───────────────────────────────────────────────── */
-#login{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px;background:linear-gradient(135deg,var(--spice-cream) 0%,#F5EDD9 100%)}
+#login{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px;background:linear-gradient(135deg,var(--spice-cream) 0%,#F1F5F9 100%)}
 .login-box{background:var(--spice-paper);border:1px solid var(--spice-line);border-radius:20px;padding:40px;width:400px;box-shadow:0 10px 40px rgba(31,25,21,.08)}
 .login-box h1{font-size:24px;font-weight:700;color:var(--spice-text-main);text-align:center;margin-bottom:8px;display:flex;align-items:center;justify-content:center;gap:12px;letter-spacing:-.3px}
 .login-box h1 .dot{
   width:44px;height:44px;border-radius:12px;
-  background:linear-gradient(135deg,var(--spice-saffron) 0%,var(--spice-chili) 100%);
+  background:linear-gradient(135deg,var(--spice-saffron) 0%,#84CC16 100%);
   display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px;font-weight:800;
-  box-shadow:0 4px 12px rgba(232,119,34,.3);animation:none
+  box-shadow:0 4px 12px rgba(16,185,129,.28);animation:none
 }
 .login-box h1 .dot::before{content:'IS'}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
@@ -83,7 +212,7 @@ body{background:var(--bg);color:var(--text);min-height:100vh;font-size:14px}
 }
 .fg textarea{height:auto;padding:10px 14px;min-height:60px}
 .fg input[type="date"]{padding:0 12px}
-.fg input:focus,.fg select:focus,.fg textarea:focus{border-color:var(--spice-saffron);box-shadow:0 0 0 3px rgba(232,119,34,.18)}
+.fg input:focus,.fg select:focus,.fg textarea:focus{border-color:var(--spice-saffron);box-shadow:0 0 0 3px rgba(16,185,129,.20)}
 .fg select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='10'%3E%3Cpath d='M1 1l6 6 6-6' stroke='%23666' fill='none' stroke-width='2'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center}
 
 /* ── Buttons ─────────────────────────────────────────────── */
@@ -96,13 +225,15 @@ body{background:var(--bg);color:var(--text);min-height:100vh;font-size:14px}
 .btn:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(31,25,21,.08)}
 .btn:active{transform:translateY(0)}
 .btn:disabled{opacity:.5;cursor:not-allowed;transform:none;box-shadow:none}
-.btn-g{background:var(--spice-cardamom);color:#fff;box-shadow:0 2px 6px rgba(47,122,77,.22)}
+.btn-g{background:var(--spice-cardamom);color:#fff;box-shadow:0 2px 6px rgba(22,101,52,.22)}
 .btn-g:hover{background:var(--spice-cardamom-dk)}
-.btn-a{background:var(--spice-saffron);color:#fff;box-shadow:0 2px 6px rgba(232,119,34,.28)}
+.btn-a{background:var(--spice-saffron);color:#fff;box-shadow:0 2px 6px rgba(16,185,129,.28)}
 .btn-a:hover{background:var(--spice-saffron-dk)}
-.btn-r{background:var(--spice-chili);color:#fff;box-shadow:0 2px 6px rgba(193,39,45,.22)}
-.btn-o{background:#fff;border:1.5px solid var(--spice-line);color:var(--spice-text-main)}
-.btn-o:hover{background:var(--spice-cream);border-color:var(--spice-line-strong)}
+.btn-r{background:var(--spice-chili);color:#fff;box-shadow:0 2px 6px rgba(220,38,38,.22)}
+.btn-o{background:var(--spice-saffron-lt);border:1.5px solid var(--spice-saffron);color:var(--spice-saffron-dk);font-weight:600}
+.btn-o:hover{background:#D1FAE5;border-color:var(--spice-saffron-dk);color:var(--spice-saffron-dk)}
+.btn-orange{background:var(--spice-turmeric);color:#fff;box-shadow:0 2px 6px rgba(245,158,11,.25)}
+.btn-orange:hover{background:#D97706}
 .btn-blue{background:var(--blue);color:#fff}
 .btn-full{width:100%;height:52px;font-size:15px;font-weight:700}
 .err{color:var(--spice-chili);font-size:13px;text-align:center;margin-top:12px;font-weight:600;display:none}
@@ -127,9 +258,9 @@ body{background:var(--bg);color:var(--text);min-height:100vh;font-size:14px}
 }
 .topbar h1 .dot{
   width:36px;height:36px;border-radius:10px;
-  background:linear-gradient(135deg,var(--spice-saffron) 0%,var(--spice-chili) 100%);
+  background:linear-gradient(135deg,var(--spice-saffron) 0%,#84CC16 100%);
   display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px;font-weight:800;
-  animation:none;box-shadow:0 3px 10px rgba(232,119,34,.25)
+  animation:none;box-shadow:0 3px 10px rgba(16,185,129,.22)
 }
 .topbar h1 .dot::before{content:'IS'}
 .topbar-user{
@@ -143,10 +274,21 @@ body{background:var(--bg);color:var(--text);min-height:100vh;font-size:14px}
   display:inline-block;flex-shrink:0
 }
 
+/* ── Sync indicator pill ────────────────────────────────── */
+.sync-pill{
+  font-size:12px;font-weight:600;padding:6px 10px;border-radius:10px;
+  display:inline-flex;align-items:center;gap:4px;
+  transition:background .2s,color .2s;cursor:default;user-select:none
+}
+.sync-pill.sync-ok{background:var(--spice-cardamom-lt);color:var(--spice-cardamom-dk)}
+.sync-pill.sync-err{background:var(--spice-chili-lt);color:var(--spice-chili-dk)}
+.sync-pill.sync-off{background:var(--spice-turmeric-lt);color:#B45309}
+@media (max-width: 640px){ .sync-pill{font-size:11px;padding:4px 8px} }
+
 /* ── Layout: Sidebar + Content ──────────────────────────── */
 .layout{display:flex;min-height:calc(100vh - 64px)}
 .sidebar{
-  width:244px;background:var(--spice-pepper);color:#C9BDA8;
+  width:244px;background:var(--spice-pepper);color:var(--spice-line-strong);
   border-right:none;
   padding:20px 12px;flex-shrink:0;position:sticky;top:64px;
   height:calc(100vh - 64px);overflow-y:auto
@@ -161,16 +303,16 @@ body{background:var(--bg);color:var(--text);min-height:100vh;font-size:14px}
 .side-item{
   display:flex;align-items:center;gap:12px;
   padding:12px 14px;border-radius:10px;cursor:pointer;
-  font-size:14px;font-weight:500;color:#C9BDA8;
+  font-size:14px;font-weight:500;color:var(--spice-line-strong);
   margin-bottom:2px;transition:all .15s;
   border:none;background:none;font-family:inherit;width:100%;text-align:left
 }
 .side-item:hover{background:rgba(255,255,255,.05);color:#fff}
 .side-item.active{
-  background:rgba(232,119,34,.15);color:var(--spice-saffron);font-weight:600
+  background:rgba(16,185,129,.15);color:var(--spice-saffron);font-weight:600
 }
 .side-item.active svg{color:var(--spice-saffron)}
-.side-item svg{width:18px;height:18px;flex-shrink:0;stroke-width:2;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round;color:#8A8172}
+.side-item svg{width:18px;height:18px;flex-shrink:0;stroke-width:2;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round;color:var(--spice-text-hint)}
 .sidebar-overlay{
   display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:25
 }
@@ -182,26 +324,29 @@ body{background:var(--bg);color:var(--text);min-height:100vh;font-size:14px}
 
 /* ── Icon action buttons (edit/del/pdf) ─────────────────── */
 .icon-btn{
-  width:32px;height:32px;padding:0;border-radius:7px;
+  width:30px;height:30px;padding:0;border-radius:7px;
   border:1.5px solid var(--border);background:var(--card);
   cursor:pointer;display:inline-flex;align-items:center;justify-content:center;
-  transition:all .15s;margin-right:4px
+  transition:all .15s;margin-right:2px;vertical-align:middle
 }
 .icon-btn:hover{transform:translateY(-1px);box-shadow:0 2px 6px rgba(0,0,0,.08)}
 .icon-btn svg{width:15px;height:15px;stroke-width:2;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round}
-.icon-btn.i-edit{color:var(--text2);border-color:#d0cfc7}
+.icon-btn.i-edit{color:var(--text2);border-color:var(--spice-line-strong)}
 .icon-btn.i-edit:hover{color:var(--green);border-color:var(--green)}
-.icon-btn.i-del{color:var(--red);border-color:#f0c5c5}
+.icon-btn.i-del{color:var(--red);border-color:var(--spice-chili-lt)}
 .icon-btn.i-del:hover{background:var(--red);color:#fff;border-color:var(--red)}
 .icon-btn.i-pdf{color:var(--green);border-color:var(--green-border)}
 .icon-btn.i-pdf:hover{background:var(--green);color:#fff}
 .icon-btn.i-view{color:var(--blue);border-color:#bfd5ec}
 .icon-btn.i-view:hover{background:var(--blue);color:#fff}
+.icon-btn.i-revert{color:#B45309;border-color:var(--spice-turmeric)}
+.icon-btn.i-revert:hover{background:var(--spice-turmeric);color:#fff;border-color:var(--spice-turmeric)}
 
 /* ── Cards ───────────────────────────────────────────────── */
 .card{
-  background:var(--card);border:1.5px solid var(--border);border-radius:14px;
-  padding:20px;margin-bottom:16px
+  background:var(--card);border:1px solid var(--border);border-radius:14px;
+  padding:20px;margin-bottom:16px;
+  box-shadow:0 1px 3px rgba(15,23,42,.04),0 4px 12px rgba(15,23,42,.04)
 }
 .card h2{
   font-size:17px;font-weight:700;margin-bottom:14px;color:var(--text);
@@ -263,14 +408,14 @@ tr:hover td{background:var(--spice-cream)}
   background:var(--spice-cardamom-lt);color:var(--spice-cardamom)
 }
 .kpi-delta.down{background:var(--spice-chili-lt);color:var(--spice-chili)}
-.kpi-delta.neutral{background:#EDE6D6;color:var(--spice-text-mute)}
+.kpi-delta.neutral{background:var(--tab-bg);color:var(--spice-text-mute)}
 .kpi-icon{
   position:absolute;right:16px;top:16px;width:36px;height:36px;border-radius:10px;
   background:var(--spice-saffron-lt);color:var(--spice-saffron);
   display:flex;align-items:center;justify-content:center
 }
 .kpi.cardamom .kpi-icon{background:var(--spice-cardamom-lt);color:var(--spice-cardamom)}
-.kpi.turmeric .kpi-icon{background:var(--spice-turmeric-lt);color:#8B6508}
+.kpi.turmeric .kpi-icon{background:var(--spice-turmeric-lt);color:#B45309}
 .kpi.chili .kpi-icon{background:var(--spice-chili-lt);color:var(--spice-chili)}
 .kpi-icon svg{width:18px;height:18px;stroke-width:2;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round}
 
@@ -344,7 +489,7 @@ tr:hover td{background:var(--spice-cream)}
   font-weight:700;font-size:13px;flex-shrink:0
 }
 .leader-rank.top{
-  background:linear-gradient(135deg,var(--spice-turmeric),var(--spice-saffron));color:#fff
+  background:linear-gradient(135deg,#FBBF24,#F59E0B);color:#fff
 }
 .leader-info{flex:1;min-width:0}
 .leader-name{
@@ -405,7 +550,7 @@ tr:hover td{background:var(--spice-cream)}
   display:flex;justify-content:space-between;align-items:center;
   padding:14px 18px;cursor:pointer;transition:background .1s
 }
-.cat-h:hover{background:#fafaf6}
+.cat-h:hover{background:#F8FAFC}
 .cat-h h3{font-size:14px;font-weight:700;color:var(--text);margin:0}
 .cat-h .arr{font-size:11px;color:var(--text3);transition:transform .2s;font-weight:700}
 .cat-h.open{background:var(--green-bg);border-bottom:1.5px solid var(--green-border)}
@@ -470,25 +615,218 @@ tr:hover td{background:var(--spice-cream)}
 /* ── Toggle Switch ───────────────────────────────────────── */
 .flag-row{
   display:flex;align-items:center;justify-content:space-between;
-  padding:10px 0;border-bottom:1px solid #f2f1ec;gap:12px
+  padding:10px 0;border-bottom:1px solid #F1F5F9;gap:12px
 }
 .flag-row:last-child{border-bottom:none}
 .flag-row label{font-size:13px;font-weight:600;cursor:pointer;flex:1;color:var(--text)}
-.sw{position:relative;width:44px;height:24px;flex-shrink:0}
+.sw{position:relative;width:32px;height:18px;flex-shrink:0}
 .sw input{opacity:0;width:0;height:0;position:absolute}
 .sl{
-  position:absolute;inset:0;background:#ccc;border-radius:24px;cursor:pointer;
+  position:absolute;inset:0;background:#ccc;border-radius:18px;cursor:pointer;
   transition:background .2s
 }
 .sl::before{
-  content:'';position:absolute;width:18px;height:18px;
-  left:3px;bottom:3px;background:#fff;border-radius:50%;
+  content:'';position:absolute;width:14px;height:14px;
+  left:2px;bottom:2px;background:#fff;border-radius:50%;
   transition:transform .2s;box-shadow:0 1px 3px rgba(0,0,0,.2)
 }
 .sw input:checked+.sl{background:var(--green)}
-.sw input:checked+.sl::before{transform:translateX(20px)}
+.sw input:checked+.sl::before{transform:translateX(14px)}
 
-/* ── Toast ───────────────────────────────────────────────── */
+/* ── Loading spinner + button-busy state ──────────────── */
+@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+.btn.is-busy{position:relative;pointer-events:none;opacity:.75}
+.btn.is-busy::after{
+  content:'';display:inline-block;width:14px;height:14px;margin-left:8px;
+  border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;
+  animation:spin .7s linear infinite;vertical-align:middle
+}
+.btn.is-busy.btn-o::after,.btn.is-busy.btn-orange::after{
+  border-color:rgba(0,0,0,.15);border-top-color:var(--spice-text-main)
+}
+/* Full-screen overlay for heavy ops (PDFs, exports) */
+.busy-overlay{
+  position:fixed;inset:0;z-index:9000;background:rgba(15,23,42,.25);
+  display:flex;align-items:center;justify-content:center;backdrop-filter:blur(2px);
+  animation:fadeIn .15s
+}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.busy-card{
+  background:var(--card);border-radius:14px;padding:24px 32px;
+  display:flex;align-items:center;gap:16px;min-width:220px;
+  box-shadow:0 20px 48px rgba(0,0,0,.18)
+}
+.busy-card .spinner{
+  width:28px;height:28px;border:3px solid var(--border);
+  border-top-color:var(--spice-saffron);border-radius:50%;
+  animation:spin .8s linear infinite;flex-shrink:0
+}
+.busy-card .msg{font-size:14px;font-weight:600;color:var(--text)}
+
+/* ── Empty-state illustrations ────────────────────────── */
+.empty-state{
+  text-align:center;padding:48px 24px;color:var(--text2)
+}
+.empty-state svg{
+  width:64px;height:64px;margin-bottom:16px;opacity:.5;
+  stroke:var(--spice-saffron);fill:none;stroke-width:1.5;
+  stroke-linecap:round;stroke-linejoin:round
+}
+.empty-state h3{font-size:16px;font-weight:700;color:var(--text);margin-bottom:6px}
+.empty-state p{font-size:13px;margin-bottom:16px;max-width:340px;margin-left:auto;margin-right:auto;line-height:1.5}
+
+/* ── Contextual help tooltips ─────────────────────────── */
+.help-icon{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:14px;height:14px;border-radius:50%;background:var(--border2);
+  color:#fff;font-size:10px;font-weight:700;margin-left:4px;
+  cursor:help;vertical-align:middle;transition:background .15s;
+  font-family:ui-sans-serif,system-ui,sans-serif
+}
+.help-icon:hover{background:var(--spice-saffron)}
+.help-icon::before{content:'?'}
+/* Tooltip body — appears on hover */
+.help-wrap{position:relative;display:inline-flex;align-items:center}
+.help-tip{
+  position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);
+  background:var(--spice-text-main);color:#fff;padding:8px 12px;border-radius:8px;
+  font-size:12px;font-weight:500;line-height:1.4;white-space:normal;width:max-content;
+  max-width:260px;box-shadow:0 4px 16px rgba(0,0,0,.2);
+  opacity:0;pointer-events:none;transition:opacity .15s;z-index:100
+}
+.help-tip::after{
+  content:'';position:absolute;top:100%;left:50%;transform:translateX(-50%);
+  border:5px solid transparent;border-top-color:var(--spice-text-main)
+}
+.help-wrap:hover .help-tip{opacity:1}
+
+/* ── Dark mode ────────────────────────────────────────── */
+body[data-dark="1"]{
+  --spice-cream:#0F172A;
+  --spice-paper:#1E293B;
+  --spice-line:#334155;
+  --spice-line-strong:#475569;
+  --spice-text-main:#F1F5F9;
+  --spice-text-mute:#CBD5E1;
+  --spice-text-hint:#94A3B8;
+  --tab-bg:#334155;
+}
+body[data-dark="1"] .card{
+  box-shadow:0 1px 3px rgba(0,0,0,.35),0 4px 12px rgba(0,0,0,.35)
+}
+body[data-dark="1"] input,body[data-dark="1"] select,body[data-dark="1"] textarea{
+  background:var(--spice-paper);color:var(--text);border-color:var(--border)
+}
+body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
+
+/* Theme switcher chip size + dark toggle spacing */
+#theme-switcher .dark-toggle{
+  width:28px;height:28px;border-radius:50%;border:2px solid #fff;
+  box-shadow:0 0 0 1.5px var(--spice-line);cursor:pointer;
+  background:linear-gradient(135deg,#FBBF24,#1E293B);
+  display:flex;align-items:center;justify-content:center;font-size:14px;
+  transition:transform .15s
+}
+#theme-switcher .dark-toggle:hover{transform:scale(1.15)}
+
+/* ── DataTable ────────────────────────────────────────── */
+.dt-wrap{position:relative;display:flex;flex-direction:column}
+
+/* Toolbar: single search + x-clear button + row count */
+.dt-toolbar{
+  display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap
+}
+.dt-search-wrap{position:relative;flex:1;min-width:200px;max-width:360px}
+.dt-search{
+  width:100%;height:34px;padding:0 34px 0 12px;
+  border:1px solid var(--spice-line);border-radius:8px;background:#fff;
+  font-size:13px;font-family:inherit;color:var(--spice-text-main);outline:none;
+  transition:border-color .15s;box-sizing:border-box
+}
+.dt-search:focus{border-color:var(--spice-cardamom)}
+.dt-search-clear{
+  position:absolute;right:6px;top:50%;transform:translateY(-50%);
+  width:22px;height:22px;border:none;background:var(--tab-bg);color:var(--spice-text-mute);
+  border-radius:50%;cursor:pointer;font-size:16px;line-height:1;
+  display:flex;align-items:center;justify-content:center;padding:0;
+  font-family:inherit;transition:all .15s
+}
+.dt-search-clear:hover{background:var(--spice-chili-lt);color:var(--spice-chili)}
+.dt-count{font-size:12px;color:var(--spice-text-mute);white-space:nowrap}
+
+/* Internal scroll container — the table scrolls inside this box,
+   not the whole page. max-height gives us a reasonable visible area;
+   sticky header/footer work because overflow:auto establishes the
+   scroll context. */
+.dt-scroll{
+  max-height:calc(100vh - 260px);
+  min-height:240px;
+  overflow:auto;
+  border:1px solid var(--spice-line);
+  border-radius:8px;
+  background:#fff
+}
+.dt-scroll table{
+  width:100%;
+  border-collapse:separate;
+  border-spacing:0;
+  margin:0   /* override any margins from parent contexts */
+}
+
+/* Sticky header */
+.dt-head th{
+  position:sticky;top:0;z-index:3;
+  background:var(--spice-cardamom-lt);
+  color:var(--spice-cardamom-dk);
+  font-weight:700;font-size:12px;
+  text-transform:uppercase;letter-spacing:.4px;
+  user-select:none;
+  border-bottom:2px solid var(--spice-cardamom);
+  padding:10px 12px;text-align:left;white-space:nowrap
+}
+.dt-head th.num{text-align:right}
+.dt-sortable{cursor:pointer;transition:background .15s}
+.dt-sortable:hover{background:#D5E5C8}
+
+/* Body cells */
+.dt-scroll tbody td{
+  padding:8px 12px;border-bottom:1px solid var(--spice-line);
+  font-size:13px;color:var(--spice-text-main)
+}
+.dt-scroll tbody tr:hover{background:#F8FAFC}
+
+/* STICKY, highlighted totals footer at the bottom of the scroll box */
+.dt-foot td{
+  position:sticky;bottom:0;z-index:3;
+  background:var(--spice-turmeric-lt);
+  border-top:2px solid var(--spice-turmeric);
+  padding:12px;font-size:13px;font-weight:700;
+  color:var(--spice-text-main);
+  box-shadow:0 -2px 6px rgba(0,0,0,.05)
+}
+.dt-foot td strong{color:#B45309}  /* amber-dark for the sum numbers */
+
+/* Load more */
+.dt-loadmore{margin-top:10px;text-align:center}
+.dt-loadmore button{
+  padding:8px 20px;background:var(--spice-saffron-lt);border:1px solid var(--spice-saffron);
+  border-radius:8px;font-size:12px;font-weight:600;color:var(--spice-saffron-dk);
+  cursor:pointer;font-family:inherit;transition:all .15s
+}
+.dt-loadmore button:hover{background:#D1FAE5;border-color:var(--spice-saffron-dk)}
+
+/* Undo any legacy overflow styles on the tab-content wrapper so
+   we don't get a double scrollbar (one outer, one from .dt-scroll). */
+.tc > div[style*="overflow-x"]{overflow:visible !important;max-height:none !important}
+
+/* Action columns: keep icon buttons on a single line across all tables */
+.dt-scroll tbody td:has(.icon-btn){white-space:nowrap}
+/* Fallback for browsers without :has() — the last td is conventionally the actions column */
+@supports not selector(:has(*)) {
+  .dt-scroll tbody td:last-child{white-space:nowrap}
+}
+
+
 .toast{
   display:none;position:fixed;top:80px;right:24px;
   padding:14px 22px;background:var(--green);color:#fff;
@@ -571,6 +909,7 @@ tr:hover td{background:var(--spice-cream)}
       <h1><span class="dot"></span> Spice Config</h1>
     </div>
     <div style="display:flex;gap:10px;align-items:center">
+      <span id="sync-indicator" class="sync-pill sync-ok" title="Last successful sync"></span>
       <span id="user-lbl" class="topbar-user"></span>
       <button class="btn btn-o" onclick="logout()">Logout</button>
     </div>
@@ -781,7 +1120,7 @@ tr:hover td{background:var(--spice-cream)}
           <input type="file" id="imp-buyers" accept=".xlsx,.xls" style="display:none" onchange="importBuyers(event)">
         </div>
         <div id="buyer-import-status" style="display:none;padding:8px 14px;border-radius:6px;font-size:12px;margin-bottom:10px"></div>
-        <div style="overflow-x:auto"><table><thead><tr><th>SBL</th><th>Code</th><th>Trade Name</th><th>GSTIN</th><th>PAN</th><th>Phone</th><th>TI</th><th>Place · State</th><th>Sale</th><th>Actions</th></tr></thead><tbody id="buyers-list"></tbody></table></div>
+        <div style="overflow-x:auto"><table><thead><tr><th>BUYER</th><th>Code</th><th>Trade Name</th><th>GSTIN</th><th>PAN</th><th>Phone</th><th>TI</th><th>Place · State</th><th>Sale</th><th>Actions</th></tr></thead><tbody id="buyers-list"></tbody></table></div>
       </div>
     </div>
 
@@ -804,7 +1143,8 @@ tr:hover td{background:var(--spice-cream)}
         <h2>Lot Data <span style="font-weight:400;font-size:12px;color:var(--text3)">Select an auction from Auctions tab first</span></h2>
         <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
           <select id="lot-auction" onchange="loadLots()" style="padding:6px;border:1px solid var(--border);border-radius:6px"></select>
-          <button class="btn btn-a" onclick="calculateAll()">Calculate All</button>
+          <button class="btn btn-o" onclick="loadLots()" title="Reload the lots table from the server">🔄 Refresh</button>
+          <button class="btn btn-a" id="btn-calculate-all" onclick="calculateAll()">Calculate All</button>
           <button class="btn btn-o" onclick="validateLots()">Validate</button>
           <button class="btn btn-g" style="margin-left:auto" onclick="showModal('price-import-modal')">📥 Price Import</button>
         </div>
@@ -820,7 +1160,7 @@ tr:hover td{background:var(--spice-cream)}
           <select id="inv-auction" onchange="loadInvoices();loadInvEligibleBuyers()" style="padding:6px;border:1px solid var(--border);border-radius:6px"></select>
           <button class="btn btn-g" onclick="openGenInvModal()">+ Generate Invoice</button>
           <button class="btn btn-a" onclick="openGenAllModal('invoices')">⚡ Generate for All Buyers</button>
-          <button class="btn" style="background:#f39c12;color:#fff" onclick="revertAllInvoices()">⟲ Revert All</button>
+          <button class="btn" style="background:var(--spice-turmeric);color:#fff" onclick="revertAllInvoices()">⟲ Revert All</button>
           <button class="btn" style="background:#c0392b;color:#fff;margin-left:auto" onclick="deleteAll('invoices','Invoices')">Delete All</button>
         </div>
         <div style="overflow-x:auto"><table><thead><tr><th>Sale</th><th>Inv#</th><th>Buyer</th><th>Qty</th><th>Amount</th><th>CGST</th><th>SGST</th><th>IGST</th><th>Total</th><th>Actions</th></tr></thead><tbody id="invoices-list"></tbody></table></div>
@@ -1130,10 +1470,10 @@ tr:hover td{background:var(--spice-cream)}
     <div style="font-size:11px;color:var(--text3);margin-top:4px">Each generated invoice increments by 1 from here</div>
   </div>
   <div id="ga-preview" style="font-size:12px;color:var(--text2);background:var(--green-bg);border:1px solid var(--green-border);border-radius:8px;padding:10px;margin:6px 0;display:none"></div>
-  <div id="ga-diag" style="display:none;font-size:11px;background:#f5f5f5;border:1px solid #ddd;border-radius:6px;padding:10px;margin:6px 0;max-height:300px;overflow:auto;font-family:monospace"></div>
+  <div id="ga-diag" style="display:none;font-size:11px;background:#F1F5F9;border:1px solid #ddd;border-radius:6px;padding:10px;margin:6px 0;max-height:300px;overflow:auto;font-family:monospace"></div>
   <div class="actions">
     <button class="btn btn-o" onclick="hideModal('gen-all-modal')">Cancel</button>
-    <button class="btn" id="ga-diag-btn" onclick="diagnoseEligibility()" style="background:#f39c12;color:#fff">Diagnose</button>
+    <button class="btn" id="ga-diag-btn" onclick="diagnoseEligibility()" style="background:var(--spice-turmeric);color:#fff">Diagnose</button>
     <button class="btn btn-g" id="ga-submit" onclick="doGenerateAll()">Generate All</button>
   </div>
 </div></div>
@@ -1337,24 +1677,203 @@ const B=location.origin;let T='';
 const h=(t,o={})=>fetch(B+t,{...o,headers:{'Content-Type':'application/json','Authorization':'Bearer '+T,...(o.headers||{})}});
 // j() throws on non-2xx so callers can't silently mis-parse an error body.
 // On 401 it auto-logs-out (stale token after server restart).
-const j=async(t,o)=>{
+// Network state for multi-user sync indicator.
+// Tracks the last successful API response + whether we're currently online.
+window._net = { lastOkAt: Date.now(), lastError: null, online: navigator.onLine };
+window.addEventListener('online',  () => { window._net.online = true;  updateSyncIndicator(); });
+window.addEventListener('offline', () => { window._net.online = false; updateSyncIndicator(); });
+
+// Map HTTP errors and network errors to user-friendly messages.
+// Keeps the original error.status and .body for any caller that needs them.
+function friendlyErr(err) {
+  if (!err) return 'Something went wrong. Please try again.';
+  if (err.status === 401) return 'Your session expired. Please log in again.';
+  if (err.status === 403) return 'You do not have permission for this action.';
+  if (err.status === 404) return 'We couldn\'t find what you were looking for.';
+  if (err.status === 409) return 'Conflict — this item was changed elsewhere. Refresh and try again.';
+  if (err.status === 413) return 'File or data is too large to upload.';
+  if (err.status === 422) return err.body?.error || 'Some fields are invalid. Please review and retry.';
+  if (err.status >= 500)  return 'Server error. Please try again in a moment.';
+  // Network or parse errors
+  const msg = (err.message || '').toLowerCase();
+  if (msg.includes('network') || msg.includes('failed to fetch') || msg.includes('load failed')) {
+    return 'Can\'t reach the server. Check your internet connection.';
+  }
+  return err.message || 'Something went wrong.';
+}
+
+// Wrap j() with auto-retry for transient network failures.
+// Retries up to 3 times with exponential backoff (300ms, 900ms, 2700ms).
+// Does NOT retry 4xx client errors — those are deterministic failures.
+async function _jOnce(t, o){
   let r;
-  try{r=await h(t,o)}
-  catch(netErr){throw new Error('Network error: '+(netErr.message||'could not reach server'))}
-  const text=await r.text();
-  let body;try{body=text?JSON.parse(text):{}}catch{body={raw:text}}
+  try{ r = await h(t, o); }
+  catch(netErr){
+    const e = new Error('Network error: ' + (netErr.message || 'could not reach server'));
+    e.isNetwork = true;
+    throw e;
+  }
+  const text = await r.text();
+  let body; try{ body = text ? JSON.parse(text) : {}; } catch { body = { raw: text }; }
   if(!r.ok){
-    if(r.status===401){
+    if(r.status === 401){
       console.warn('Got 401 — clearing stale token');
-      localStorage.removeItem('t');T='';
-      setTimeout(()=>{document.getElementById('app').style.display='none';document.getElementById('login').style.display='flex'},100);
+      localStorage.removeItem('t'); T = '';
+      setTimeout(()=>{ document.getElementById('app').style.display='none'; document.getElementById('login').style.display='flex'; }, 100);
     }
-    const msg=body.error||body.message||`HTTP ${r.status} ${r.statusText||''}`.trim();
-    const err=new Error(msg);err.status=r.status;err.body=body;throw err;
+    const msg = body.error || body.message || `HTTP ${r.status} ${r.statusText||''}`.trim();
+    const err = new Error(msg);
+    err.status = r.status; err.body = body;
+    throw err;
   }
   return body;
+}
+const j = async (t, o) => {
+  // Non-GET writes: retry only network errors, not server errors.
+  const method = (o?.method || 'GET').toUpperCase();
+  const maxRetries = 3;
+  let lastErr;
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const result = await _jOnce(t, o);
+      // Update sync state on success
+      window._net.lastOkAt = Date.now();
+      window._net.lastError = null;
+      updateSyncIndicator();
+      return result;
+    } catch (err) {
+      lastErr = err;
+      // Only retry transient failures (network or 5xx). Do NOT retry 4xx.
+      const shouldRetry = (err.isNetwork || (err.status >= 500 && err.status < 600));
+      if (!shouldRetry || attempt === maxRetries - 1) {
+        window._net.lastError = err;
+        updateSyncIndicator();
+        throw err;
+      }
+      // Exponential backoff: 300ms, 900ms, 2700ms
+      const delay = 300 * Math.pow(3, attempt);
+      console.warn(`j() attempt ${attempt+1} failed (${err.message}) — retrying in ${delay}ms`);
+      await new Promise(r => setTimeout(r, delay));
+    }
+  }
+  throw lastErr;
 };
+
+// Small pill at the top-right that reflects current connection status.
+// Clicking it retries any pending ops (currently just shows timestamp).
+function updateSyncIndicator(){
+  const el = document.getElementById('sync-indicator');
+  if (!el) return;
+  const { online, lastError, lastOkAt } = window._net;
+  if (!online) {
+    el.innerHTML = '⚠ Offline';
+    el.className = 'sync-pill sync-off';
+    el.title = 'You are offline. Changes will fail until you reconnect.';
+  } else if (lastError) {
+    el.innerHTML = '⚠ Sync failed';
+    el.className = 'sync-pill sync-err';
+    el.title = friendlyErr(lastError);
+  } else {
+    const secs = Math.round((Date.now() - lastOkAt) / 1000);
+    el.innerHTML = secs < 5 ? '✓ Synced' : `✓ Synced ${secs}s ago`;
+    el.className = 'sync-pill sync-ok';
+    el.title = `Last successful sync: ${new Date(lastOkAt).toLocaleTimeString()}`;
+  }
+}
+// Refresh the indicator's "Xs ago" text every 10s
+setInterval(updateSyncIndicator, 10000);
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.style.display='block';setTimeout(()=>t.style.display='none',3000)}
+
+// Show a user-friendly error. Uses the friendlyErr() mapping for HTTP/network
+// errors; falls back to the message string. Non-blocking — shows a red toast.
+function showError(err){
+  const msg = typeof err === 'string' ? err : friendlyErr(err);
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.display = 'block';
+  // Error styling via inline since toast has no variant system
+  t.style.background = 'var(--spice-chili)';
+  t.style.color = '#fff';
+  setTimeout(() => {
+    t.style.display = 'none';
+    t.style.background = '';
+    t.style.color = '';
+  }, 5000);
+}
+
+// ── Loading state helpers ──────────────────────────────
+// Wrap a button in busy-state during an async operation. Prevents double-clicks,
+// shows a spinner, restores on completion. Safe to use around any async fn.
+async function withBusy(btn, fn){
+  if (!btn) return fn();
+  const wasDisabled = btn.disabled;
+  btn.classList.add('is-busy');
+  btn.disabled = true;
+  try { return await fn(); }
+  finally {
+    btn.classList.remove('is-busy');
+    btn.disabled = wasDisabled;
+  }
+}
+// Full-screen overlay for heavy ops. Returns a close function.
+function showBusy(message){
+  const existing = document.getElementById('busy-overlay');
+  if (existing) existing.remove();
+  const el = document.createElement('div');
+  el.id = 'busy-overlay';
+  el.className = 'busy-overlay';
+  el.innerHTML = `<div class="busy-card"><div class="spinner"></div><div class="msg">${esc(message||'Working…')}</div></div>`;
+  document.body.appendChild(el);
+  return () => { el.remove(); };
+}
+// Wrap any async op in an overlay. Usage: await withOverlay('Generating PDF…', () => ...)
+async function withOverlay(message, fn){
+  const hide = showBusy(message);
+  try { return await fn(); }
+  finally { hide(); }
+}
+
+// ── Empty-state helper ────────────────────────────────
+// Returns HTML for an empty list. Pass {icon, title, body, actionLabel, onAction}.
+function emptyStateHTML(opts){
+  const icons = {
+    lots:     '<svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="14" rx="2"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/><path d="M7 11h10M7 15h6"/></svg>',
+    traders:  '<svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>',
+    buyers:   '<svg viewBox="0 0 24 24"><path d="M3 3h2l2 10h13l2-7H6"/><circle cx="9" cy="20" r="1.5"/><circle cx="18" cy="20" r="1.5"/></svg>',
+    auctions: '<svg viewBox="0 0 24 24"><path d="M14 7L9 12l-4-4"/><path d="M14 17l5-5 1 1"/><path d="M6 19h12"/></svg>',
+    invoices: '<svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h6"/></svg>',
+    search:   '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>',
+    empty:    '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M8 15h8M9 9h.01M15 9h.01"/></svg>'
+  };
+  const icon = icons[opts.icon || 'empty'] || icons.empty;
+  const action = opts.actionLabel
+    ? `<button class="btn btn-a" onclick="${opts.onAction||''}">${esc(opts.actionLabel)}</button>`
+    : '';
+  return `<div class="empty-state">
+    ${icon}
+    <h3>${esc(opts.title||'Nothing here yet')}</h3>
+    ${opts.body ? `<p>${esc(opts.body)}</p>` : ''}
+    ${action}
+  </div>`;
+}
+
+// ── Help tooltip helper ────────────────────────────────
+// Returns a small ? icon that shows a tooltip on hover.
+function helpTip(text){
+  return `<span class="help-wrap"><span class="help-icon" tabindex="0"></span><span class="help-tip">${esc(text)}</span></span>`;
+}
+
+// ── Dark mode ──────────────────────────────────────────
+function toggleDark(){
+  const cur = document.body.getAttribute('data-dark') === '1';
+  const next = cur ? '0' : '1';
+  document.body.setAttribute('data-dark', next);
+  try { localStorage.setItem('dark', next); } catch(e){}
+}
+// Apply on load
+(function(){
+  try { if (localStorage.getItem('dark') === '1') document.body.setAttribute('data-dark','1'); } catch(e){}
+})();
 function showModal(id){document.getElementById(id).classList.add('show')}
 function hideModal(id){document.getElementById(id).classList.remove('show')}
 function esc(s){return s?String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'):''}
@@ -1387,22 +1906,282 @@ const ICONS={
   edit:'<svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
   del:'<svg viewBox="0 0 24 24"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/></svg>',
   pdf:'<svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M12 18v-6M9 15l3 3 3-3"/></svg>',
-  view:'<svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>'
+  view:'<svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
+  revert:'<svg viewBox="0 0 24 24"><path d="M3 7v6h6"/><path d="M3 13a9 9 0 1 0 3-7.7L3 8"/></svg>'
 };
 function iconBtn(kind,title,onclick){return `<button class="icon-btn i-${kind}" title="${title}" onclick="${onclick}">${ICONS[kind]}</button>`}
+
+// ══════════════════════════════════════════════════════════
+// DataTable — reusable table component
+// ══════════════════════════════════════════════════════════
+// Features: global search, per-column filters, click-to-sort,
+// sticky header, Load More (100 at a time), numeric totals footer.
+//
+// Usage:
+//   DataTable.mount('traders-list', data, {
+//     columns: [
+//       { key:'name',  label:'Name', sort:'text' },
+//       { key:'bags',  label:'Bags', sort:'number', numeric:true },
+//       { key:'_actions', label:'Actions', sortable:false,
+//         render:(row)=> iconBtn(...) + iconBtn(...) }
+//     ],
+//     rowClass: (row)=>'' // optional
+//   });
+//
+// Each <tbody id="X-list"> must live inside a <table>. The
+// component replaces the ENTIRE table so it can add a <thead>,
+// filter row, and <tfoot>.
+
+const DataTable = (function(){
+  const PAGE_SIZE = 100;       // rows shown per load
+  const state = {}; // keyed by tbodyId: { data, cols, sort, search, visible }
+
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+
+  function getValue(row, col){
+    if (col.value) return col.value(row);
+    return row[col.key];
+  }
+
+  // Extract the first numeric run from a string for search-match on formatted numbers
+  function parseNum(v){
+    if (v == null) return null;
+    if (typeof v === 'number') return isFinite(v) ? v : null;
+    const m = String(v).match(/-?\d+(\.\d+)?/);
+    return m ? Number(m[0]) : null;
+  }
+
+  // Natural-order compare so "A-2" sorts before "A-10", and "2" before "10"
+  function naturalCompare(a, b){
+    const sa = String(a==null?'':a);
+    const sb = String(b==null?'':b);
+    // Split into runs of digits vs non-digits so we can compare each run numerically
+    const re = /(\d+)|(\D+)/g;
+    const ra = sa.match(re) || [];
+    const rb = sb.match(re) || [];
+    const n = Math.min(ra.length, rb.length);
+    for (let i = 0; i < n; i++) {
+      const ta = ra[i], tb = rb[i];
+      const na = /^\d+$/.test(ta), nb = /^\d+$/.test(tb);
+      if (na && nb) {
+        const d = Number(ta) - Number(tb);
+        if (d !== 0) return d;
+      } else {
+        const c = ta.toLowerCase().localeCompare(tb.toLowerCase());
+        if (c !== 0) return c;
+      }
+    }
+    return ra.length - rb.length;
+  }
+
+  function displayValue(row, col){
+    if (col.render) return col.render(row);
+    const v = getValue(row, col);
+    if (v == null || v === '') return '<span style="color:var(--text3)">—</span>';
+    if (col.sort === 'number') {
+      const n = Number(v);
+      if (!isFinite(n)) return esc(v);
+      return col.fmt ? col.fmt(n) : n.toLocaleString('en-IN', { maximumFractionDigits: 3 });
+    }
+    return esc(v);
+  }
+
+  function compare(a, b, col, dir){
+    const va = getValue(a, col), vb = getValue(b, col);
+    let cmp;
+    if (col.sort === 'number') {
+      const na = Number(va), nb = Number(vb);
+      const ea = !isFinite(na), eb = !isFinite(nb);
+      if (ea && eb) cmp = 0;
+      else if (ea) cmp = 1;        // empty/NaN always sorted to bottom
+      else if (eb) cmp = -1;
+      else cmp = na - nb;
+    } else if (col.sort === 'date') {
+      cmp = String(va||'').localeCompare(String(vb||''));
+    } else {
+      // Natural sort handles "2" < "10", "Lot-2" < "Lot-10"
+      cmp = naturalCompare(va, vb);
+    }
+    return dir === 'desc' ? -cmp : cmp;
+  }
+
+  function applyFilters(s){
+    let rows = s.data.slice();
+    if (s.search) {
+      const q = s.search.toLowerCase();
+      rows = rows.filter(r => s.cols.some(c => {
+        if (c.searchable === false) return false;
+        const v = getValue(r, c);
+        return v != null && String(v).toLowerCase().includes(q);
+      }));
+    }
+    if (s.sort && s.sort.col) {
+      const col = s.cols.find(c => c.key === s.sort.col);
+      if (col) rows.sort((a,b) => compare(a, b, col, s.sort.dir));
+    }
+    return rows;
+  }
+
+  function render(tbodyId){
+    const s = state[tbodyId]; if (!s) return;
+    const table = document.getElementById(tbodyId).closest('table');
+    if (!table) return;
+
+    const filtered = applyFilters(s);
+    const visible = filtered.slice(0, s.visible);
+
+    // Header row with click-to-sort indicators
+    const headCells = s.cols.map(c => {
+      const sortable = c.sortable !== false;
+      const isSort = s.sort && s.sort.col === c.key;
+      const arrow = isSort ? (s.sort.dir === 'asc' ? ' ▲' : ' ▼') : '';
+      const cls = 'dt-th' + (sortable ? ' dt-sortable' : '') + (c.numeric ? ' num' : '');
+      const onc = sortable ? `onclick="DataTable._sort('${tbodyId}','${c.key}')"` : '';
+      return `<th class="${cls}" ${onc}>${esc(c.label)}${arrow}</th>`;
+    }).join('');
+
+    // Body rows
+    const bodyRows = visible.map(r => {
+      const cells = s.cols.map(c => {
+        const v = displayValue(r, c);
+        const cls = c.numeric ? ' class="num"' : (c.tdClass ? ` class="${c.tdClass}"` : '');
+        return `<td${cls}>${v}</td>`;
+      }).join('');
+      const rc = s.rowClass ? s.rowClass(r) : '';
+      return `<tr${rc ? ` class="${rc}"` : ''}>${cells}</tr>`;
+    }).join('');
+
+    // Totals footer — sum numeric columns across ALL filtered rows (not just visible ones)
+    // Per-column overrides:
+    //   c.noTotal      → render an empty cell (no sum, no count)
+    //   c.totalKind    → 'count'  → show row count (e.g. "27 lots") instead of sum
+    //                  → 'sum'    → sum (default when numeric is true)
+    const totals = s.cols.map(c => {
+      if (c.noTotal) return '<td></td>';
+      if (c.totalKind === 'count') {
+        const n = filtered.length;
+        let label;
+        if (typeof c.totalLabel === 'function') label = c.totalLabel(n);
+        else if (typeof c.totalLabel === 'string') label = c.totalLabel;
+        else label = `${n} row${n===1?'':'s'}`;
+        return `<td><strong>${label}</strong></td>`;
+      }
+      if (!c.numeric) return '<td></td>';
+      const sum = filtered.reduce((a,r) => a + (Number(getValue(r,c))||0), 0);
+      const fmt = c.fmt ? c.fmt(sum) : sum.toLocaleString('en-IN',{maximumFractionDigits:2});
+      return `<td class="num"><strong>${fmt}</strong></td>`;
+    }).join('');
+
+    // Toolbar: single search box + clear (x) + row count
+    const hasSearch = !!s.search;
+    const toolbar = `
+      <div class="dt-toolbar">
+        <div class="dt-search-wrap">
+          <input type="text" class="dt-search" placeholder="Search all columns…" value="${esc(s.search||'')}" oninput="DataTable._search('${tbodyId}',this.value)">
+          ${hasSearch ? `<button class="dt-search-clear" title="Clear search" onclick="DataTable._clear('${tbodyId}')" aria-label="Clear">&times;</button>` : ''}
+        </div>
+        <span class="dt-count">${filtered.length} row${filtered.length===1?'':'s'}${s.data.length!==filtered.length?` (of ${s.data.length})`:''}</span>
+      </div>`;
+
+    const loadMore = visible.length < filtered.length
+      ? `<div class="dt-loadmore"><button onclick="DataTable._loadMore('${tbodyId}')">Load ${Math.min(PAGE_SIZE, filtered.length-visible.length)} more (${visible.length} of ${filtered.length} shown)</button></div>`
+      : '';
+
+    // Replace table content. Structure:
+    //   .dt-wrap
+    //     .dt-toolbar (search + count)
+    //     .dt-scroll (internal scroll — max-height, overflow)
+    //       <table> with sticky thead + sticky tfoot
+    //     .dt-loadmore
+    // Richer empty-state support: the caller can pass `emptyState: {icon, title, body}` in config.
+    // Fallback is the minimal "No rows" row to keep existing callers working.
+    const empty = s.emptyState;
+    const emptyRow = empty
+      ? `<tr><td colspan="${s.cols.length}" style="padding:0">${emptyStateHTML(empty)}</td></tr>`
+      : `<tr><td colspan="${s.cols.length}" style="text-align:center;padding:24px;color:var(--text3)">No rows</td></tr>`;
+    const newInner = `
+      <thead class="dt-head"><tr>${headCells}</tr></thead>
+      <tbody id="${tbodyId}">${bodyRows || emptyRow}</tbody>
+      <tfoot class="dt-foot"><tr>${totals}</tr></tfoot>
+    `;
+    table.innerHTML = newInner;
+
+    // Wrap table in .dt-wrap + .dt-scroll (once)
+    let wrap = table.closest('.dt-wrap');
+    if (!wrap) {
+      const parent = table.parentElement;
+      wrap = document.createElement('div');
+      wrap.className = 'dt-wrap';
+      const scroll = document.createElement('div');
+      scroll.className = 'dt-scroll';
+      parent.insertBefore(wrap, table);
+      wrap.appendChild(scroll);
+      scroll.appendChild(table);
+    }
+    // Refresh toolbar + load-more
+    wrap.querySelectorAll(':scope > .dt-toolbar, :scope > .dt-loadmore').forEach(el => el.remove());
+    wrap.insertAdjacentHTML('afterbegin', toolbar);
+    if (loadMore) wrap.insertAdjacentHTML('beforeend', loadMore);
+  }
+
+  return {
+    mount(tbodyId, data, config){
+      state[tbodyId] = {
+        data: data || [],
+        cols: config.columns,
+        rowClass: config.rowClass,
+        sort: state[tbodyId] && state[tbodyId].sort || (config.defaultSort || null),
+        search: state[tbodyId] && state[tbodyId].search || '',
+        visible: PAGE_SIZE
+      };
+      render(tbodyId);
+    },
+    _sort(tbodyId, colKey){
+      const s = state[tbodyId]; if (!s) return;
+      if (!s.sort || s.sort.col !== colKey) s.sort = { col: colKey, dir: 'asc' };
+      else if (s.sort.dir === 'asc')         s.sort = { col: colKey, dir: 'desc' };
+      else                                    s.sort = null;
+      render(tbodyId);
+    },
+    _search(tbodyId, q){
+      const s = state[tbodyId]; if (!s) return;
+      s.search = q; s.visible = PAGE_SIZE;
+      render(tbodyId);
+      // Restore focus to the search input (innerHTML replacement loses it)
+      const el = document.querySelector(`#${tbodyId}`)?.closest('.dt-wrap')?.querySelector('.dt-search');
+      if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+    },
+    _clear(tbodyId){
+      const s = state[tbodyId]; if (!s) return;
+      s.search = ''; s.visible = PAGE_SIZE;
+      render(tbodyId);
+      const el = document.querySelector(`#${tbodyId}`)?.closest('.dt-wrap')?.querySelector('.dt-search');
+      if (el) el.focus();
+    },
+    _loadMore(tbodyId){
+      const s = state[tbodyId]; if (!s) return;
+      s.visible += PAGE_SIZE;
+      render(tbodyId);
+    }
+  };
+})();
 
 // ── Auth ──────────────────────────────────────────────────
 async function login(){
   const e=document.getElementById('login-err');e.style.display='none';
   try{const d=await j('/api/login',{method:'POST',body:JSON.stringify({username:document.getElementById('inp-u').value,password:document.getElementById('inp-p').value})});
   T=d.token;localStorage.setItem('t',T);document.getElementById('user-lbl').textContent=d.username;
-  document.getElementById('login').style.display='none';document.getElementById('app').style.display='block';go('dash');}
+  document.getElementById('login').style.display='none';document.getElementById('app').style.display='block';
+  loadSettings();  // fire-and-forget: populates _sdata so mode-aware UI works across all tabs
+  go('dash');}
   catch(x){e.textContent='Invalid credentials';e.style.display='block'}}
 function logout(){h('/api/logout',{method:'POST'});T='';localStorage.removeItem('t');
   document.getElementById('app').style.display='none';document.getElementById('login').style.display='flex'}
 (async()=>{const t=localStorage.getItem('t');if(!t)return;try{const d=await j('/api/me');T=t;
   document.getElementById('user-lbl').textContent=d.username;document.getElementById('login').style.display='none';
-  document.getElementById('app').style.display='block';go('dash');}catch(e){localStorage.removeItem('t')}})();
+  document.getElementById('app').style.display='block';
+  loadSettings();  // fire-and-forget: populates _sdata so mode-aware UI works across all tabs
+  go('dash');}catch(e){localStorage.removeItem('t')}})();
 
 // ── Navigation ────────────────────────────────────────────
 function go(tab){
@@ -1437,20 +2216,29 @@ function toggleSidebar(){
 }
 
 // ── Dashboard ─────────────────────────────────────────────
-let _dashSelectedAuctionId = null; // null = auto (latest)
+// _dashSelectedAuctionId:
+//   null  => "All Trades" (cumulative view, default)
+//   <id>  => drilled into that specific auction
+let _dashSelectedAuctionId = null;
 async function loadStats(auctionId){
   // Allow explicit override; otherwise use the remembered selection
   if (auctionId !== undefined) _dashSelectedAuctionId = auctionId || null;
-  const url = _dashSelectedAuctionId ? `/api/stats?auction_id=${_dashSelectedAuctionId}` : '/api/stats';
+  const url = _dashSelectedAuctionId
+    ? `/api/stats?auction_id=${_dashSelectedAuctionId}`
+    : '/api/stats?auction_id=all';
   const d=await j(url);
   const K=d.kpi||{}, A=d.currentAuction, S=d.topSellers||[], I=d.recentInvoices||[], C=d.counts||{}, AA=d.allAuctions||[];
-  // Keep our remembered selection in sync with what the server actually picked
-  if (A && A.id) _dashSelectedAuctionId = A.id;
+  const CUM=d.cumulative||{qty:0,amount:0,lots:0,auctions:0};
+  const PT=d.perTradeBreakdown||[];
+  // Note: do NOT auto-sync _dashSelectedAuctionId from the server response.
+  // The server may return a currentAuction when we're in cumulative mode (for
+  // KPI calc fallbacks); we want to preserve the user's explicit selection.
 
   // Format helpers
   const inr = n => '₹'+Math.round(n||0).toLocaleString('en-IN');
   const inrL = n => { const v = (n||0)/100000; return v>=1 ? '₹'+v.toFixed(1)+'L' : inr(n); };
   const kg = n => (n||0).toFixed(0)+' kg';
+  const kgK = n => { const v = (n||0)/1000; return v>=1 ? v.toFixed(1)+'T' : Math.round(n||0)+' kg'; };
   const now = new Date();
   const hour = now.getHours();
   const greet = hour<12 ? 'Good morning' : hour<17 ? 'Good afternoon' : 'Good evening';
@@ -1464,17 +2252,38 @@ async function loadStats(auctionId){
     : revDelta>=0 ? `<span class="kpi-delta">▲ ${revDelta}% vs last month</span>`
     : `<span class="kpi-delta down">▼ ${Math.abs(revDelta)}% vs last month</span>`;
 
-  // Build auction picker (shows all auctions so user can switch)
-  const pickerOptions = AA.map(a=>{
-    const sel = (A && a.id === A.id) ? ' selected' : '';
-    return `<option value="${a.id}"${sel}>Trade #${esc(a.ano)} — ${fmtD(a.date)}</option>`;
-  }).join('');
-  const picker = AA.length > 1
-    ? `<select onchange="loadStats(parseInt(this.value))" style="background:rgba(255,255,255,.85);border:1px solid rgba(47,122,77,.25);border-radius:8px;padding:6px 10px;font-size:13px;font-weight:600;color:var(--spice-cardamom-dk);cursor:pointer;font-family:inherit">${pickerOptions}</select>`
-    : '';
+  // Build auction picker — includes "All Trades" as default option
+  const isAllMode = !_dashSelectedAuctionId;
+  const allSel = isAllMode ? ' selected' : '';
+  const pickerOptions =
+    `<option value="all"${allSel}>All Trades (Cumulative)</option>` +
+    AA.map(a=>{
+      const sel = (!isAllMode && a.id === _dashSelectedAuctionId) ? ' selected' : '';
+      return `<option value="${a.id}"${sel}>Trade #${esc(a.ano)} — ${fmtD(a.date)}</option>`;
+    }).join('');
+  const picker = `<select onchange="loadStats(this.value === 'all' ? null : parseInt(this.value))" style="background:rgba(255,255,255,.85);border:1px solid rgba(22,101,52,.25);border-radius:8px;padding:6px 10px;font-size:13px;font-weight:600;color:var(--spice-cardamom-dk);cursor:pointer;font-family:inherit">${pickerOptions}</select>`;
 
-  // Auction progress — cardamom green fill ("done"), white remainder
-  const aHTML = A ? `
+  // Hero card: "All Trades" cumulative view in default/cumulative mode,
+  // otherwise the drilled-in current-auction view.
+  const aHTML = isAllMode ? `
+    <div class="auction-hero" style="background:var(--spice-cardamom-lt);color:var(--spice-text-main)">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:6px">
+        <div class="auction-hero-label" style="color:var(--spice-cardamom-dk);opacity:.85">All Trades · Cumulative</div>
+        ${picker}
+      </div>
+      <div class="auction-hero-number" style="color:var(--spice-cardamom-dk)">${CUM.auctions||0} Trade${CUM.auctions===1?'':'s'}</div>
+      <div class="auction-hero-date" style="color:var(--spice-text-mute);opacity:1">Lifetime totals across every auction</div>
+      <div class="auction-hero-stats">
+        <div class="hero-stat" style="color:var(--spice-text-mute);opacity:1"><strong style="color:var(--spice-text-main)">${CUM.lots||0}</strong>Total Lots</div>
+        <div class="hero-stat" style="color:var(--spice-text-mute);opacity:1"><strong style="color:var(--spice-text-main)">${kgK(CUM.qty)}</strong>Total Qty</div>
+        <div class="hero-stat" style="color:var(--spice-text-mute);opacity:1"><strong style="color:var(--spice-text-main)">${inrL(CUM.amount)}</strong>Total Volume</div>
+        <div class="hero-stat" style="color:var(--spice-text-mute);opacity:1"><strong style="color:var(--spice-text-main)">${CUM.auctions?inrL((CUM.amount||0)/CUM.auctions).replace('₹','₹'):'—'}</strong>Avg / Trade</div>
+      </div>
+      <div style="font-size:12px;color:var(--spice-text-mute);opacity:.9;border-top:1px solid rgba(22,101,52,.15);padding-top:10px;margin-top:4px">
+        💡 Select a specific trade above to drill into its details
+      </div>
+    </div>
+  ` : (A ? `
     <div class="auction-hero" style="background:var(--spice-cardamom-lt);color:var(--spice-text-main)">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:6px">
         <div class="auction-hero-label" style="color:var(--spice-cardamom-dk);opacity:.85">Current Auction</div>
@@ -1488,7 +2297,7 @@ async function loadStats(auctionId){
         <div class="hero-stat" style="color:var(--spice-text-mute);opacity:1"><strong style="color:var(--spice-text-main)">${A.invoiced||0}</strong>Invoiced</div>
         <div class="hero-stat" style="color:var(--spice-text-mute);opacity:1"><strong style="color:var(--spice-text-main)">${inrL(A.totalAmt)}</strong>Volume</div>
       </div>
-      <div style="height:10px;background:#ffffff;border:1px solid rgba(47,122,77,.18);border-radius:999px;overflow:hidden;margin-bottom:8px">
+      <div style="height:10px;background:#ffffff;border:1px solid rgba(22,101,52,.18);border-radius:999px;overflow:hidden;margin-bottom:8px">
         <div style="height:100%;background:var(--spice-cardamom);width:${A.totalLots?Math.round(A.invoiced/A.totalLots*100):0}%;border-radius:999px;transition:width .6s ease-out"></div>
       </div>
       <div class="progress-label" style="color:var(--spice-text-mute);opacity:1">
@@ -1497,13 +2306,68 @@ async function loadStats(auctionId){
       </div>
     </div>
   ` : `
-    <div class="auction-hero" style="background:#EDE6D6;color:var(--spice-text-main)">
+    <div class="auction-hero" style="background:var(--tab-bg);color:var(--spice-text-main)">
       <div class="auction-hero-label" style="color:var(--spice-text-mute)">No active auction</div>
       <div class="auction-hero-number" style="color:var(--spice-text-main);font-size:22px">Create your first auction</div>
       <div class="auction-hero-date" style="color:var(--spice-text-mute);opacity:1">Head to the Auctions tab to get started.</div>
       <button class="btn btn-a" onclick="go('auctions')" style="margin-top:8px">+ New Auction</button>
     </div>
-  `;
+  `);
+
+  // Per-trade breakdown table (shown only in All-Trades mode, below the hero row)
+  const ptHTML = isAllMode && PT.length ? `
+    <div class="card" style="padding:0;margin-bottom:20px">
+      <div style="padding:18px 22px 12px;border-bottom:1px solid var(--spice-line);display:flex;justify-content:space-between;align-items:center">
+        <h2 style="font-size:17px;font-weight:700;margin:0;color:var(--spice-text-main)">Per-Trade Breakdown</h2>
+        <span style="font-size:12px;color:var(--spice-text-hint)">${PT.length} trade${PT.length===1?'':'s'} · click a row to drill in</span>
+      </div>
+      <div style="padding:0 4px;overflow-x:auto">
+        <table style="width:100%">
+          <thead>
+            <tr>
+              <th>Trade</th>
+              <th>Date</th>
+              <th>Crop</th>
+              <th class="num">Lots</th>
+              <th class="num">Qty</th>
+              <th class="num">Amount</th>
+              <th class="num">Invoiced</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${PT.map(t=>{
+              const pct = t.lots ? Math.round((t.invoiced||0)/t.lots*100) : 0;
+              return `<tr style="cursor:pointer" onclick="loadStats(${t.id})">
+                <td><strong>#${esc(t.ano)}</strong></td>
+                <td style="color:var(--spice-text-mute)">${fmtD(t.date)}</td>
+                <td>${esc(t.crop_type||'—')}</td>
+                <td class="num">${t.lots||0}</td>
+                <td class="num">${kg(t.qty)}</td>
+                <td class="num"><strong>${inrL(t.amount)}</strong></td>
+                <td class="num">
+                  <span style="display:inline-flex;align-items:center;gap:6px">
+                    <span style="width:40px;height:6px;background:var(--spice-line);border-radius:999px;overflow:hidden;display:inline-block">
+                      <span style="display:block;height:100%;width:${pct}%;background:var(--spice-cardamom);border-radius:999px"></span>
+                    </span>
+                    <span style="font-size:12px;color:var(--spice-text-mute);min-width:34px">${pct}%</span>
+                  </span>
+                </td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+          <tfoot>
+            <tr style="background:var(--spice-cardamom-lt);font-weight:700">
+              <td colspan="3" style="padding:12px 22px">Totals</td>
+              <td class="num">${CUM.lots||0}</td>
+              <td class="num">${kg(CUM.qty)}</td>
+              <td class="num">${inrL(CUM.amount)}</td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  ` : '';
 
   const sellersHTML = S.length ? S.map((s,i)=>{
     const max = S[0].amount || 1;
@@ -1562,21 +2426,31 @@ async function loadStats(auctionId){
     <div class="kpi-grid">
       <div class="kpi">
         <div class="kpi-icon"><svg viewBox="0 0 24 24"><path d="M3 3v18h18M8 13v5M13 9v9M18 6v12"/></svg></div>
-        <div class="kpi-label">Today's Trade</div>
-        <div class="kpi-value">${K.todayQty?kg(K.todayQty).replace(' kg',''):'0'}<span class="kpi-unit">kg</span></div>
-        <span class="kpi-delta neutral">Current auction</span>
+        <div class="kpi-label">${isAllMode ? 'Total Volume' : 'Trade Volume'}</div>
+        <div class="kpi-value">${isAllMode
+          ? inrL(CUM.amount).replace('₹','').replace('L','')
+          : inrL(A ? A.totalAmt : 0).replace('₹','').replace('L','')}<span class="kpi-unit">${isAllMode
+            ? ((CUM.amount||0)>=100000?'L':'')
+            : (((A && A.totalAmt)||0)>=100000?'L':'')}</span></div>
+        <span class="kpi-delta neutral">${isAllMode
+          ? `${CUM.auctions||0} trade${CUM.auctions===1?'':'s'}`
+          : (A ? `${kg(A.totalQty)} traded` : 'No auction')}</span>
       </div>
       <div class="kpi cardamom">
         <div class="kpi-icon"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 12l2 2 4-4"/></svg></div>
-        <div class="kpi-label">Active Lots</div>
-        <div class="kpi-value">${K.activeLots||0}</div>
-        <span class="kpi-delta neutral">${C.lots||0} total lots</span>
+        <div class="kpi-label">${isAllMode ? 'Total Lots' : 'Active Lots'}</div>
+        <div class="kpi-value">${isAllMode ? (CUM.lots||0) : (K.activeLots||0)}</div>
+        <span class="kpi-delta neutral">${isAllMode
+          ? `across all trades`
+          : `${C.lots||0} total lots`}</span>
       </div>
       <div class="kpi turmeric">
         <div class="kpi-icon"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg></div>
         <div class="kpi-label">Pending Invoices</div>
         <div class="kpi-value">${K.pendingInvoices||0}</div>
-        <span class="kpi-delta ${K.pendingInvoices>0?'down':'neutral'}">${K.pendingInvoices>0?'Buyers awaiting':'All clear'}</span>
+        <span class="kpi-delta ${K.pendingInvoices>0?'down':'neutral'}">${K.pendingInvoices>0
+          ? (isAllMode ? 'Across all trades' : 'Buyers awaiting')
+          : 'All clear'}</span>
       </div>
       <div class="kpi chili">
         <div class="kpi-icon"><svg viewBox="0 0 24 24"><path d="M12 2l3 7h7l-5.5 4 2 7L12 16l-6.5 4 2-7L2 9h7z"/></svg></div>
@@ -1619,6 +2493,8 @@ async function loadStats(auctionId){
       </div>
     </div>
 
+    ${ptHTML}
+
     <div class="dash-row-eq">
       <div class="card" style="padding:0">
         <div style="padding:18px 22px 12px;border-bottom:1px solid var(--spice-line);display:flex;justify-content:space-between;align-items:center">
@@ -1645,24 +2521,26 @@ async function loadUsers(){
   // Load users list
   try{
     const users = await j('/api/users');
-    document.getElementById('users-list').innerHTML = users.map(u => {
-      const lastActive = u.last_active ? fmtD(u.last_active.substring(0,10)) : '—';
-      const isMe = u.username === uname;
-      const sessionBadge = u.active_sessions>0
-        ? `<span class="pill pill-local"><span class="pill-dot"></span>${u.active_sessions} online</span>`
-        : `<span class="pill" style="background:#EDE6D6;color:var(--spice-text-mute)"><span class="pill-dot"></span>signed out</span>`;
-      return `<tr>
-        <td><strong>${esc(u.username)}</strong>${isMe?' <span style="font-size:11px;color:var(--spice-saffron);font-weight:600">(you)</span>':''}</td>
-        <td><span class="pill pill-warn">${esc(u.role)}</span></td>
-        <td>${sessionBadge}</td>
-        <td>${lastActive}</td>
-        <td>${u.created_at ? fmtD(u.created_at.substring(0,10)) : '—'}</td>
-        <td style="white-space:nowrap">
-          <button class="btn btn-o" style="height:32px;font-size:12px;padding:0 10px" onclick="openResetPwModal(${u.id},'${esc(u.username)}')">Reset PW</button>
-          ${isMe ? '' : `<button class="btn btn-r" style="height:32px;font-size:12px;padding:0 10px;margin-left:4px" onclick="deleteUser(${u.id},'${esc(u.username)}')">Delete</button>`}
-        </td>
-      </tr>`;
-    }).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--spice-text-hint);padding:20px">No users</td></tr>';
+    DataTable.mount('users-list', users, {
+      columns: [
+        { key:'username', label:'Username', sort:'text', render:(u)=>{
+            const isMe = u.username === uname;
+            return `<strong>${esc(u.username)}</strong>${isMe?' <span style="font-size:11px;color:var(--spice-saffron);font-weight:600">(you)</span>':''}`;
+          } },
+        { key:'role', label:'Role', sort:'text', render:(u)=>`<span class="pill pill-warn">${esc(u.role)}</span>` },
+        { key:'active_sessions', label:'Status', sort:'number', render:(u)=>
+            u.active_sessions>0
+              ? `<span class="pill pill-local"><span class="pill-dot"></span>${u.active_sessions} online</span>`
+              : `<span class="pill" style="background:var(--tab-bg);color:var(--spice-text-mute)"><span class="pill-dot"></span>signed out</span>` },
+        { key:'last_active', label:'Last Active', sort:'date', render:(u)=>u.last_active?fmtD(u.last_active.substring(0,10)):'—' },
+        { key:'created_at',  label:'Created', sort:'date', render:(u)=>u.created_at?fmtD(u.created_at.substring(0,10)):'—' },
+        { key:'_actions', label:'Actions', sortable:false, searchable:false, render:(u)=>{
+            const isMe = u.username === uname;
+            return `<button class="btn btn-o" style="height:32px;font-size:12px;padding:0 10px" onclick="openResetPwModal(${u.id},'${esc(u.username)}')">Reset PW</button>`
+              + (isMe ? '' : ` <button class="btn btn-r" style="height:32px;font-size:12px;padding:0 10px;margin-left:4px" onclick="deleteUser(${u.id},'${esc(u.username)}')">Delete</button>`);
+          } }
+      ]
+    });
   }catch(e){
     document.getElementById('users-list').innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--spice-chili);padding:20px">Failed to load users: ${esc(e.message)}</td></tr>`;
   }
@@ -1708,7 +2586,7 @@ async function createUser(){
     toast(`User "${username}" created`);
     hideModal('add-user-modal');
     loadUsers();
-  }catch(e){alert('Failed: '+e.message)}
+  }catch(e){showError(e)}
 }
 function openResetPwModal(id,username){
   document.getElementById('reset-pw-id').value=id;
@@ -1726,7 +2604,7 @@ async function doResetPassword(){
     toast('Password reset — user must sign in again');
     hideModal('reset-pw-modal');
     loadUsers();
-  }catch(e){alert('Failed: '+e.message)}
+  }catch(e){showError(e)}
 }
 async function deleteUser(id,username){
   if(!confirm(`Delete user "${username}"?\n\nThey will be immediately signed out from all devices and their login will stop working.\n\nContinue?`))return;
@@ -1734,7 +2612,7 @@ async function deleteUser(id,username){
     await j(`/api/users/${id}`,{method:'DELETE'});
     toast(`User "${username}" deleted`);
     loadUsers();
-  }catch(e){alert('Failed: '+e.message)}
+  }catch(e){showError(e)}
 }
 async function revokeSession(tokenSuffix){
   if(!confirm('Revoke this session? The device will be signed out on its next request.'))return;
@@ -1742,7 +2620,7 @@ async function revokeSession(tokenSuffix){
     await j(`/api/me/sessions/${tokenSuffix}`,{method:'DELETE'});
     toast('Session revoked');
     loadUsers();
-  }catch(e){alert('Failed: '+e.message)}
+  }catch(e){showError(e)}
 }
 async function changeMyPassword(){
   const cur=document.getElementById('pw-cur').value;
@@ -1758,7 +2636,7 @@ async function changeMyPassword(){
     document.getElementById('pw-new').value='';
     document.getElementById('pw-conf').value='';
     loadUsers();
-  }catch(e){alert('Failed: '+e.message)}
+  }catch(e){showError(e)}
 }
 
 // ── Settings ──────────────────────────────────────────────
@@ -1769,6 +2647,9 @@ async function loadSettings(){
   try{
     const d=await j('/api/company-settings');
     _cats=d.categories||{};_sdata=d.settings||{};
+    // Company and Sister Company fields are edited INDEPENDENTLY in Settings.
+    // No mutation on load — at read time (invoices, exports, PDFs),
+    // effectiveCompany() picks the right set based on state + mode.
     renderSettingsNav();
     // Open first category by default
     const firstKey=Object.keys(_cats).sort((a,b)=>_cats[a].order-_cats[b].order).find(k=>(_sdata[k]||[]).length);
@@ -1788,6 +2669,74 @@ async function loadSettings(){
     throw err; // re-throw so go()'s error handler toasts it
   }
 }
+
+// ── Business-mode gating ──────────────────────────────────
+// Fields/categories that should appear only in specific modes.
+// When mode = e-Auction: hide sister company (no sister in auction mode)
+//                         hide pooler/dealer deductions, ASP/ISP profit, sample refund
+// When mode = e-Trade:   hide commission, handling, SB sample refund
+const _MODE_HIDE_CATS = { 'e-Auction': ['sister'], 'e-Trade': [] };
+const _MODE_HIDE_KEYS = {
+  'e-Auction': ['deduction1','deduction2','asp_profit','isp_profit','refund'],
+  'e-Trade':   ['commission','hpc','sb_refund']
+};
+
+function getCurrentBusinessMode(){
+  // Prefer the live select value if mode panel is on-screen
+  const liveSel = document.querySelector('select[data-key="business_mode"]');
+  if (liveSel) return liveSel.value;
+  // Fall back to saved state
+  const modeFields = _sdata.mode || [];
+  const f = modeFields.find(x => x.key === 'business_mode');
+  return f ? f.value : 'e-Trade';
+}
+
+function getCurrentBusinessState(){
+  const liveSel = document.querySelector('select[data-key="business_state"]');
+  if (liveSel) return liveSel.value;
+  const modeFields = _sdata.mode || [];
+  const f = modeFields.find(x => x.key === 'business_state');
+  return f ? f.value : 'TAMIL NADU';
+}
+
+function isCategoryHiddenByMode(catKey){
+  const m = getCurrentBusinessMode();
+  return (_MODE_HIDE_CATS[m] || []).includes(catKey);
+}
+
+function isFieldHiddenByMode(fieldKey){
+  const m = getCurrentBusinessMode();
+  return (_MODE_HIDE_KEYS[m] || []).includes(fieldKey);
+}
+
+// ── Business state → Logo/Company auto-switch ─────────────
+// TN  → ISP (primary company.*  + address_tn.*)
+// KL  → ASP (sister.* values copied to company.* fields, address_kl becomes active)
+// This updates the in-memory _sdata so the user sees the change immediately;
+// the values persist on Save like any other edit.
+// On state change:
+//   1. Persist business_state to server (live — no Save click needed)
+//   2. Mutate the Company category fields so Settings UI shows the right values
+//      (ISP for TN, ASP for KL). First switch snapshots the original ISP values
+//      so switching back restores them exactly.
+//
+// Note: PDFs don't rely on this mutation — they use effectiveCompany(cfg) which
+// reads from the correct backing keys directly. So even if the user refreshes
+// mid-switch, PDFs stay correct.
+async function applyStateToCompanyProfile(state){
+  // 1. Persist the state change to the server (live)
+  try {
+    await j('/api/company-settings', {
+      method: 'PUT',
+      body: JSON.stringify({ settings: { business_state: state } })
+    });
+  } catch (e) {
+    console.error('Failed to persist state change:', e);
+  }
+  // No mutation — Company and Sister fields are edited independently.
+  // PDFs and exports pick the right set at read time via effectiveCompany().
+}
+
 function renderSettingsNav(){
   const keys=Object.keys(_cats).sort((a,b)=>_cats[a].order-_cats[b].order);
   const q=_setFilter.toLowerCase().trim();
@@ -1795,10 +2744,13 @@ function renderSettingsNav(){
   for(const ck of keys){
     const cat=_cats[ck],fields=_sdata[ck]||[];
     if(!fields.length)continue;
-    // When searching, count matching fields
-    let count=fields.length;
+    // Hide entire categories that don't apply to the current business mode
+    if(isCategoryHiddenByMode(ck))continue;
+    // When searching, count matching fields (skip mode-hidden fields in the count)
+    const visibleFields = fields.filter(f => !isFieldHiddenByMode(f.key));
+    let count=visibleFields.length;
     if(q){
-      const matches=fields.filter(f=>(f.label||'').toLowerCase().includes(q)||(f.key||'').toLowerCase().includes(q));
+      const matches=visibleFields.filter(f=>(f.label||'').toLowerCase().includes(q)||(f.key||'').toLowerCase().includes(q));
       count=matches.length;
       if(!count)continue;
     }
@@ -1835,10 +2787,14 @@ function captureCurrentPanel(){
 function renderSettingsPanel(){
   const ck=_activeCat;
   if(!ck||!_cats[ck]){document.getElementById('settings-root').innerHTML='<div class="set-no-match">Select a category</div>';return}
+  // If user lands on a mode-hidden category (via deep link or stale state), redirect to 'mode'
+  if(isCategoryHiddenByMode(ck)){ _activeCat='mode'; renderSettingsNav(); return renderSettingsPanel(); }
   const cat=_cats[ck];
   document.getElementById('set-panel-title').textContent=`${cat.icon||''} ${cat.title}`;
   document.getElementById('set-panel-desc').textContent=cat.description||'';
   let fields=_sdata[ck]||[];
+  // Filter out individual fields hidden by current business mode
+  fields = fields.filter(f => !isFieldHiddenByMode(f.key));
   const q=_setFilter.toLowerCase().trim();
   if(q)fields=fields.filter(f=>(f.label||'').toLowerCase().includes(q)||(f.key||'').toLowerCase().includes(q));
   if(!fields.length){document.getElementById('settings-root').innerHTML='<div class="set-no-match">No matching settings</div>';return}
@@ -1848,7 +2804,7 @@ function renderSettingsPanel(){
     html+='<div class="bgrid" style="gap:2px 18px">';
     for(const f of fields){
       const ck2=(f.value==='true')?'checked':'';
-      html+=`<div class="flag-row"><label>${esc(f.label)}</label><label class="sw"><input type="checkbox" data-key="${f.key}" data-type="boolean" ${ck2}><span class="sl"></span></label></div>`;
+      html+=`<div class="flag-row"><label>${esc(f.label)}${FIELD_HELP[f.key]?helpTip(FIELD_HELP[f.key]):''}</label><label class="sw"><input type="checkbox" data-key="${f.key}" data-type="boolean" ${ck2}><span class="sl"></span></label></div>`;
     }
     html+='</div>';
   }else if(ck==='branches'){
@@ -1859,21 +2815,155 @@ function renderSettingsPanel(){
   }else if(ck==='mode'){
     html+='<div class="sgrid">';
     for(const f of fields){
-      if(f.key==='business_mode')html+=`<div class="fg"><label>${f.label}</label><select data-key="${f.key}"><option${f.value==='e-Trade'?' selected':''}>e-Trade</option><option${f.value==='e-Auction'?' selected':''}>e-Auction</option></select></div>`;
-      else if(f.key==='business_state')html+=`<div class="fg"><label>${f.label}</label><select data-key="${f.key}"><option${f.value==='TAMIL NADU'?' selected':''}>TAMIL NADU</option><option${f.value==='KERALA'?' selected':''}>KERALA</option></select></div>`;
+      if(f.key==='business_mode')html+=`<div class="fg"><label>${f.label}${helpTip(FIELD_HELP.business_mode)}</label><select data-key="${f.key}" onchange="onBusinessModeChanged(this.value)"><option${f.value==='e-Trade'?' selected':''}>e-Trade</option><option${f.value==='e-Auction'?' selected':''}>e-Auction</option></select></div>`;
+      else if(f.key==='business_state')html+=`<div class="fg"><label>${f.label}${helpTip(FIELD_HELP.business_state)}</label><select data-key="${f.key}" onchange="onBusinessStateChanged(this.value)"><option${f.value==='TAMIL NADU'?' selected':''}>TAMIL NADU</option><option${f.value==='KERALA'?' selected':''}>KERALA</option></select></div>`;
       else html+=fld(f);
     }
     html+='</div>';
   }else{
+    // Company and Sister Company categories get a logo upload widget on top
+    if (ck === 'company') {
+      html += logoUploadWidget('ispl', 'Company Logo (ISPL)');
+    } else if (ck === 'sister') {
+      html += logoUploadWidget('asp', 'Sister Company Logo (ASP)');
+    }
     html+='<div class="sgrid">';
     for(const f of fields)html+=fld(f);
     html+='</div>';
   }
   document.getElementById('settings-root').innerHTML=html;
+  // After DOM paint, fetch existing logo status for preview
+  if (ck === 'company') refreshLogoPreview('ispl');
+  else if (ck === 'sister') refreshLogoPreview('asp');
+}
+
+// ── Logo upload widget ──────────────────────────────────────
+// Renders a small card with a file input + preview + delete button.
+// The actual preview is loaded async via refreshLogoPreview() after render.
+function logoUploadWidget(which, label) {
+  return `
+    <div class="card" style="padding:12px;margin-bottom:16px;background:var(--spice-cream);border:1px dashed var(--border)">
+      <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+        <div style="flex-shrink:0;width:80px;height:80px;display:flex;align-items:center;justify-content:center;background:#fff;border:1px solid var(--border);border-radius:8px;overflow:hidden" id="logo-preview-${which}">
+          <span style="color:var(--text3);font-size:11px">No logo</span>
+        </div>
+        <div style="flex:1;min-width:180px">
+          <div style="font-weight:600;font-size:13px;margin-bottom:4px">${esc(label)}</div>
+          <div style="font-size:11px;color:var(--text2);margin-bottom:8px">PNG or JPG, appears on generated invoices. Recommended: 200×200px.</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <label class="btn btn-a" style="cursor:pointer;font-size:12px;padding:5px 10px;margin:0">
+              Upload
+              <input type="file" accept="image/png,image/jpeg" style="display:none" onchange="uploadLogo('${which}', this)">
+            </label>
+            <button class="btn btn-o" style="font-size:12px;padding:5px 10px" onclick="deleteLogo('${which}')">Remove</button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+// Fetch and display the current logo (or 'No logo' if none)
+async function refreshLogoPreview(which) {
+  const preview = document.getElementById('logo-preview-' + which);
+  if (!preview) return;
+  try {
+    const d = await j(`/api/company-settings/logo/${which}`);
+    if (d.exists) {
+      // Cache-buster: ?t= based on mtime so fresh uploads show immediately
+      const ts = new Date(d.mtime).getTime();
+      preview.innerHTML = `<img src="/logo-${which}.png?t=${ts}" style="max-width:100%;max-height:100%;object-fit:contain">`;
+    } else {
+      preview.innerHTML = '<span style="color:var(--text3);font-size:11px">No logo</span>';
+    }
+  } catch (e) { /* ignore */ }
+}
+
+async function uploadLogo(which, inputEl) {
+  const file = inputEl.files && inputEl.files[0];
+  if (!file) return;
+  if (file.size > 5 * 1024 * 1024) {
+    showError('Logo file too large (max 5MB)');
+    return;
+  }
+  const btn = inputEl.parentElement;
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    await withOverlay('Uploading logo…', async () => {
+      const r = await fetch(B + `/api/company-settings/logo/${which}`, {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + T },
+        body: fd,
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Upload failed');
+      toast('Logo uploaded ✓');
+      await refreshLogoPreview(which);
+    });
+  } catch (e) {
+    showError(e);
+  } finally {
+    inputEl.value = '';
+  }
+}
+
+async function deleteLogo(which) {
+  if (!confirm('Remove this logo?')) return;
+  try {
+    await j(`/api/company-settings/logo/${which}`, { method: 'DELETE' });
+    toast('Logo removed');
+    await refreshLogoPreview(which);
+  } catch (e) { showError(e); }
+}
+
+// Triggered when the Business Mode dropdown changes
+function onBusinessModeChanged(newMode){
+  // Persist the change into _sdata immediately (so helpers read the new value)
+  const f = (_sdata.mode||[]).find(x => x.key === 'business_mode');
+  if (f) f.value = newMode;
+  // Re-render nav + panel: categories/fields appear or disappear based on mode
+  renderSettingsNav();
+  renderSettingsPanel();
+  toast(`Mode: ${newMode}`);
+}
+
+// Triggered when the Business State dropdown changes
+async function onBusinessStateChanged(newState){
+  const f = (_sdata.mode||[]).find(x => x.key === 'business_state');
+  if (f) f.value = newState;
+  // Persist state change to server LIVE — all downstream reads (PDFs,
+  // invoice headers) now use the right TN/ISP or KL/ASP data set
+  await applyStateToCompanyProfile(newState);
+  // If the user is currently viewing the Company tab, re-render so they see the new values
+  if (_activeCat === 'company' || _activeCat === 'mode') renderSettingsPanel();
+  toast(`State: ${newState} · Logo: ${newState==='TAMIL NADU'?'ISP':'ASP'}`);
 }
 function renderSettings(){renderSettingsNav();renderSettingsPanel()}
-function fld(f){const t=f.field_type==='number'?'number':f.field_type==='date'?'date':'text';
-  return`<div class="fg"><label>${esc(f.label)}</label><input type="${t}" data-key="${f.key}" value="${esc(f.value)}"${t==='number'?' step="any"':''}></div>`}
+// ── Settings field help text ───────────────────────────
+// Shown as a ? tooltip next to the label. Keep concise (1-2 lines).
+const FIELD_HELP = {
+  commission:      'In e-Auction mode, the percentage commission charged on (Amount + Refund). Default 1%.',
+  hpc:             'Handling percentage applied on the commission. e.g. 10% means Handling = Commission × 10%.',
+  deduction1:      'In e-Trade mode, the % reduction applied to the lot price for grade 1 (Pooler). P_Rate = Price × (1 − Deduction%).',
+  deduction2:      'In e-Trade mode, the % reduction applied for grade 2 (Dealer).',
+  asp_profit:      'Profit ratio retained by ASP (sister company) on each lot. Used in e-Trade profit-sharing calculations.',
+  isp_profit:      'Profit ratio retained by ISP (main company) on each lot. Used in e-Trade profit-sharing calculations.',
+  refund:          'Sample quantity (in kilograms) added to the lot qty in e-Trade mode to compute P_Qty. P_Qty = Qty + Sample Refund.',
+  sb_refund:       'SB (Sample Bag) refund in kilograms, multiplied by Price to compute the Refund amount in e-Auction mode.',
+  gst_goods:       'GST rate applied on goods (e.g. spices). Split equally into CGST + SGST for intra-state, or IGST for inter-state. Default 5%.',
+  gst_service:     'GST rate applied on services (commission, handling, discount). Default 18%.',
+  discount_pct:    'Trade credit discount percentage per 1000 rupees per day. Discount = round(PurAmt/1000 × days × %).',
+  discount_days:   'Number of days the trade credit is extended. Multiplied with Discount % to compute the Discount amount.',
+  flag_disc_gst:   'When ON, GST is charged on top of the Discount amount (using the service rate) and subtracted from the Payable.',
+  business_mode:   'e-Trade: grade-based deduction + discount workflow. e-Auction: commission + handling + sample refund workflow.',
+  business_state:  'Tamil Nadu uses ISP logo + TN office details. Kerala uses ASP logo + KL office details. Invoices adapt automatically.',
+  tcs_tds:         'TDS / TCS percentage applied on eligible invoices for tax compliance.',
+};
+function fld(f){
+  const t = f.field_type === 'number' ? 'number' : f.field_type === 'date' ? 'date' : 'text';
+  const tip = FIELD_HELP[f.key] ? helpTip(FIELD_HELP[f.key]) : '';
+  return `<div class="fg"><label>${esc(f.label)}${tip}</label><input type="${t}" data-key="${f.key}" value="${esc(f.value)}"${t==='number'?' step="any"':''}></div>`;
+}
 async function saveSettings(){
   // Capture what's currently on-screen, then flatten ALL categories
   captureCurrentPanel();
@@ -1895,21 +2985,29 @@ const T_IDS={name:'t-name',cr:'t-cr',pan:'t-pan',tel:'t-tel',aadhar:'t-aadhar',p
   pstate:'t-pstate',pst_code:'t-pstcode',pin:'t-pin',acctnum:'t-acctnum',ifsc:'t-ifsc',holder_name:'t-holder'};
 
 async function searchTraders(q){const d=await j(`/api/traders?search=${encodeURIComponent(q)}&limit=100`);
-  document.getElementById('traders-list').innerHTML=d.map(t=>{
-    const placeState=[t.ppla,t.pstate].filter(Boolean).join(' · ');
-    const bankShort=t.ifsc?`${esc(t.ifsc)}${t.acctnum?' ·· '+String(t.acctnum).slice(-4):''}`:'<span style="color:var(--text3)">—</span>';
-    return `<tr>
-      <td><a href="#" onclick="viewTraderDetails(${JSON.stringify(t).replace(/"/g,'&quot;')});return false" style="color:var(--green);font-weight:600;text-decoration:none">${esc(t.name)}</a></td>
-      <td style="font-size:11px">${esc(t.cr)}</td>
-      <td>${esc(t.pan)}</td>
-      <td>${esc(t.tel)}</td>
-      <td style="font-size:12px">${esc(placeState)||'<span style=\"color:var(--text3)\">—</span>'}</td>
-      <td style="font-size:11px;font-family:monospace">${bankShort}</td>
-      <td style="white-space:nowrap">
-        ${iconBtn('view','View details',`viewTraderDetails(${JSON.stringify(t).replace(/"/g,'&quot;')})`)}
-        ${iconBtn('edit','Edit seller',`openTraderEdit(${JSON.stringify(t).replace(/"/g,'&quot;')})`)}
-        ${iconBtn('del','Delete seller',`delTrader(${t.id})`)}
-      </td></tr>`}).join('')}
+  DataTable.mount('traders-list', d, {
+    columns: [
+      { key:'name', label:'Name', sort:'text', render:(t)=>
+          `<a href="#" onclick="viewTraderDetails(${JSON.stringify(t).replace(/"/g,'&quot;')});return false" style="color:var(--green);font-weight:600;text-decoration:none">${esc(t.name)}</a>` },
+      { key:'cr', label:'CR/GSTIN', sort:'text', tdClass:'small' },
+      { key:'pan', label:'PAN', sort:'text' },
+      { key:'tel', label:'Phone', sort:'text' },
+      { key:'_place', label:'Place · State', sort:'text',
+        value:(t)=>[t.ppla,t.pstate].filter(Boolean).join(' · '),
+        render:(t)=>{
+          const ps = [t.ppla,t.pstate].filter(Boolean).join(' · ');
+          return ps ? esc(ps) : '<span style="color:var(--text3)">—</span>';
+        } },
+      { key:'_bank', label:'Bank', sort:'text',
+        value:(t)=>t.ifsc||'',
+        render:(t)=>t.ifsc?`${esc(t.ifsc)}${t.acctnum?' ·· '+String(t.acctnum).slice(-4):''}`:'<span style="color:var(--text3)">—</span>' },
+      { key:'_actions', label:'Actions', sortable:false, searchable:false, render:(t)=>
+          iconBtn('view','View details',`viewTraderDetails(${JSON.stringify(t).replace(/"/g,'&quot;')})`)
+          + iconBtn('edit','Edit seller',`openTraderEdit(${JSON.stringify(t).replace(/"/g,'&quot;')})`)
+          + iconBtn('del','Delete seller',`delTrader(${t.id})`) }
+    ]
+  });
+}
 
 function viewTraderDetails(t){
   const kv=(k,v)=>v?`<tr><td style="padding:6px 10px;color:var(--text2);font-size:12px;width:40%">${k}</td><td style="padding:6px 10px;font-size:13px">${esc(v)}</td></tr>`:'';
@@ -1947,7 +3045,7 @@ async function saveTrader(){
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+T},body:JSON.stringify(body)});
     if(!r.ok){const d=await r.json();throw new Error(d.error||'Save failed')}
     hideModal('trader-modal');toast(id?'Seller updated':'Seller added');searchTraders('');
-  }catch(e){alert('Error: '+e.message)}
+  }catch(e){showError(e)}
 }
 async function delTrader(id){if(!confirm('Delete?'))return;await j(`/api/traders/${id}`,{method:'DELETE'});searchTraders('')}
 
@@ -1991,7 +3089,7 @@ async function deleteAll(resource,label){
     else if(resource==='purchases')loadPurchases&&loadPurchases();
     else if(resource==='bills')loadBills&&loadBills();
     else if(resource==='debit-notes')loadDebitNotes&&loadDebitNotes();
-  }catch(e){alert('Error: '+e.message)}
+  }catch(e){showError(e)}
 }
 
 // ── GST Portal Lookup (Item 4) ───────────────────────────
@@ -2059,12 +3157,12 @@ async function gstLookup(prefix){
           // Focus the gst_api_key input if present
           setTimeout(()=>{
             const el=document.querySelector('[data-key="gst_api_key"]');
-            if(el){el.focus();el.scrollIntoView({behavior:'smooth',block:'center'});el.style.boxShadow='0 0 0 3px rgba(232,119,34,.35)';setTimeout(()=>el.style.boxShadow='',2000)}
+            if(el){el.focus();el.scrollIntoView({behavior:'smooth',block:'center'});el.style.boxShadow='0 0 0 3px rgba(16,185,129,.32)';setTimeout(()=>el.style.boxShadow='',2000)}
           },250);
         },200);
       }
     }
-  }catch(e){alert('Lookup failed: '+e.message)}
+  }catch(e){showError(e)}
   finally{gstinEl.disabled=false}
 }
 
@@ -2076,25 +3174,30 @@ const B_IDS={buyer:'b-buyer',buyer1:'b-buyer1',code:'b-code',sbl:'b-sbl',add1:'b
   cbuyer1:'b-cbuyer1',cadd1:'b-cadd1',cadd2:'b-cadd2',cpla:'b-cpla',cpin:'b-cpin',cstate:'b-cstate',cst_code:'b-cstcode',cgstin:'b-cgstin'};
 
 async function searchBuyers(q){const d=await j(`/api/buyers?search=${encodeURIComponent(q)}`);
-  document.getElementById('buyers-list').innerHTML=d.map(b=>{
-    const placeState=[b.pla,b.state].filter(Boolean).join(' · ');
-    const saleMap={L:'Local',I:'Inter-state',E:'Export'};
-    const saleBadge=b.sale?`<span style="display:inline-block;padding:2px 8px;background:var(--green-bg);color:var(--green);border-radius:10px;font-size:11px;font-weight:700">${saleMap[b.sale]||b.sale}</span>`:'<span style="color:var(--text3)">—</span>';
-    return `<tr>
-      <td><a href="#" onclick="viewBuyerDetails(${JSON.stringify(b).replace(/"/g,'&quot;')});return false" style="color:var(--green);font-weight:700;text-decoration:none">${esc(b.buyer)}</a></td>
-      <td style="font-size:12px;font-weight:600;color:var(--spice-saffron)">${esc(b.code)||'<span style=\"color:var(--text3);font-weight:400\">—</span>'}</td>
-      <td>${esc(b.buyer1)}</td>
-      <td style="font-size:11px;font-family:monospace">${esc(b.gstin)||'<span style=\"color:var(--text3)\">—</span>'}</td>
-      <td style="font-size:12px">${esc(b.pan)||'—'}</td>
-      <td>${esc(b.tel)||'<span style=\"color:var(--text3)\">—</span>'}</td>
-      <td style="font-size:12px">${esc(b.ti)||'<span style=\"color:var(--text3)\">—</span>'}</td>
-      <td style="font-size:12px">${esc(placeState)||'<span style=\"color:var(--text3)\">—</span>'}</td>
-      <td>${saleBadge}</td>
-      <td style="white-space:nowrap">
-        ${iconBtn('view','View details',`viewBuyerDetails(${JSON.stringify(b).replace(/"/g,'&quot;')})`)}
-        ${iconBtn('edit','Edit buyer',`openBuyerEdit(${JSON.stringify(b).replace(/"/g,'&quot;')})`)}
-        ${iconBtn('del','Delete buyer',`delBuyer(${b.id})`)}
-      </td></tr>`}).join('')}
+  const saleMap={L:'Local',I:'Inter-state',E:'Export'};
+  DataTable.mount('buyers-list', d, {
+    emptyState: { icon: 'buyers', title: "No buyers yet", body: "Register buyers to generate sales invoices. Use Add Buyer above or import from a template." }, 
+    columns: [
+      { key:'buyer', label:'BUYER', sort:'text', render:(b)=>
+          `<a href="#" onclick="viewBuyerDetails(${JSON.stringify(b).replace(/"/g,'&quot;')});return false" style="color:var(--green);font-weight:700;text-decoration:none">${esc(b.buyer)}</a>` },
+      { key:'code', label:'Code', sort:'text', render:(b)=>
+          b.code?`<span style="font-weight:600;color:var(--spice-saffron)">${esc(b.code)}</span>`:'<span style="color:var(--text3)">—</span>' },
+      { key:'buyer1', label:'Trade Name', sort:'text' },
+      { key:'gstin', label:'GSTIN', sort:'text' },
+      { key:'pan', label:'PAN', sort:'text' },
+      { key:'tel', label:'Phone', sort:'text' },
+      { key:'ti', label:'TI', sort:'text' },
+      { key:'_place', label:'Place · State', sort:'text',
+        value:(b)=>[b.pla,b.state].filter(Boolean).join(' · ') },
+      { key:'sale', label:'Sale', sort:'text', render:(b)=>
+          b.sale?`<span style="display:inline-block;padding:2px 8px;background:var(--green-bg);color:var(--green);border-radius:10px;font-size:11px;font-weight:700">${saleMap[b.sale]||b.sale}</span>`:'<span style="color:var(--text3)">—</span>' },
+      { key:'_actions', label:'Actions', sortable:false, searchable:false, render:(b)=>
+          iconBtn('view','View details',`viewBuyerDetails(${JSON.stringify(b).replace(/"/g,'&quot;')})`)
+          + iconBtn('edit','Edit buyer',`openBuyerEdit(${JSON.stringify(b).replace(/"/g,'&quot;')})`)
+          + iconBtn('del','Delete buyer',`delBuyer(${b.id})`) }
+    ]
+  });
+}
 
 function viewBuyerDetails(b){
   const kv=(k,v)=>v?`<tr><td style="padding:6px 10px;color:var(--text2);font-size:12px;width:40%">${k}</td><td style="padding:6px 10px;font-size:13px">${esc(v)}</td></tr>`:'';
@@ -2135,7 +3238,7 @@ async function saveBuyer(){
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+T},body:JSON.stringify(body)});
     if(!r.ok){const d=await r.json();throw new Error(d.error||'Save failed')}
     hideModal('buyer-modal');toast(id?'Buyer updated':'Buyer added');searchBuyers('');
-  }catch(e){alert('Error: '+e.message)}
+  }catch(e){showError(e)}
 }
 async function delBuyer(id){if(!confirm('Delete?'))return;await j(`/api/buyers/${id}`,{method:'DELETE'});searchBuyers('')}
 
@@ -2157,11 +3260,19 @@ async function importBuyers(e){
 
 // ── Auctions ──────────────────────────────────────────────
 async function loadAuctions(){const d=await j('/api/auctions');
-  document.getElementById('auctions-list').innerHTML=d.map(a=>`<tr><td><b>${esc(a.ano)}</b></td><td>${fmtD(a.date)}</td><td>${esc(a.crop_type)}</td><td class="num">${a.lot_count||0}</td>
-    <td style="white-space:nowrap">
-      ${iconBtn('edit','Edit auction',`openAuctionEdit(${JSON.stringify(a).replace(/"/g,'&quot;')})`)}
-      ${iconBtn('del','Delete auction',`delAuction(${a.id})`)}
-    </td></tr>`).join('')}
+  DataTable.mount('auctions-list', d, {
+    emptyState: { icon: 'auctions', title: "No auctions yet", body: "Create your first auction (trade) from the Add Auction button to start entering lots." }, 
+    columns: [
+      { key:'ano', label:'Trade No', sort:'text', render:(a)=>`<b>${esc(a.ano)}</b>` },
+      { key:'date', label:'Date', sort:'date', render:(a)=>fmtD(a.date) },
+      { key:'crop_type', label:'Type', sort:'text' },
+      { key:'lot_count', label:'Lots', sort:'number', numeric:true, render:(a)=>String(a.lot_count||0) },
+      { key:'_actions', label:'Actions', sortable:false, searchable:false, render:(a)=>
+          iconBtn('edit','Edit auction',`openAuctionEdit(${JSON.stringify(a).replace(/"/g,'&quot;')})`)
+          + iconBtn('del','Delete auction',`delAuction(${a.id})`) }
+    ]
+  });
+}
 
 function openAuctionAdd(){
   document.getElementById('auction-modal-title').textContent='New Auction';
@@ -2191,7 +3302,7 @@ async function saveAuction(){
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+T},body:JSON.stringify(body)});
     if(!r.ok){const d=await r.json();throw new Error(d.error||'Save failed')}
     hideModal('auction-modal');toast(id?'Auction updated':'Auction created');loadAuctions();
-  }catch(e){alert('Error: '+e.message)}
+  }catch(e){showError(e)}
 }
 async function delAuction(id){if(!confirm('Delete auction and ALL its lots?'))return;await j(`/api/auctions/${id}`,{method:'DELETE'});loadAuctions()}
 
@@ -2396,8 +3507,8 @@ async function refreshGenAllPreview(){
         list.slice(0,8).map(x=>`• ${esc(x.name||x.buyer1||x.buyer)}${x.total_amount?` — ₹${x.total_amount.toFixed(2)}`:''}${x.default_sale?` <span style="color:var(--text3)">[${x.default_sale}]</span>`:''}`).join('<br>')+
         (list.length>8?`<br>…and ${list.length-8} more`:'');
     }else{
-      preview.style.background='#fff2e5';
-      preview.style.borderColor='#ffb782';
+      preview.style.background='var(--spice-turmeric-lt)';
+      preview.style.borderColor='var(--spice-turmeric-lt)';
       const st=kind==='invoices'?document.getElementById('ga-sale')?.value:'';
       const filter=st?` for sale type <strong>${st}</strong>`:'';
       preview.innerHTML=`<strong>No eligible ${labelMap[kind]}(s) found${filter}.</strong><br><span style="font-size:11px;color:var(--text3)">Common reasons:<br>• Lots haven't been assigned a buyer code yet<br>• All lots in this auction have already been invoiced<br>• When a sale type filter is set, no buyer's default matches it</span>`;
@@ -2467,7 +3578,7 @@ async function doGenerateAll(){
     if(kind==='invoices')loadInvoices();
     else if(kind==='purchases')loadPurchases();
     else loadBills();
-  }catch(e){alert('Error: '+e.message)}
+  }catch(e){showError(e)}
   finally{submitBtn.disabled=false;submitBtn.textContent='Generate All'}
 }
 function loadPayAuctions(){fillAucSelect('pay-auction').then(()=>loadPayments())}
@@ -2497,7 +3608,7 @@ async function downloadDbf(type, extraParams={}){
     const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=fn;a.click();
     setTimeout(()=>URL.revokeObjectURL(a.href),5000);
     toast(`Downloaded ${fn}`);
-  }catch(e){alert('Error: '+e.message)}
+  }catch(e){showError(e)}
 }
 
 async function downloadDbfRange(type){
@@ -2514,14 +3625,74 @@ const L_IDS={lot_no:'l-lotno',name:'l-name',cr:'l-cr',branch:'l-branch',grade:'l
   code:'l-code',sale:'l-sale'};
 
 async function loadLots(){const aid=document.getElementById('lot-auction').value;if(!aid)return;
-  const d=await j(`/api/lots/${aid}`);
-  document.getElementById('lots-list').innerHTML=d.map(l=>`<tr><td>${esc(l.lot_no)}</td><td>${esc(l.name)}</td><td style="font-size:11px">${esc(l.branch)}</td>
-    <td class="num">${l.bags}</td><td class="num">${(l.qty||0).toFixed(3)}</td><td class="num">${(l.price||0).toFixed(2)}</td><td class="num">${(l.amount||0).toFixed(2)}</td>
-    <td style="font-size:11px">${esc(l.buyer)}</td><td class="num">${(l.puramt||0).toFixed(2)}</td><td class="num" style="font-weight:600">${(l.balance||0).toFixed(2)}</td>
-    <td style="white-space:nowrap">
-      ${iconBtn('edit','Edit lot',`openLotEdit(${JSON.stringify(l).replace(/"/g,'&quot;')})`)}
-      ${iconBtn('del','Delete lot',`delLot(${l.id})`)}
-    </td></tr>`).join('')}
+  // Cache-buster ensures the browser actually hits the server (otherwise Refresh
+  // may return stale cached JSON and nothing visibly changes)
+  const d=await j(`/api/lots/${aid}?_=${Date.now()}`);
+  const mode = getCurrentBusinessMode();
+  const isAuction = (mode === 'e-Auction');
+  // Update the Calculate All button label to show which mode will be applied
+  const calcBtn = document.getElementById('btn-calculate-all');
+  if (calcBtn) calcBtn.textContent = `Calculate All (${mode})`;
+  // Column set depends on mode:
+  //   e-Auction: show Refund, Commission, Handling; HIDE P_Qty, P_Rate, PurAmt, Discount
+  //   e-Trade:   show Discount, P_Qty, P_Rate, PurAmt; HIDE Refund, Commission, Handling
+  const baseCols = [
+    { key:'lot_no', label:'Lot', sort:'text', totalKind:'count',
+      totalLabel: (n)=> String(n) },
+    { key:'name', label:'Name', sort:'text' },
+    { key:'buyer', label:'Buyer', sort:'text' },
+    { key:'buyer_code', label:'Code', sort:'text',
+      render:(l)=> l.buyer_code ? esc(l.buyer_code) : '<span style="color:var(--text3)">—</span>' },
+    { key:'branch', label:'Branch', sort:'text' },
+    { key:'grade', label:'Grade', sort:'text' },
+    { key:'bags', label:'Bags', sort:'number', numeric:true },
+    { key:'qty', label:'Qty', sort:'number', numeric:true,
+      fmt:(n)=>n.toFixed(3) },
+    { key:'price', label:'Price', sort:'number', numeric:true, noTotal:true,
+      fmt:(n)=>n.toFixed(2) },
+    { key:'amount', label:'Amount', sort:'number', numeric:true,
+      fmt:(n)=>n.toFixed(2) },
+  ];
+  const auctionCols = [
+    { key:'refund', label:'Refund', sort:'number', numeric:true,
+      fmt:(n)=>n.toFixed(2) },
+    { key:'com', label:'Commission', sort:'number', numeric:true,
+      fmt:(n)=>n.toFixed(2) },
+    { key:'sertax', label:'Handling', sort:'number', numeric:true,
+      fmt:(n)=>n.toFixed(2) },
+  ];
+  const tradeCols = [
+    { key:'pqty', label:'P_Qty', sort:'number', numeric:true,
+      fmt:(n)=>n.toFixed(3) },
+    { key:'prate', label:'P_Rate', sort:'number', numeric:true, noTotal:true,
+      fmt:(n)=>n.toFixed(2) },
+    { key:'puramt', label:'PurAmt', sort:'number', numeric:true,
+      fmt:(n)=>n.toFixed(2) },
+    { key:'refund', label:'Discount', sort:'number', numeric:true,
+      fmt:(n)=>n.toFixed(2) },
+  ];
+  const taxCols = [
+    { key:'cgst', label:'CGST', sort:'number', numeric:true,
+      fmt:(n)=>n.toFixed(2) },
+    { key:'sgst', label:'SGST', sort:'number', numeric:true,
+      fmt:(n)=>n.toFixed(2) },
+    { key:'igst', label:'IGST', sort:'number', numeric:true,
+      fmt:(n)=>n.toFixed(2) },
+    { key:'balance', label:'Payable', sort:'number', numeric:true,
+      fmt:(n)=>n.toFixed(2),
+      render:(l)=>`<strong>${(l.balance||0).toFixed(2)}</strong>` },
+    { key:'_actions', label:'Actions', sortable:false, searchable:false, render:(l)=>
+        iconBtn('edit','Edit lot',`openLotEdit(${JSON.stringify(l).replace(/"/g,'&quot;')})`)
+        + iconBtn('del','Delete lot',`delLot(${l.id})`) }
+  ];
+  const columns = [
+    ...baseCols,
+    ...(isAuction ? auctionCols : tradeCols),
+    ...taxCols,
+  ];
+  DataTable.mount('lots-list', d, {
+    emptyState: { icon: 'lots', title: "No lots in this auction yet", body: "Add your first lot using the form on the left — enter Lot #, Name, Qty, and Price to get started." },  columns });
+}
 
 function openLotEdit(l){
   document.getElementById('lot-modal-title').textContent='Edit Lot #'+l.lot_no;
@@ -2531,29 +3702,51 @@ function openLotEdit(l){
 }
 async function saveLot(){
   const id=document.getElementById('l-id').value;
-  if(!id){alert('Lot ID missing');return}
+  if(!id){showError('Lot ID missing');return}
   const body={};L_FIELDS.forEach(f=>{
     const el=document.getElementById(L_IDS[f]);
     if(!el)return;
     if(['bags','qty','price','amount'].includes(f)) body[f]=parseFloat(el.value)||0;
     else body[f]=el.value;
   });
+  // Optimistic UI: close the modal immediately and show a pending toast.
+  // The actual save runs in the background. If it fails, we show an error and
+  // re-open the modal so the user can retry without re-entering data.
+  const pendingValues = { ...body };
+  hideModal('lot-modal');
+  toast('Saving lot…');
   try{
     const r=await fetch(B+`/api/lots/${id}`,{method:'PUT',
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+T},body:JSON.stringify(body)});
-    if(!r.ok){const d=await r.json();throw new Error(d.error||'Save failed')}
-    hideModal('lot-modal');toast('Lot updated');loadLots();
-  }catch(e){alert('Error: '+e.message)}
+    if(!r.ok){const d=await r.json().catch(()=>({}));const err=new Error(d.error||'Save failed');err.status=r.status;throw err;}
+    toast('Lot updated ✓');
+    loadLots();
+  }catch(e){
+    // Save failed — show error and re-open the modal pre-filled so the user can retry.
+    showError(e);
+    // Re-open with the values they just entered so they don't lose anything
+    openLotEdit({ id, ...pendingValues });
+  }
 }
 async function delLot(id){if(!confirm('Delete this lot?'))return;
   try{await j(`/api/lots/${id}`,{method:'DELETE'});loadLots();toast('Lot deleted')}
-  catch(e){alert('Error: '+e.message)}
+  catch(e){showError(e)}
 }
 
-async function calculateAll(){const aid=document.getElementById('lot-auction').value;if(!aid)return;
-  const d=await j(`/api/lots/calculate/${aid}`,{method:'POST'});toast(`Calculated ${d.calculated} lots`);loadLots()}
-async function validateLots(){const aid=document.getElementById('lot-auction').value;if(!aid)return;
-  const d=await j(`/api/lots/validate/${aid}`);alert(d.length?`${d.length} lots have issues:\n`+d.map(l=>l.lot_no+': price='+l.price+' amt='+l.amount+' buyer='+l.buyer).join('\n'):'All lots OK')}
+async function calculateAll(){
+  const aid=document.getElementById('lot-auction').value;if(!aid)return;
+  const btn = document.getElementById('btn-calculate-all');
+  await withBusy(btn, async () => {
+    const d=await j(`/api/lots/calculate/${aid}`,{method:'POST'});
+    toast(`Calculated ${d.calculated} lots`);
+    await loadLots();
+  });
+}
+async function validateLots(){
+  const aid=document.getElementById('lot-auction').value;if(!aid)return;
+  const d=await j(`/api/lots/validate/${aid}`);
+  alert(d.length?`${d.length} lots have issues:\n`+d.map(l=>l.lot_no+': price='+l.price+' amt='+l.amount+' buyer='+l.buyer).join('\n'):'All lots OK');
+}
 
 // ── Invoices ──────────────────────────────────────────────
 async function generateInvoice(){
@@ -2565,36 +3758,47 @@ async function generateInvoice(){
   if(!buyerCode){alert('Enter buyer code');return}
   if(!invoiceNo){alert('Enter invoice number');return}
   try{
-    const r=await fetch(B+`/api/invoices/generate/${aid}`,{
-      method:'POST',
-      headers:{'Content-Type':'application/json','Authorization':'Bearer '+T},
-      body:JSON.stringify({saleType,buyerCode,invoiceNo})});
-    const d=await r.json();
-    if(!r.ok)throw new Error(d.error||'Failed to generate invoice');
-    hideModal('gen-inv-modal');
-    toast('Invoice generated — Total: ₹'+Number(d.invoice.grandTotal).toFixed(2));
-    loadInvoices();
-  }catch(e){alert('Error: '+e.message)}}
+    await withOverlay('Generating invoice…', async () => {
+      const r=await fetch(B+`/api/invoices/generate/${aid}`,{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+T},
+        body:JSON.stringify({saleType,buyerCode,invoiceNo})});
+      const d=await r.json();
+      if(!r.ok)throw new Error(d.error||'Failed to generate invoice');
+      hideModal('gen-inv-modal');
+      toast('Invoice generated — Total: ₹'+Number(d.invoice.grandTotal).toFixed(2));
+      await loadInvoices();
+    });
+  }catch(e){showError(e)}}
 
 async function loadInvoices(){
   const aid=document.getElementById('inv-auction')?.value;
   const url=aid?`/api/invoices?auction_id=${aid}`:'/api/invoices';
   const d=await j(url);
-  const emptyMsg = aid
-    ? 'No invoices yet for this auction. Click <strong>⚡ Generate for All Buyers</strong> to create them.'
-    : 'Select an auction above to see its invoices.';
-  document.getElementById('invoices-list').innerHTML=d.map(i=>`<tr>
-    <td>${esc(i.sale)}</td><td>${esc(i.invo)}</td><td>${esc(i.buyer1||i.buyer)}</td>
-    <td class="num">${(i.qty||0).toFixed(3)}</td><td class="num">${(i.amount||0).toFixed(2)}</td>
-    <td class="num">${(i.cgst||0).toFixed(2)}</td><td class="num">${(i.sgst||0).toFixed(2)}</td>
-    <td class="num">${(i.igst||0).toFixed(2)}</td><td class="num" style="font-weight:600">${(i.tot||0).toFixed(2)}</td>
-    <td style="white-space:nowrap">
-      ${iconBtn('pdf','View / download PDF',`viewInvoicePDF(${i.id})`)}
-      ${iconBtn('edit','Edit invoice',`openInvoiceEdit(${JSON.stringify(i).replace(/"/g,'&quot;')})`)}
-      <button class="icon-btn" title="Revert — delete invoice & re-enable lots for re-invoicing" onclick="revertInvoice(${i.id},'${esc(i.buyer1||i.buyer)}','${esc(i.sale)}-${esc(i.invo)}')" style="background:#f39c12;color:#fff;border:none;border-radius:4px;padding:4px 8px;cursor:pointer;margin-left:4px;font-size:11px">⟲ Revert</button>
-      ${iconBtn('del','Delete invoice',`delInvoice(${i.id})`)}
-    </td>
-  </tr>`).join('')||`<tr><td colspan="10" style="text-align:center;color:var(--text3);padding:24px">${emptyMsg}</td></tr>`}
+  DataTable.mount('invoices-list', d, {
+    emptyState: { icon: 'invoices', title: "No invoices yet", body: "Once you have calculated lots for a buyer, use Generate Invoice to create one." }, 
+    columns: [
+      { key:'sale', label:'Sale', sort:'text' },
+      { key:'invo', label:'Inv#', sort:'text' },
+      { key:'_buyer', label:'Buyer', sort:'text',
+        value:(i)=>i.buyer1||i.buyer,
+        render:(i)=>esc(i.buyer1||i.buyer) },
+      { key:'qty', label:'Qty', sort:'number', numeric:true, fmt:(n)=>n.toFixed(3) },
+      { key:'amount', label:'Amount', sort:'number', numeric:true, fmt:(n)=>n.toFixed(2) },
+      { key:'cgst', label:'CGST', sort:'number', numeric:true, fmt:(n)=>n.toFixed(2) },
+      { key:'sgst', label:'SGST', sort:'number', numeric:true, fmt:(n)=>n.toFixed(2) },
+      { key:'igst', label:'IGST', sort:'number', numeric:true, fmt:(n)=>n.toFixed(2) },
+      { key:'tot', label:'Total', sort:'number', numeric:true,
+        fmt:(n)=>n.toFixed(2),
+        render:(i)=>`<strong>${(i.tot||0).toFixed(2)}</strong>` },
+      { key:'_actions', label:'Actions', sortable:false, searchable:false, render:(i)=>
+          iconBtn('pdf','View / download PDF',`viewInvoicePDF(${i.id})`)
+          + iconBtn('edit','Edit invoice',`openInvoiceEdit(${JSON.stringify(i).replace(/"/g,'&quot;')})`)
+          + iconBtn('revert','Revert — delete invoice & re-enable lots for re-invoicing',`revertInvoice(${i.id},'${esc(i.buyer1||i.buyer)}','${esc(i.sale)}-${esc(i.invo)}')`)
+          + iconBtn('del','Delete invoice',`delInvoice(${i.id})`) }
+    ]
+  });
+}
 
 async function revertInvoice(id, buyerName, invLabel){
   if(!confirm(`Revert invoice ${invLabel} for ${buyerName}?\n\nThis will DELETE this invoice and re-enable its lots so you can re-generate.\n\nContinue?`))return;
@@ -2605,7 +3809,7 @@ async function revertInvoice(id, buyerName, invLabel){
     toast(`Reverted: ${d.lotsFreed} lot(s) freed for re-invoicing`);
     loadInvoices();
     loadInvEligibleBuyers&&loadInvEligibleBuyers();
-  }catch(e){alert('Error: '+e.message)}
+  }catch(e){showError(e)}
 }
 
 async function revertAllInvoices(){
@@ -2621,7 +3825,7 @@ async function revertAllInvoices(){
     alert(`Reverted ${d.invoicesReverted} invoice(s), freed ${d.lotsFreed} lot(s).`);
     loadInvoices();
     loadInvEligibleBuyers&&loadInvEligibleBuyers();
-  }catch(e){alert('Error: '+e.message)}
+  }catch(e){showError(e)}
 }
 
 async function viewInvoicePDF(id){
@@ -2633,7 +3837,7 @@ async function viewInvoicePDF(id){
     const w=window.open(url,'_blank');
     if(!w||w.closed){const a=document.createElement('a');a.href=url;a.download=`Invoice_${id}.pdf`;a.click()}
     setTimeout(()=>URL.revokeObjectURL(url),30000);
-  }catch(e){alert('Error: '+e.message)}
+  }catch(e){showError(e)}
 }
 
 function openInvoiceEdit(i){
@@ -2656,10 +3860,10 @@ async function saveInvoiceEdit(){
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+T},body:JSON.stringify(body)});
     if(!r.ok){const d=await r.json();throw new Error(d.error||'Save failed')}
     hideModal('inv-edit-modal');toast('Invoice updated');loadInvoices();
-  }catch(e){alert('Error: '+e.message)}}
+  }catch(e){showError(e)}}
 async function delInvoice(id){if(!confirm('Delete this invoice? Related lots will be unlinked.'))return;
   try{await j(`/api/invoices/${id}`,{method:'DELETE'});loadInvoices();toast('Invoice deleted')}
-  catch(e){alert('Error: '+e.message)}}
+  catch(e){showError(e)}}
 
 // ── Purchases ─────────────────────────────────────────────
 async function generatePurchase(){
@@ -2679,27 +3883,32 @@ async function generatePurchase(){
     hideModal('gen-pur-modal');
     toast('Purchase invoice generated — Total: ₹'+Number(d.invoice.grandTotal).toFixed(2));
     loadPurchases();
-  }catch(e){alert('Error: '+e.message)}}
+  }catch(e){showError(e)}}
 
 async function loadPurchases(){
   const aid=document.getElementById('pur-auction')?.value;
   const url=aid?`/api/purchases?auction_id=${aid}`:'/api/purchases';
   const d=await j(url);
-  const emptyMsg = aid
-    ? 'No purchase invoices yet for this auction. Click <strong>⚡ Generate for All Dealers</strong> to create them.'
-    : 'Select an auction above to see its purchase invoices.';
-  document.getElementById('purchases-list').innerHTML=d.map(p=>`<tr>
-    <td>${esc(p.invo)}</td><td>${esc(p.name)}</td>
-    <td class="num">${(p.qty||0).toFixed(3)}</td><td class="num">${(p.amount||0).toFixed(2)}</td>
-    <td class="num">${(p.cgst||0).toFixed(2)}</td><td class="num">${(p.sgst||0).toFixed(2)}</td>
-    <td class="num">${(p.igst||0).toFixed(2)}</td><td class="num">${(p.tds||0).toFixed(2)}</td>
-    <td class="num" style="font-weight:600">${(p.total||0).toFixed(2)}</td>
-    <td style="white-space:nowrap">
-      ${iconBtn('pdf','View PDF',`viewPurchasePDF(${p.auction_id},'${encodeURIComponent(p.name)}','${encodeURIComponent(p.invo)}')`)}
-      ${iconBtn('edit','Edit purchase',`openPurchaseEdit(${JSON.stringify(p).replace(/"/g,'&quot;')})`)}
-      ${iconBtn('del','Delete purchase',`delPurchase(${p.id})`)}
-    </td>
-  </tr>`).join('')||`<tr><td colspan="10" style="text-align:center;color:var(--text3);padding:24px">${emptyMsg}</td></tr>`}
+  DataTable.mount('purchases-list', d, {
+    columns: [
+      { key:'invo', label:'Inv#', sort:'text' },
+      { key:'name', label:'Name', sort:'text' },
+      { key:'qty', label:'Qty', sort:'number', numeric:true, fmt:(n)=>n.toFixed(3) },
+      { key:'amount', label:'Amount', sort:'number', numeric:true, fmt:(n)=>n.toFixed(2) },
+      { key:'cgst', label:'CGST', sort:'number', numeric:true, fmt:(n)=>n.toFixed(2) },
+      { key:'sgst', label:'SGST', sort:'number', numeric:true, fmt:(n)=>n.toFixed(2) },
+      { key:'igst', label:'IGST', sort:'number', numeric:true, fmt:(n)=>n.toFixed(2) },
+      { key:'tds', label:'TDS', sort:'number', numeric:true, fmt:(n)=>n.toFixed(2) },
+      { key:'total', label:'Total', sort:'number', numeric:true,
+        fmt:(n)=>n.toFixed(2),
+        render:(p)=>`<strong>${(p.total||0).toFixed(2)}</strong>` },
+      { key:'_actions', label:'Actions', sortable:false, searchable:false, render:(p)=>
+          iconBtn('pdf','View PDF',`viewPurchasePDF(${p.auction_id},'${encodeURIComponent(p.name)}','${encodeURIComponent(p.invo)}')`)
+          + iconBtn('edit','Edit purchase',`openPurchaseEdit(${JSON.stringify(p).replace(/"/g,'&quot;')})`)
+          + iconBtn('del','Delete purchase',`delPurchase(${p.id})`) }
+    ]
+  });
+}
 
 function openPurchaseEdit(p){
   document.getElementById('pur-edit-id').value=p.id;
@@ -2721,10 +3930,10 @@ async function savePurchaseEdit(){
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+T},body:JSON.stringify(body)});
     if(!r.ok){const d=await r.json();throw new Error(d.error||'Save failed')}
     hideModal('pur-edit-modal');toast('Purchase updated');loadPurchases();
-  }catch(e){alert('Error: '+e.message)}}
+  }catch(e){showError(e)}}
 async function delPurchase(id){if(!confirm('Delete this purchase invoice?'))return;
   try{await j(`/api/purchases/${id}`,{method:'DELETE'});loadPurchases();toast('Purchase deleted')}
-  catch(e){alert('Error: '+e.message)}}
+  catch(e){showError(e)}}
 
 async function viewPurchasePDF(auctionId,sellerName,invNo){
   try{
@@ -2755,7 +3964,7 @@ async function viewPurchasePDF(auctionId,sellerName,invNo){
       toast('Popup blocked — downloading PDF instead');
     }
     setTimeout(()=>URL.revokeObjectURL(url),30000);
-  }catch(e){alert('Error: '+e.message)}}
+  }catch(e){showError(e)}}
 
 // ── Payments ──────────────────────────────────────────────
 async function loadPayments(){
@@ -2764,16 +3973,19 @@ async function loadPayments(){
   if(!aid){body.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:24px">Select an auction above</td></tr>';return}
   try{
     const d=await j(`/api/payments/${aid}`);
-    if(!d.length){
-      body.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:24px">No payment data for this auction yet. Make sure lots are priced and calculated.</td></tr>';
-      return;
-    }
-    let tPur=0,tPay=0;
-    body.innerHTML=d.map(p=>{tPur+=p.total_puramt||0;tPay+=p.total_payable||0;
-      return`<tr><td>${esc(p.name)}</td><td class="num">${p.lot_count}</td><td class="num">${(p.total_qty||0).toFixed(3)}</td>
-      <td class="num">${(p.total_amount||0).toFixed(2)}</td><td class="num">${(p.total_puramt||0).toFixed(2)}</td>
-      <td class="num">${(p.total_discount||0).toFixed(2)}</td><td class="num" style="font-weight:600">${(p.total_payable||0).toFixed(2)}</td></tr>`}).join('')
-      +`<tr style="font-weight:700;background:var(--spice-lt)"><td colspan="4">TOTAL</td><td class="num">${tPur.toFixed(2)}</td><td></td><td class="num">${tPay.toFixed(2)}</td></tr>`;
+    DataTable.mount('payments-list', d, {
+      columns: [
+        { key:'name', label:'Seller', sort:'text' },
+        { key:'lot_count', label:'Lots', sort:'number', numeric:true },
+        { key:'total_qty', label:'Qty', sort:'number', numeric:true, fmt:(n)=>n.toFixed(3) },
+        { key:'total_amount', label:'Amount', sort:'number', numeric:true, fmt:(n)=>n.toFixed(2) },
+        { key:'total_puramt', label:'Purchase', sort:'number', numeric:true, fmt:(n)=>n.toFixed(2) },
+        { key:'total_discount', label:'Discount', sort:'number', numeric:true, fmt:(n)=>n.toFixed(2) },
+        { key:'total_payable', label:'Payable', sort:'number', numeric:true,
+          fmt:(n)=>n.toFixed(2),
+          render:(p)=>`<strong>${(p.total_payable||0).toFixed(2)}</strong>` }
+      ]
+    });
   }catch(e){
     body.innerHTML=`<tr><td colspan="7" style="text-align:center;color:var(--red);padding:24px">Failed to load: ${esc(e.message)}</td></tr>`;
   }
@@ -2794,19 +4006,37 @@ function renderExportBtns(){document.getElementById('export-btns').innerHTML=Obj
 async function exportType(type,format){format=format||'xlsx';
   const aid=document.getElementById('exp-auction')?.value||document.getElementById('pay-auction')?.value;
   if(!aid){alert('Select an auction first');return}
-  const r=await fetch(B+`/api/exports/${type}/${aid}?format=${format}`,{headers:{'Authorization':'Bearer '+T}});
-  if(!r.ok){alert('Export failed');return}const blob=await r.blob();
-  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`${type}_${aid}.${format}`;a.click()}
+  const label = (EXP_LABELS[type]||type);
+  await withOverlay(`Exporting ${label} (${format.toUpperCase()})…`, async () => {
+    const r=await fetch(B+`/api/exports/${type}/${aid}?format=${format}`,{headers:{'Authorization':'Bearer '+T}});
+    if(!r.ok){alert('Export failed');return}
+    const blob=await r.blob();
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`${type}_${aid}.${format}`;a.click();
+  });
+}
 
 // ── TDS ───────────────────────────────────────────────────
 async function loadTDS(){const f=document.getElementById('tds-from').value,t=document.getElementById('tds-to').value;
   if(!f||!t){alert('Select date range');return}const d=await j(`/api/tds-return?from=${f}&to=${t}`);
-  document.getElementById('tds-list').innerHTML=d.map(r=>`<tr><td>${esc(r.invoice)}</td><td>${fmtD(r.date)}</td><td>${esc(r.name)}</td><td>${esc(r.pan)}</td>
-    <td class="num">${(r.assess_value||0).toFixed(2)}</td><td class="num">${(r.tds||0).toFixed(2)}</td></tr>`).join('')}
+  DataTable.mount('tds-list', d, {
+    columns: [
+      { key:'invoice', label:'Invoice', sort:'text' },
+      { key:'date', label:'Date', sort:'date', render:(r)=>fmtD(r.date) },
+      { key:'name', label:'Name', sort:'text' },
+      { key:'pan', label:'PAN', sort:'text' },
+      { key:'assess_value', label:'Assess Value', sort:'number', numeric:true, fmt:(n)=>n.toFixed(2) },
+      { key:'tds', label:'TDS', sort:'number', numeric:true, fmt:(n)=>n.toFixed(2) }
+    ]
+  });
+}
 async function exportTDS(format){format=format||'xlsx';const f=document.getElementById('tds-from').value,t=document.getElementById('tds-to').value;
   if(!f||!t){alert('Select date range');return}
-  const r=await fetch(B+`/api/exports/tds-return?from=${f}&to=${t}&format=${format}`,{headers:{'Authorization':'Bearer '+T}});
-  const blob=await r.blob();const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`TDSReturn.${format}`;a.click()}
+  await withOverlay(`Exporting TDS Return (${format.toUpperCase()})…`, async () => {
+    const r=await fetch(B+`/api/exports/tds-return?from=${f}&to=${t}&format=${format}`,{headers:{'Authorization':'Bearer '+T}});
+    const blob=await r.blob();
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`TDSReturn.${format}`;a.click();
+  });
+}
 
 // ── Bills (Agriculturist) ──────────────────────────────────
 function loadBillAuctions(){fillAucSelect('bill-auction').then(()=>{loadBills();loadEligibleSellers()})}
@@ -2830,18 +4060,25 @@ async function loadBills(){
   const aid=document.getElementById('bill-auction')?.value;
   const url=aid?`/api/bills?auction_id=${aid}`:'/api/bills';
   const d=await j(url);
-  const emptyMsg = aid
-    ? 'No bills yet for this auction. Click <strong>⚡ Generate for All Agri Sellers</strong> to create them.'
-    : 'Select an auction above to see its bills.';
-  document.getElementById('bills-list').innerHTML=d.map(b=>`<tr>
-    <td>${esc(b.bil)}</td><td>${fmtD(b.date)}</td><td>${esc(b.name)}</td><td>${esc(b.pla)}</td>
-    <td class="num">${(b.qty||0).toFixed(3)}</td><td class="num">${(b.cost||0).toFixed(2)}</td>
-    <td class="num" style="font-weight:600">${(b.net||0).toFixed(2)}</td>
-    <td style="white-space:nowrap">
-      ${iconBtn('pdf','View PDF',`viewBillPDF('${b.auction_id||1}','${encodeURIComponent(b.name)}','${b.bil}')`)}
-      ${iconBtn('edit','Edit bill',`openBillEdit(${JSON.stringify(b).replace(/"/g,'&quot;')})`)}
-      ${iconBtn('del','Delete bill',`delBill(${b.id})`)}
-    </td></tr>`).join('')||`<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:24px">${emptyMsg}</td></tr>`}
+  DataTable.mount('bills-list', d, {
+    emptyState: { icon: 'invoices', title: "No agri bills yet", body: "Generate agriculturist purchase bills for eligible sellers using the form above." }, 
+    columns: [
+      { key:'bil', label:'Bill#', sort:'text' },
+      { key:'date', label:'Date', sort:'date', render:(b)=>fmtD(b.date) },
+      { key:'name', label:'Name', sort:'text' },
+      { key:'pla', label:'Place', sort:'text' },
+      { key:'qty', label:'Qty', sort:'number', numeric:true, fmt:(n)=>n.toFixed(3) },
+      { key:'cost', label:'Cost', sort:'number', numeric:true, fmt:(n)=>n.toFixed(2) },
+      { key:'net', label:'Net', sort:'number', numeric:true,
+        fmt:(n)=>n.toFixed(2),
+        render:(b)=>`<strong>${(b.net||0).toFixed(2)}</strong>` },
+      { key:'_actions', label:'Actions', sortable:false, searchable:false, render:(b)=>
+          iconBtn('pdf','View PDF',`viewBillPDF('${b.auction_id||1}','${encodeURIComponent(b.name)}','${b.bil}')`)
+          + iconBtn('edit','Edit bill',`openBillEdit(${JSON.stringify(b).replace(/"/g,'&quot;')})`)
+          + iconBtn('del','Delete bill',`delBill(${b.id})`) }
+    ]
+  });
+}
 
 function openBillEdit(b){
   document.getElementById('bill-edit-id').value=b.id;
@@ -2863,7 +4100,7 @@ async function saveBillEdit(){
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+T},body:JSON.stringify(body)});
     if(!r.ok){const d=await r.json();throw new Error(d.error||'Save failed')}
     hideModal('bill-edit-modal');toast('Bill updated');loadBills();
-  }catch(e){alert('Error: '+e.message)}}
+  }catch(e){showError(e)}}
 async function generateBill(){
   const aid=document.getElementById('bill-auction').value;if(!aid){alert('Select auction');return}
   const sellerName=document.getElementById('gb-seller').value.trim();
@@ -2878,7 +4115,7 @@ async function generateBill(){
     hideModal('gen-bill-modal');
     toast('Bill generated — Net: ₹'+Number(d.bill.netAmount).toFixed(2));
     loadBills();
-  }catch(e){alert('Error: '+e.message)}}
+  }catch(e){showError(e)}}
 async function viewBillPDF(auctionId,sellerName,billNo){
   try{
     const r=await fetch(B+`/api/bills/pdf/${auctionId}/${sellerName}?billNo=${billNo}`,{headers:{'Authorization':'Bearer '+T}});
@@ -2888,24 +4125,31 @@ async function viewBillPDF(auctionId,sellerName,billNo){
     const w=window.open(url,'_blank');
     if(!w||w.closed){const a=document.createElement('a');a.href=url;a.download=`BillOfSupply_${decodeURIComponent(sellerName)}_${billNo}.pdf`;a.click()}
     setTimeout(()=>URL.revokeObjectURL(url),30000);
-  }catch(e){alert('Error: '+e.message)}}
+  }catch(e){showError(e)}}
 async function delBill(id){if(!confirm('Delete bill?'))return;await j(`/api/bills/${id}`,{method:'DELETE'});loadBills()}
 
 // ── Debit Notes ────────────────────────────────────────────
 async function loadDebitNotes(){
   const d=await j('/api/debit-notes');
-  document.getElementById('debit-list').innerHTML=d.map(n=>`<tr>
-    <td>${esc(n.note_no)}</td><td>${fmtD(n.date)}</td>
-    <td>${n.ano?('#'+esc(n.ano)):'—'}</td>
-    <td>${esc(n.name)}</td>
-    <td class="num">${(n.amount||0).toFixed(2)}</td>
-    <td class="num">${(n.cgst||0).toFixed(2)}</td><td class="num">${(n.sgst||0).toFixed(2)}</td>
-    <td class="num">${(n.igst||0).toFixed(2)}</td>
-    <td class="num" style="font-weight:600">${(n.total||0).toFixed(2)}</td>
-    <td style="white-space:nowrap">
-      ${iconBtn('edit','Edit debit note',`openDebitEdit(${JSON.stringify(n).replace(/"/g,'&quot;')})`)}
-      ${iconBtn('del','Delete debit note',`delDebitNote(${n.id})`)}
-    </td></tr>`).join('')||'<tr><td colspan="10" style="text-align:center;color:var(--text3);padding:24px">No debit notes yet</td></tr>'}
+  DataTable.mount('debit-list', d, {
+    columns: [
+      { key:'note_no', label:'Note#', sort:'text' },
+      { key:'date', label:'Date', sort:'date', render:(n)=>fmtD(n.date) },
+      { key:'ano', label:'Auction', sort:'text', render:(n)=>n.ano?('#'+esc(n.ano)):'—' },
+      { key:'name', label:'Name', sort:'text' },
+      { key:'amount', label:'Amount', sort:'number', numeric:true, fmt:(v)=>v.toFixed(2) },
+      { key:'cgst', label:'CGST', sort:'number', numeric:true, fmt:(v)=>v.toFixed(2) },
+      { key:'sgst', label:'SGST', sort:'number', numeric:true, fmt:(v)=>v.toFixed(2) },
+      { key:'igst', label:'IGST', sort:'number', numeric:true, fmt:(v)=>v.toFixed(2) },
+      { key:'total', label:'Total', sort:'number', numeric:true,
+        fmt:(v)=>v.toFixed(2),
+        render:(n)=>`<strong>${(n.total||0).toFixed(2)}</strong>` },
+      { key:'_actions', label:'Actions', sortable:false, searchable:false, render:(n)=>
+          iconBtn('edit','Edit debit note',`openDebitEdit(${JSON.stringify(n).replace(/"/g,'&quot;')})`)
+          + iconBtn('del','Delete debit note',`delDebitNote(${n.id})`) }
+    ]
+  });
+}
 
 function openDebitEdit(n){
   document.getElementById('dn-edit-id').value=n.id;
@@ -2927,7 +4171,7 @@ async function saveDebitEdit(){
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+T},body:JSON.stringify(body)});
     if(!r.ok){const d=await r.json();throw new Error(d.error||'Save failed')}
     hideModal('dn-edit-modal');toast('Debit note updated');loadDebitNotes();
-  }catch(e){alert('Error: '+e.message)}}
+  }catch(e){showError(e)}}
 async function generateDebitNote(){
   const invoiceNo=document.getElementById('gd-invno').value.trim();
   const saleType=document.getElementById('gd-sale').value;
@@ -2943,7 +4187,7 @@ async function generateDebitNote(){
     hideModal('gen-debit-modal');
     toast('Debit note created — Total: ₹'+Number(d.note.total).toFixed(2));
     loadDebitNotes();
-  }catch(e){alert('Error: '+e.message)}}
+  }catch(e){showError(e)}}
 async function delDebitNote(id){if(!confirm('Delete debit note?'))return;await j(`/api/debit-notes/${id}`,{method:'DELETE'});loadDebitNotes()}
 
 // ── Journals ───────────────────────────────────────────────
@@ -3023,7 +4267,7 @@ async function previewInvoice(type){
     if(!r.ok)throw new Error(d.error||'Preview failed');
     renderPreview(d.invoice,type);
     showModal('preview-modal');
-  }catch(e){alert('Error: '+e.message)}}
+  }catch(e){showError(e)}}
 
 function renderPreview(inv,type){
   const s=inv.summary;
@@ -3082,6 +4326,44 @@ function renderPreview(inv,type){
   document.getElementById('preview-body').innerHTML=html;
 }
 
+// ── Theme switcher ─────────────────────────────────────────
+const _THEMES = ['emerald','coral','violet','sunshine','electric','ocean','tech','minimal','trust'];
+function setTheme(t){
+  if (!_THEMES.includes(t)) t = 'emerald';
+  document.body.setAttribute('data-theme', t);
+  try { localStorage.setItem('theme', t); } catch(e){}
+  document.querySelectorAll('.theme-chip').forEach(c=>{
+    c.classList.toggle('active', c.dataset.t === t);
+  });
+}
+// Apply saved theme on load
+(function(){
+  let saved = 'emerald';
+  try { saved = localStorage.getItem('theme') || 'emerald'; } catch(e){}
+  document.body.setAttribute('data-theme', saved);
+})();
+
+</script>
+<div id="theme-switcher" title="Pick a theme — it'll remember your choice">
+  <span class="theme-chip" data-t="emerald"  title="Emerald (fresh)"   onclick="setTheme('emerald')"></span>
+  <span class="theme-chip" data-t="coral"    title="Coral sunset"      onclick="setTheme('coral')"></span>
+  <span class="theme-chip" data-t="violet"   title="Violet (premium)"  onclick="setTheme('violet')"></span>
+  <span class="theme-chip" data-t="sunshine" title="Sunshine (gold)"   onclick="setTheme('sunshine')"></span>
+  <span class="theme-chip" data-t="electric" title="Electric (bold)"   onclick="setTheme('electric')"></span>
+  <span class="theme-chip" data-t="ocean"    title="Ocean (sky)"       onclick="setTheme('ocean')"></span>
+  <span class="theme-chip" data-t="tech"     title="Tech (analytics)"  onclick="setTheme('tech')"></span>
+  <span class="theme-chip" data-t="minimal"  title="Minimal (B&amp;W + mint)" onclick="setTheme('minimal')"></span>
+  <span class="theme-chip" data-t="trust"    title="Trust (deep blue)" onclick="setTheme('trust')"></span>
+  <span class="dark-toggle" title="Toggle dark mode" onclick="toggleDark()" role="button" aria-label="Toggle dark mode">🌓</span>
+</div>
+<script>
+// Highlight the active chip on initial render
+(function(){
+  const t = document.body.getAttribute('data-theme') || 'emerald';
+  document.querySelectorAll('.theme-chip').forEach(c=>{
+    c.classList.toggle('active', c.dataset.t === t);
+  });
+})();
 </script>
 </body>
 </html>

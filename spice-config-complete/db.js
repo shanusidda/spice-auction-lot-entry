@@ -1,20 +1,60 @@
-const initSqlJs = require('sql.js');
+/**
+ * db.js — Migrated from sql.js → better-sqlite3
+ *
+ * Why: sql.js holds the entire DB in memory and writes the whole file on every
+ * operation. With multiple branches entering lots concurrently, this causes
+ * race conditions and can lose writes. better-sqlite3 uses native SQLite with
+ * WAL mode for safe concurrent access.
+ *
+ * Compatibility: This wrapper preserves the exact same API your existing
+ * server.js, calculations.js, company-config.js, exports.js, etc. already use.
+ * No changes needed in those files.
+ *
+ *   db.run(sql, params)           // INSERT/UPDATE/DELETE (params array or spread)
+ *   db.get(sql, params)           // SELECT one row
+ *   db.all(sql, params)           // SELECT many rows
+ *   db.exec(sql)                  // multi-statement SQL
+ *   db.prepare(sql).run(...args)  // prepared INSERT/UPDATE
+ *   db.prepare(sql).get(...args)  // prepared SELECT one
+ *   db.prepare(sql).all(...args)  // prepared SELECT many
+ *   db.transaction(fn)            // returns a wrapped function
+ */
+
+const Database = require('better-sqlite3');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
 const DB_PATH = path.join(__dirname, 'data', 'config.db');
-let rawDb, wrapped;
 
+let rawDb = null;
+let wrapped = null;
+
+/**
+ * Initialize the database. Async signature preserved for backwards
+ * compatibility (better-sqlite3 is synchronous, but existing code does
+ * `await initDb()`).
+ */
 async function initDb() {
+  if (wrapped) return wrapped;
+
   const dir = path.dirname(DB_PATH);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  const SQL = await initSqlJs();
-  rawDb = fs.existsSync(DB_PATH) ? new SQL.Database(fs.readFileSync(DB_PATH)) : new SQL.Database();
+
+  rawDb = new Database(DB_PATH);
+
+  // WAL mode: concurrent reads during writes. Main reason we migrated.
+  rawDb.pragma('journal_mode = WAL');
+  // Wait up to 5s if another connection holds a lock, instead of instant failure.
+  rawDb.pragma('busy_timeout = 5000');
+  // Synchronous = NORMAL is safe with WAL and ~2x faster than FULL.
+  rawDb.pragma('synchronous = NORMAL');
+  // Enforce foreign keys (off by default in SQLite).
+  rawDb.pragma('foreign_keys = ON');
+
   wrapped = makeWrapper();
 
   // ── SESSIONS ───────────────────────────────────────────────
-  // One row per active login (supports the same user signed in on multiple devices)
   wrapped.exec(`CREATE TABLE IF NOT EXISTS sessions (
     token TEXT PRIMARY KEY,
     user_id INTEGER NOT NULL,
@@ -150,6 +190,9 @@ async function initDb() {
     cgst REAL DEFAULT 0,
     sgst REAL DEFAULT 0,
     igst REAL DEFAULT 0,
+    dcgst REAL DEFAULT 0,
+    dsgst REAL DEFAULT 0,
+    digst REAL DEFAULT 0,
     refud REAL DEFAULT 0,
     refund REAL DEFAULT 0,
     advance REAL DEFAULT 0,
@@ -283,7 +326,7 @@ async function initDb() {
     'CREATE INDEX IF NOT EXISTS idx_buyers_buyer ON buyers(buyer)',
     'CREATE INDEX IF NOT EXISTS idx_buyers_buyer1 ON buyers(buyer1)',
   ];
-  for (const idx of indexes) { try { wrapped.exec(idx); } catch(e) {} }
+  for (const idx of indexes) { try { wrapped.exec(idx); } catch (e) {} }
 
   // ── MIGRATIONS (for existing databases created before schema changes) ──
   const migrations = [
@@ -291,16 +334,19 @@ async function initDb() {
     'ALTER TABLE invoices ADD COLUMN auction_id INTEGER',
     'ALTER TABLE bills ADD COLUMN auction_id INTEGER',
     'ALTER TABLE debit_notes ADD COLUMN auction_id INTEGER',
-    // Buyer short alias (CODE column in XLSX — used in price import to match lots to buyers)
     "ALTER TABLE buyers ADD COLUMN code TEXT DEFAULT ''",
     "ALTER TABLE buyers ADD COLUMN cadd2 TEXT DEFAULT ''",
     "ALTER TABLE buyers ADD COLUMN email TEXT DEFAULT ''",
     "ALTER TABLE buyers ADD COLUMN tdsq TEXT DEFAULT ''",
     "ALTER TABLE buyers ADD COLUMN sbl TEXT DEFAULT ''",
+    // Discount GST columns (per-lot, when flag_disc_gst is ON)
+    'ALTER TABLE lots ADD COLUMN dcgst REAL DEFAULT 0',
+    'ALTER TABLE lots ADD COLUMN dsgst REAL DEFAULT 0',
+    'ALTER TABLE lots ADD COLUMN digst REAL DEFAULT 0',
   ];
   for (const m of migrations) {
     try { wrapped.exec(m); console.log('Migration applied:', m); }
-    catch(e) { /* column already exists — ignore */ }
+    catch (e) { /* column already exists — ignore */ }
   }
 
   // Seed admin
@@ -311,43 +357,107 @@ async function initDb() {
     console.log('Default admin created (admin / admin123)');
   }
 
-  save();
-  setInterval(save, 30000);
-  console.log('Database ready at', DB_PATH);
+  console.log('Database ready at', DB_PATH, '(better-sqlite3, WAL mode)');
   return wrapped;
 }
 
-function save() { if (rawDb) fs.writeFileSync(DB_PATH, Buffer.from(rawDb.export())); }
+/**
+ * Normalize params so callers can pass either an array or spread arguments.
+ * Accepts: fn('sql', [a, b, c])  OR  fn('sql', a, b, c)  OR  fn('sql')
+ */
+function normalizeParams(args) {
+  if (args.length === 0) return [];
+  if (args.length === 1 && Array.isArray(args[0])) return args[0];
+  return args;
+}
 
 function makeWrapper() {
   return {
-    run(sql, params = []) { rawDb.run(sql, params); save(); },
-    get(sql, params = []) {
-      const s = rawDb.prepare(sql); s.bind(params);
-      const r = s.step() ? s.getAsObject() : null; s.free(); return r;
+    /**
+     * Execute multi-statement SQL (no params, no return).
+     */
+    exec(sql) {
+      rawDb.exec(sql);
     },
-    all(sql, params = []) {
-      const s = rawDb.prepare(sql); s.bind(params);
-      const rows = []; while (s.step()) rows.push(s.getAsObject()); s.free(); return rows;
+
+    /**
+     * Run an INSERT/UPDATE/DELETE. Accepts params as array or spread.
+     * Returns { lastInsertRowid, changes } for compatibility with
+     * better-sqlite3's native API, though existing code doesn't use them.
+     */
+    run(sql, ...rest) {
+      const params = normalizeParams(rest);
+      const stmt = rawDb.prepare(sql);
+      const info = stmt.run(...params);
+      return { lastInsertRowid: info.lastInsertRowid, changes: info.changes };
     },
-    exec(sql) { rawDb.run(sql); save(); },
+
+    /**
+     * SELECT one row. Returns row object or null (matching sql.js behavior).
+     */
+    get(sql, ...rest) {
+      const params = normalizeParams(rest);
+      const stmt = rawDb.prepare(sql);
+      const row = stmt.get(...params);
+      return row || null;
+    },
+
+    /**
+     * SELECT many rows. Returns array (possibly empty).
+     */
+    all(sql, ...rest) {
+      const params = normalizeParams(rest);
+      const stmt = rawDb.prepare(sql);
+      return stmt.all(...params);
+    },
+
+    /**
+     * Prepare a statement. Returns an object with run/get/all that accept
+     * spread args — matches better-sqlite3 native API and existing code's
+     * usage pattern: `insert.run(a, b, c, d, e)`.
+     */
     prepare(sql) {
+      const stmt = rawDb.prepare(sql);
       return {
-        run(...p) { rawDb.run(sql, p); },
-        get(...p) { const s = rawDb.prepare(sql); s.bind(p); const r = s.step() ? s.getAsObject() : null; s.free(); return r; },
-        all(...p) { const s = rawDb.prepare(sql); s.bind(p); const rows = []; while (s.step()) rows.push(s.getAsObject()); s.free(); return rows; }
+        run(...args) {
+          const info = stmt.run(...args);
+          return { lastInsertRowid: info.lastInsertRowid, changes: info.changes };
+        },
+        get(...args) {
+          const row = stmt.get(...args);
+          return row || null;
+        },
+        all(...args) {
+          return stmt.all(...args);
+        }
       };
     },
+
+    /**
+     * Wrap a function in a transaction. Returns a new function that runs
+     * the original inside BEGIN/COMMIT (or ROLLBACK on throw). Uses
+     * better-sqlite3's native transaction API for atomic correctness.
+     */
     transaction(fn) {
-      return (...args) => {
-        rawDb.run('BEGIN');
-        try { const r = fn(...args); rawDb.run('COMMIT'); save(); return r; }
-        catch(e) { rawDb.run('ROLLBACK'); throw e; }
-      };
-    }
+      return rawDb.transaction(fn);
+    },
+
+    // Escape hatch to the raw better-sqlite3 Database instance.
+    get raw() { return rawDb; }
   };
 }
 
-function getDb() { if (!wrapped) throw new Error('Call initDb() first'); return wrapped; }
+function getDb() {
+  if (!wrapped) throw new Error('Call initDb() first');
+  return wrapped;
+}
 
-module.exports = { initDb, getDb };
+function closeDb() {
+  if (rawDb) {
+    rawDb.close();
+    rawDb = null;
+    wrapped = null;
+  }
+}
+
+module.exports = { initDb, getDb, closeDb };

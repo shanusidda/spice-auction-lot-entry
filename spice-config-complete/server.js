@@ -17,6 +17,15 @@ const app = express();
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Prevent browser/proxy caching of API responses so Refresh buttons actually
+// fetch fresh data (without this, fetch() may return stale cached JSON)
+app.use('/api', (req, res, next) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+  next();
+});
+
 // File upload setup
 const uploadDir = path.join(__dirname, 'data', 'uploads');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
@@ -223,6 +232,49 @@ app.put('/api/company-settings', requireAdmin, (req, res) => {
   res.json({ success: true, updated: count });
 });
 app.get('/api/company-settings/flat', requireAdmin, (req, res) => res.json(getSettingsFlat(getDb())));
+
+// ── Logo upload/delete ────────────────────────────────────────
+// Supports two logos: 'ispl' (main company) and 'asp' (sister company).
+// Files are saved to public/ so the PDF generator can read them at runtime.
+// Also served to the browser for preview via GET /logo-<which>.png.
+const LOGO_FILES = {
+  ispl: path.join(__dirname, 'public', 'logo-ispl.png'),
+  asp:  path.join(__dirname, 'public', 'logo-asp.png'),
+};
+app.post('/api/company-settings/logo/:which', requireAdmin, upload.single('file'), (req, res) => {
+  const which = req.params.which;
+  if (!LOGO_FILES[which]) return res.status(400).json({ error: 'Invalid logo type (use ispl or asp)' });
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+  // Only allow image types
+  const ext = (req.file.originalname.split('.').pop() || '').toLowerCase();
+  if (!['png', 'jpg', 'jpeg'].includes(ext)) {
+    fs.unlinkSync(req.file.path);
+    return res.status(400).json({ error: 'Only PNG or JPG images allowed' });
+  }
+  // Always save as .png at the fixed path (PDFKit handles both PNG and JPEG from PNG extension? No — rename to real ext)
+  // Simpler: keep .png in the PDF code always pointing to PNG. For JPEG uploads, save as .jpg alongside.
+  const target = LOGO_FILES[which];
+  fs.copyFileSync(req.file.path, target);
+  fs.unlinkSync(req.file.path);
+  res.json({ success: true, path: `/logo-${which}.png`, size: fs.statSync(target).size });
+});
+app.delete('/api/company-settings/logo/:which', requireAdmin, (req, res) => {
+  const which = req.params.which;
+  if (!LOGO_FILES[which]) return res.status(400).json({ error: 'Invalid logo type' });
+  const target = LOGO_FILES[which];
+  if (fs.existsSync(target)) fs.unlinkSync(target);
+  res.json({ success: true });
+});
+// Quick probe so the UI knows whether a logo is uploaded
+app.get('/api/company-settings/logo/:which', requireAdmin, (req, res) => {
+  const which = req.params.which;
+  if (!LOGO_FILES[which]) return res.status(400).json({ error: 'Invalid logo type' });
+  const target = LOGO_FILES[which];
+  if (!fs.existsSync(target)) return res.json({ exists: false });
+  const stat = fs.statSync(target);
+  res.json({ exists: true, size: stat.size, mtime: stat.mtime });
+});
+
 app.get('/api/company-settings/export', requireAdmin, (req, res) => {
   res.setHeader('Content-Disposition', 'attachment; filename="company-settings.json"');
   res.json(getSettingsFlat(getDb()));
@@ -912,11 +964,17 @@ app.get('/api/auctions/template', requireAdmin, async (req, res) => {
 // ══════════════════════════════════════════════════════════════
 app.get('/api/lots/:auctionId', requireAdmin, (req, res) => {
   const { branch, name, buyer } = req.query;
-  let q = 'SELECT * FROM lots WHERE auction_id = ?'; const p = [req.params.auctionId];
-  if (branch) { q += ' AND branch = ?'; p.push(branch); }
-  if (name) { q += ' AND name LIKE ?'; p.push(`%${name}%`); }
-  if (buyer) { q += ' AND buyer = ?'; p.push(buyer); }
-  q += ' ORDER BY lot_no';
+  // Correlated subquery (not LEFT JOIN) to avoid any risk of row duplication
+  // if the same buyer code exists multiple times in the buyers table.
+  let q = `SELECT lots.*,
+             (SELECT b.code FROM buyers b WHERE b.buyer = lots.buyer LIMIT 1) AS buyer_code
+           FROM lots
+           WHERE lots.auction_id = ?`;
+  const p = [req.params.auctionId];
+  if (branch) { q += ' AND lots.branch = ?'; p.push(branch); }
+  if (name) { q += ' AND lots.name LIKE ?'; p.push(`%${name}%`); }
+  if (buyer) { q += ' AND lots.buyer = ?'; p.push(buyer); }
+  q += ' ORDER BY lots.lot_no';
   res.json(getDb().all(q, p));
 });
 
@@ -949,8 +1007,8 @@ app.post('/api/lots/calculate/:auctionId', requireAdmin, (req, res) => {
   let count = 0;
   for (const lot of lots) {
     const calc = calculateLot(lot, cfg);
-    db.run(`UPDATE lots SET pqty=?,prate=?,puramt=?,com=?,sertax=?,cgst=?,sgst=?,igst=?,advance=?,balance=?,bilamt=?,refud=? WHERE id=?`,
-      [calc.pqty,calc.prate,calc.puramt,calc.com,calc.sertax,calc.cgst,calc.sgst,calc.igst,calc.advance,calc.balance,calc.bilamt,calc.refud||0,lot.id]);
+    db.run(`UPDATE lots SET pqty=?,prate=?,puramt=?,com=?,sertax=?,cgst=?,sgst=?,igst=?,advance=?,balance=?,bilamt=?,refund=?,refud=? WHERE id=?`,
+      [calc.pqty,calc.prate,calc.puramt,calc.com,calc.sertax,calc.cgst,calc.sgst,calc.igst,calc.advance,calc.balance,calc.bilamt,calc.refund||0,calc.refud||0,lot.id]);
     count++;
   }
   res.json({ success: true, calculated: count });
@@ -989,8 +1047,8 @@ app.post('/api/invoices/generate/:auctionId', requireAdmin, (req, res) => {
   const uncalc = db.all(`SELECT * FROM lots WHERE auction_id = ? AND amount > 0 AND (puramt IS NULL OR puramt = 0)`, [req.params.auctionId]);
   for (const lot of uncalc) {
     const c = calculateLot(lot, cfg);
-    db.run(`UPDATE lots SET pqty=?,prate=?,puramt=?,com=?,sertax=?,cgst=?,sgst=?,igst=?,advance=?,balance=?,bilamt=?,refud=? WHERE id=?`,
-      [c.pqty,c.prate,c.puramt,c.com,c.sertax,c.cgst,c.sgst,c.igst,c.advance,c.balance,c.bilamt,c.refud||0,lot.id]);
+    db.run(`UPDATE lots SET pqty=?,prate=?,puramt=?,com=?,sertax=?,cgst=?,sgst=?,igst=?,advance=?,balance=?,bilamt=?,refund=?,refud=? WHERE id=?`,
+      [c.pqty,c.prate,c.puramt,c.com,c.sertax,c.cgst,c.sgst,c.igst,c.advance,c.balance,c.bilamt,c.refund||0,c.refud||0,lot.id]);
   }
   
   const invoice = buildSalesInvoice(db, req.params.auctionId, buyerCode, saleType, cfg);
@@ -1119,8 +1177,8 @@ app.post('/api/invoices/generate-all/:auctionId', requireAdmin, (req, res) => {
   const uncalc = db.all(`SELECT * FROM lots WHERE auction_id = ? AND amount > 0 AND (puramt IS NULL OR puramt = 0)`, [req.params.auctionId]);
   for (const lot of uncalc) {
     const c = calculateLot(lot, cfg);
-    db.run(`UPDATE lots SET pqty=?,prate=?,puramt=?,com=?,sertax=?,cgst=?,sgst=?,igst=?,advance=?,balance=?,bilamt=?,refud=? WHERE id=?`,
-      [c.pqty,c.prate,c.puramt,c.com,c.sertax,c.cgst,c.sgst,c.igst,c.advance,c.balance,c.bilamt,c.refud||0,lot.id]);
+    db.run(`UPDATE lots SET pqty=?,prate=?,puramt=?,com=?,sertax=?,cgst=?,sgst=?,igst=?,advance=?,balance=?,bilamt=?,refund=?,refud=? WHERE id=?`,
+      [c.pqty,c.prate,c.puramt,c.com,c.sertax,c.cgst,c.sgst,c.igst,c.advance,c.balance,c.bilamt,c.refund||0,c.refud||0,lot.id]);
   }
   
   // Get distinct buyers. When saleType filter is set, only buyers whose
@@ -1378,8 +1436,8 @@ app.post('/api/purchases/generate-all/:auctionId', requireAdmin, (req, res) => {
   const uncalc = db.all(`SELECT * FROM lots WHERE auction_id = ? AND amount > 0 AND (puramt IS NULL OR puramt = 0)`, [req.params.auctionId]);
   for (const lot of uncalc) {
     const c = calculateLot(lot, cfg);
-    db.run(`UPDATE lots SET pqty=?,prate=?,puramt=?,com=?,sertax=?,cgst=?,sgst=?,igst=?,advance=?,balance=?,bilamt=?,refud=? WHERE id=?`,
-      [c.pqty,c.prate,c.puramt,c.com,c.sertax,c.cgst,c.sgst,c.igst,c.advance,c.balance,c.bilamt,c.refud||0,lot.id]);
+    db.run(`UPDATE lots SET pqty=?,prate=?,puramt=?,com=?,sertax=?,cgst=?,sgst=?,igst=?,advance=?,balance=?,bilamt=?,refund=?,refud=? WHERE id=?`,
+      [c.pqty,c.prate,c.puramt,c.com,c.sertax,c.cgst,c.sgst,c.igst,c.advance,c.balance,c.bilamt,c.refund||0,c.refud||0,lot.id]);
   }
   
   const sellers = db.all(
@@ -1514,8 +1572,8 @@ app.post('/api/bills/generate/:auctionId', requireAdmin, (req, res) => {
   const uncalc = db.all(`SELECT * FROM lots WHERE auction_id = ? AND amount > 0 AND (puramt IS NULL OR puramt = 0)`, [req.params.auctionId]);
   for (const lot of uncalc) {
     const c = calculateLot(lot, cfg);
-    db.run(`UPDATE lots SET pqty=?,prate=?,puramt=?,com=?,sertax=?,cgst=?,sgst=?,igst=?,advance=?,balance=?,bilamt=?,refud=? WHERE id=?`,
-      [c.pqty,c.prate,c.puramt,c.com,c.sertax,c.cgst,c.sgst,c.igst,c.advance,c.balance,c.bilamt,c.refud||0,lot.id]);
+    db.run(`UPDATE lots SET pqty=?,prate=?,puramt=?,com=?,sertax=?,cgst=?,sgst=?,igst=?,advance=?,balance=?,bilamt=?,refund=?,refud=? WHERE id=?`,
+      [c.pqty,c.prate,c.puramt,c.com,c.sertax,c.cgst,c.sgst,c.igst,c.advance,c.balance,c.bilamt,c.refund||0,c.refud||0,lot.id]);
   }
   
   const bill = buildAgriBill(db, req.params.auctionId, sellerName, cfg);
@@ -1552,8 +1610,8 @@ app.post('/api/bills/generate-all/:auctionId', requireAdmin, (req, res) => {
   const uncalc = db.all(`SELECT * FROM lots WHERE auction_id = ? AND amount > 0 AND (puramt IS NULL OR puramt = 0)`, [req.params.auctionId]);
   for (const lot of uncalc) {
     const c = calculateLot(lot, cfg);
-    db.run(`UPDATE lots SET pqty=?,prate=?,puramt=?,com=?,sertax=?,cgst=?,sgst=?,igst=?,advance=?,balance=?,bilamt=?,refud=? WHERE id=?`,
-      [c.pqty,c.prate,c.puramt,c.com,c.sertax,c.cgst,c.sgst,c.igst,c.advance,c.balance,c.bilamt,c.refud||0,lot.id]);
+    db.run(`UPDATE lots SET pqty=?,prate=?,puramt=?,com=?,sertax=?,cgst=?,sgst=?,igst=?,advance=?,balance=?,bilamt=?,refund=?,refud=? WHERE id=?`,
+      [c.pqty,c.prate,c.puramt,c.com,c.sertax,c.cgst,c.sgst,c.igst,c.advance,c.balance,c.bilamt,c.refund||0,c.refud||0,lot.id]);
   }
   
   const sellers = listAgriSellers(db, req.params.auctionId);
@@ -1730,8 +1788,8 @@ app.post('/api/invoices/preview/:auctionId', requireAdmin, (req, res) => {
   const uncalc = db.all(`SELECT * FROM lots WHERE auction_id = ? AND amount > 0 AND (puramt IS NULL OR puramt = 0)`, [req.params.auctionId]);
   for (const lot of uncalc) {
     const c = calculateLot(lot, cfg);
-    db.run(`UPDATE lots SET pqty=?,prate=?,puramt=?,com=?,sertax=?,cgst=?,sgst=?,igst=?,advance=?,balance=?,bilamt=?,refud=? WHERE id=?`,
-      [c.pqty,c.prate,c.puramt,c.com,c.sertax,c.cgst,c.sgst,c.igst,c.advance,c.balance,c.bilamt,c.refud||0,lot.id]);
+    db.run(`UPDATE lots SET pqty=?,prate=?,puramt=?,com=?,sertax=?,cgst=?,sgst=?,igst=?,advance=?,balance=?,bilamt=?,refund=?,refud=? WHERE id=?`,
+      [c.pqty,c.prate,c.puramt,c.com,c.sertax,c.cgst,c.sgst,c.igst,c.advance,c.balance,c.bilamt,c.refund||0,c.refud||0,lot.id]);
   }
   
   let invoice;
@@ -1923,14 +1981,48 @@ app.get('/api/stats', requireAdmin, (req, res) => {
     `SELECT id, ano, date, crop_type FROM auctions ORDER BY id DESC LIMIT 50`
   );
 
-  // Pick: ?auction_id=N if provided, else most recent
+  // ── Cumulative totals across ALL trades (lifetime) ──
+  // Aggregates over every lot in every auction, regardless of state.
+  const cumRow = db.get(
+    `SELECT COALESCE(SUM(qty),0) as qty,
+            COALESCE(SUM(amount),0) as amount,
+            COUNT(*) as lots
+     FROM lots`
+  ) || {};
+  const cumulative = {
+    qty:    cumRow.qty    || 0,
+    amount: cumRow.amount || 0,
+    lots:   cumRow.lots   || 0,
+    auctions: counts.auctions,
+  };
+
+  // ── Per-trade breakdown (one row per auction, newest first) ──
+  // One query with a LEFT JOIN so auctions with zero lots still appear.
+  const perTradeBreakdown = db.all(
+    `SELECT a.id, a.ano, a.date, a.crop_type,
+            COUNT(l.id) as lots,
+            COALESCE(SUM(l.qty),0) as qty,
+            COALESCE(SUM(l.amount),0) as amount,
+            COALESCE(SUM(CASE WHEN l.amount > 0 THEN 1 ELSE 0 END),0) as priced,
+            COALESCE(SUM(CASE WHEN l.invo IS NOT NULL AND l.invo != '' THEN 1 ELSE 0 END),0) as invoiced
+     FROM auctions a
+     LEFT JOIN lots l ON l.auction_id = a.id
+     GROUP BY a.id, a.ano, a.date, a.crop_type
+     ORDER BY a.date DESC, a.id DESC
+     LIMIT 50`
+  );
+
+  // Pick: ?auction_id=N if provided
+  //   - "all" (or no param) => dashboard shows cumulative view, no individual auction highlighted
+  //   - specific id         => dashboard drills into that one auction
   let currentAuction = null;
-  const requestedId = parseInt(req.query.auction_id);
-  if (requestedId) {
-    currentAuction = db.get('SELECT * FROM auctions WHERE id = ?', [requestedId]);
-  }
-  if (!currentAuction) {
-    currentAuction = db.get('SELECT * FROM auctions ORDER BY id DESC LIMIT 1');
+  const rawAuctionId = req.query.auction_id;
+  const isAllMode = (rawAuctionId === 'all' || rawAuctionId === '' || rawAuctionId === undefined);
+  if (!isAllMode) {
+    const requestedId = parseInt(rawAuctionId);
+    if (requestedId) {
+      currentAuction = db.get('SELECT * FROM auctions WHERE id = ?', [requestedId]);
+    }
   }
 
   let auctionStats = null;
@@ -1977,7 +2069,9 @@ app.get('/api/stats', requireAdmin, (req, res) => {
        AND date <  date('now','start of month')`
   ) || {}).s || 0;
 
-  // Pending invoices = un-invoiced priced lots in current auction
+  // Pending invoices:
+  //   - Drilled into an auction: un-invoiced priced lots in that auction
+  //   - Cumulative mode: un-invoiced priced lots across ALL auctions
   let pendingInvoices = 0;
   if (currentAuction) {
     pendingInvoices = (db.get(
@@ -1985,10 +2079,18 @@ app.get('/api/stats', requireAdmin, (req, res) => {
        WHERE auction_id = ? AND amount > 0 AND buyer IS NOT NULL AND buyer != ''
          AND (invo IS NULL OR invo = '')`, [currentAuction.id]
     ) || {}).c || 0;
+  } else {
+    pendingInvoices = (db.get(
+      `SELECT COUNT(DISTINCT buyer || '|' || auction_id) as c FROM lots
+       WHERE amount > 0 AND buyer IS NOT NULL AND buyer != ''
+         AND (invo IS NULL OR invo = '')`
+    ) || {}).c || 0;
   }
 
   res.json({
     counts,
+    cumulative,
+    perTradeBreakdown,
     currentAuction: auctionStats,
     allAuctions,
     topSellers,

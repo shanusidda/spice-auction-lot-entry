@@ -16,48 +16,107 @@ function calculateLot(lot, cfg) {
   const sgstRate = gstGoods / 2;
   const igstRate = gstGoods;
   
-  // Purchase qty = qty + refund (sample weight returned)
-  result.pqty = lot.qty + (lot.refud || 0);
-  
+  // Purchase qty = qty + Sample Refund (from Rates & Charges settings, global)
+  // Falls back to per-lot `refud` column for back-compat with older data.
+  const sampleRefundKg = (cfg.refund != null && cfg.refund !== '') ? Number(cfg.refund) : (lot.refud || 0);
+  result.pqty = (lot.qty || 0) + (Number(sampleRefundKg) || 0);
+
   // Purchase rate based on business mode
   if (cfg.business_mode === 'e-Auction') {
-    // e-Auction: commission-based
-    result.com = Math.round(lot.amount * (cfg.commission || 1) / 100 * 100) / 100;
-    result.sertax = Math.round(lot.amount * (cfg.hpc || 0) / 100 * 100) / 100;
-    result.prate = lot.price;
+    // e-Auction (new spec — commission agent model):
+    //   Refund     = Price × SB Sample Refund (Kgs)        [stored in `refund` column]
+    //   Commission = (Amount + Refund) × commission%        [stored in `com` column]
+    //   Handling   = Commission × hpc%  (Handling % from Rates & Charges) [stored in `sertax`]
+    //   GST (CGST+SGST intra, IGST inter) on (Commission + Handling) using Service Rate
+    const sbRefund  = Number(cfg.sb_refund) || 0;
+    const commPct   = Number(cfg.commission) || 0;
+    const handlingPct = Number(cfg.hpc) || 0;
+    const refundAmt = Math.round((lot.price || 0) * sbRefund * 100) / 100;
+    const commAmt   = Math.round((((lot.amount || 0) + refundAmt) * commPct / 100) * 100) / 100;
+    const handling  = Math.round(commAmt * handlingPct / 100 * 100) / 100;
+    result.refund = refundAmt;
+    result.com    = commAmt;
+    result.sertax = handling;
+    result.prate  = lot.price;
     result.puramt = lot.amount - result.com - result.sertax;
   } else {
     // e-Trade: deduction-based
-    const deduction = lot.cr && lot.cr.includes('GSTIN') ? cfg.deduction2 : cfg.deduction1;
-    result.prate = Math.round((lot.price - (lot.price * deduction / 100)) * 100) / 100;
+    //   grade 1 (pooler)  → deduction1
+    //   grade 2 (dealer)  → deduction2
+    //   other grades fall back to pooler rate
+    const gradeStr = String(lot.grade || '').trim();
+    const deduction = (gradeStr === '2') ? (cfg.deduction2 || 0) : (cfg.deduction1 || 0);
+    const rawRate = (lot.price || 0) * (1 - deduction / 100);
+    // Round to nearest rupee (half-up)
+    result.prate = Math.round(rawRate);
     result.puramt = Math.round(result.pqty * result.prate * 100) / 100;
     result.com = 0;
     result.sertax = 0;
   }
 
-  // GST calculation — intra-state (CGST+SGST) vs inter-state (IGST)
+  // Intra/inter-state detection (shared between both modes):
+  //   Seller's GSTIN state code (chars 6-7 of lot.cr "GSTIN XX...") vs company's state code
   const sellerGstState = lot.cr ? lot.cr.substring(6, 8) : '';
   const companyGstState = cfg.business_state === 'KERALA' ? '32' : '33';
-  
-  if (sellerGstState === companyGstState) {
-    // Intra-state: CGST + SGST
-    result.cgst = Math.round(result.puramt * cgstRate / 100 * 100) / 100;
-    result.sgst = Math.round(result.puramt * sgstRate / 100 * 100) / 100;
-    result.igst = 0;
+  const isIntra = (sellerGstState === companyGstState);
+
+  // GST rate: both modes tax a SERVICE component (commission/handling for e-Auction,
+  // trade-credit discount for e-Trade), so both use gst_service rate.
+  const gstServiceRate = Number(cfg.gst_service) || 18;
+  const halfRate = gstServiceRate / 2;
+
+  // Default CGST/SGST/IGST to 0; mode-specific branches fill them in below.
+  result.cgst = 0;
+  result.sgst = 0;
+  result.igst = 0;
+
+  if (cfg.business_mode === 'e-Auction') {
+    // e-Auction: GST on (Commission + Handling) using Service Rate
+    const gstBase = result.com + result.sertax;
+    if (isIntra) {
+      result.cgst = Math.round(gstBase * halfRate / 100 * 100) / 100;
+      result.sgst = Math.round(gstBase * halfRate / 100 * 100) / 100;
+    } else {
+      result.igst = Math.round(gstBase * gstServiceRate / 100 * 100) / 100;
+    }
+
+    // Advance (sum of deductions) — kept for downstream compatibility (PDFs, exports)
+    result.advance = result.com + result.sertax + result.cgst + result.sgst + result.igst;
+
+    // Payable = (Amount + Refund) − (Commission + Handling + CGST + SGST + IGST)
+    result.balance = Math.round(((lot.amount || 0) + result.refund - result.advance) * 100) / 100;
+
   } else {
-    // Inter-state: IGST
-    result.cgst = 0;
-    result.sgst = 0;
-    result.igst = Math.round(result.puramt * igstRate / 100 * 100) / 100;
+    // e-Trade: compute Discount first, then GST on the Discount (if flag is ON).
+    //
+    //   Discount = round(PurAmt / 1000 * days * discount%)  — nearest rupee, half-up
+    //   Payable  = PurAmt − Discount − CGST − SGST − IGST
+    //
+    // result.refund is reused as the Discount amount for e-Trade mode.
+    const days    = Number(cfg.discount_days) || 0;
+    const discPct = Number(cfg.discount_pct)  || 0;
+    result.refund = Math.round((result.puramt / 1000) * days * discPct);
+
+    // Only apply GST on the Discount when flag_disc_gst is ON.
+    // Uses Service Rate because the discount is treated as a credit/finance service.
+    if (cfg.flag_disc_gst && result.refund > 0) {
+      if (isIntra) {
+        result.cgst = Math.round(result.refund * halfRate / 100 * 100) / 100;
+        result.sgst = Math.round(result.refund * halfRate / 100 * 100) / 100;
+      } else {
+        result.igst = Math.round(result.refund * gstServiceRate / 100 * 100) / 100;
+      }
+    }
+
+    // e-Trade has no commission/handling, so advance = GST only (informational).
+    result.advance = result.cgst + result.sgst + result.igst;
+
+    // Payable = PurAmt − Discount − GST-on-Discount
+    const totalDeductions = result.refund + result.cgst + result.sgst + result.igst;
+    result.balance = Math.round((result.puramt - totalDeductions) * 100) / 100;
   }
 
-  // Advance/discount
-  result.advance = result.com + result.sertax + result.cgst + result.sgst + result.igst;
-  
-  // Balance payable to seller
-  result.balance = Math.round((result.puramt - result.advance) * 100) / 100;
-  
-  // Bill amount (for agriculturist bills)
+  // Bill amount (for agriculturist bills) — always equals PurAmt
   result.bilamt = result.puramt;
 
   return result;
@@ -135,15 +194,45 @@ function buildSalesInvoice(db, auctionId, buyerCode, saleType, cfg) {
     });
   }
 
-  // Gunny cost
+  // Gunny cost (HSN: jute bags)
   const gunnyCost = totalBags * (cfg.gunny_rate || 165);
-  
-  // Transport & insurance (only for inter-state or specific flags)
-  const transportCost = isInterState ? Math.round(totalQty * (cfg.transport || 2.5) * 100) / 100 : 0;
-  const insuranceCost = isInterState ? Math.round(totalQty * (cfg.insurance || 0.75) * 100) / 100 : 0;
 
-  const taxableValue = totalAmount + gunnyCost + transportCost + insuranceCost;
+  // Transport & Insurance rates depend on sale type:
+  //   L (Local)        → local_transport / local_insurance
+  //   I (Inter-state)  → transport / insurance
+  //   E (Export)       → use inter-state rates (same interstate logistics)
+  // All rates are in ₹/kg (transport) or paise-per-thousand-units (insurance).
+  // IMPORTANT: Use `??` not `||` so that an explicit 0 from settings is
+  // respected (e.g. user wants no transport charge). `||` would treat 0 as
+  // falsy and fall back to the default, silently adding unwanted charges.
+  const pickRate = (...vals) => {
+    for (const v of vals) {
+      if (v === undefined || v === null || v === '') continue;
+      const n = typeof v === 'number' ? v : parseFloat(v);
+      if (!Number.isNaN(n)) return n;
+    }
+    return 0;
+  };
+  const isLocal = (saleType === 'L');
+  const transportRate = isLocal
+    ? pickRate(cfg.local_transport, cfg.transport, 2.5)
+    : pickRate(cfg.transport, 2.5);
+  const insuranceRate = isLocal
+    ? pickRate(cfg.local_insurance, cfg.insurance, 0.75)
+    : pickRate(cfg.insurance, 0.75);
 
+  const transportCost = Math.round(totalQty * transportRate * 100) / 100;
+
+  // Insurance formula (per spec):
+  //   insurance = ((cardamom_amount + gunny_cost) + GST on cardamom+gunny) / 1000 × insurance_rate
+  const subtotalGoods = totalAmount + gunnyCost;
+  const gstOnGoods = subtotalGoods * gstGoods / 100;
+  const insuranceCost = Math.round((subtotalGoods + gstOnGoods) / 1000 * insuranceRate * 100) / 100;
+
+  // Taxable value = cardamom + gunny + transport + insurance
+  const taxableValue = subtotalGoods + transportCost + insuranceCost;
+
+  // All four components get the SAME gstGoods rate (per user confirmation).
   let cgst = 0, sgst = 0, igst = 0;
   if (isInterState) {
     igst = Math.round(taxableValue * gstGoods / 100 * 100) / 100;
