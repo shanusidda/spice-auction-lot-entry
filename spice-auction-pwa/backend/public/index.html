@@ -954,15 +954,17 @@
 
       <div id="adm-ed-bank-form" style="display:none;margin-top:6px;background:#fff;border:1px solid #e4e3df;border-radius:8px;padding:10px">
 
-        <label>A/C NUMBER</label><input type="text" id="adm-ed-acct" placeholder="Account number">
-
-        <div id="adm-ed-acct-confirm-wrap"><label style="margin-top:6px">RE-ENTER A/C NUMBER</label><input type="text" id="adm-ed-acct-confirm" placeholder="Re-enter account number"></div>
+        <label>A/C NUMBER</label><input type="text" id="adm-ed-acct" placeholder="Account number (9-18 digits)" inputmode="numeric" oninput="sanitizeInt(this);checkAdmAcctChanged();checkAdmAcctMatch()">
+        <div id="adm-ed-acct-err" style="display:none;font-size:10px;font-weight:600;margin-top:2px;color:var(--red)"></div>
+        <div id="adm-ed-acct-confirm-wrap"><label style="margin-top:6px">RE-ENTER A/C NUMBER</label><input type="text" id="adm-ed-acct-confirm" placeholder="Re-enter account number" inputmode="numeric" oninput="sanitizeInt(this);checkAdmAcctMatch()"></div>
+        <div id="adm-ed-acct-match" style="display:none;font-size:10px;font-weight:600;margin-top:2px"></div>
 
         <div class="row" style="margin-top:6px"><div><label>IFSC CODE</label><input type="text" id="adm-ed-ifsc" placeholder="IFSC code" style="text-transform:uppercase"></div><div><label>HOLDER NAME</label><input type="text" id="adm-ed-holder" placeholder="Account holder name"></div></div>
 
         <label style="margin-top:6px">LABEL (optional)</label><input type="text" id="adm-ed-bank-label" placeholder="e.g. SBI Main">
 
         <input type="hidden" id="adm-ed-bank-edit-id" value="">
+        <div id="adm-ed-bank-err" style="display:none;font-size:11px;font-weight:600;color:var(--red);margin-top:6px;padding:6px 10px;background:#fef2f2;border-radius:6px"></div>
 
         <div style="display:flex;gap:8px;margin-top:8px">
 
@@ -1873,18 +1875,17 @@ function openAdmEdit(id, lotNo, seller, grade, bags, litre, qty, traderId, bankI
   document.getElementById('adm-ed-qty').value = Number(qty).toFixed(3);
   document.getElementById('adm-ed-err').textContent = '';
   document.getElementById('adm-ed-bank-form').style.display = 'none';
-  // Load sample weight from config
-  fetch(`${BASE}/api/config`).then(r=>r.json()).then(d=>{
-    const sw = d.sampleWeight || 0;
-    document.getElementById('adm-ed-sample').value = Number(sw).toFixed(3);
-    document.getElementById('adm-ed-moisture-wrap').style.display = d.showMoisture ? 'block' : 'none';
-    calcAdmGross();
-  }).catch(()=>{});
-  // Fetch lot details for moisture
   fetch(`${BASE}/api/lots/${id}/detail`, { headers: authHeaders() }).then(r=>r.json()).then(d=>{
     if (d.lot) {
-      if (d.lot.moisture != null) document.getElementById('adm-ed-moisture').value = d.lot.moisture;
-      else document.getElementById('adm-ed-moisture').value = '';
+      fetch(`${BASE}/api/config`).then(r2=>r2.json()).then(cfg=>{
+        var sw = d.lot.sample_weight != null && d.lot.sample_weight > 0 ? d.lot.sample_weight : cfg.sampleWeight || 0;
+        document.getElementById('adm-ed-sample').value = Number(sw).toFixed(3);
+        document.getElementById('adm-ed-gross').value = d.lot.gross_weight ? Number(d.lot.gross_weight).toFixed(3) : '0';
+        if (d.lot.moisture != null) document.getElementById('adm-ed-moisture').value = d.lot.moisture;
+        else document.getElementById('adm-ed-moisture').value = '';
+        document.getElementById('adm-ed-moisture-wrap').style.display = cfg.showMoisture ? 'block' : 'none';
+        calcAdmGross();
+      }).catch(()=>{ calcAdmGross(); });
     }
   }).catch(()=>{});
   document.getElementById('adm-edit-modal').classList.add('show');
@@ -2001,8 +2002,13 @@ function admEditBankEdit() {
   if (!sel.value) { admShowAddBank(); return; }
   const b = admEditBanks.find(x => x.id == sel.value);
   if (!b) return;
+  admBankErr('');
   document.getElementById('adm-ed-acct').value = b.acctnum || '';
+  document.getElementById('adm-ed-acct').dataset.original = b.acctnum || '';
+  document.getElementById('adm-ed-acct-confirm').value = '';
   document.getElementById('adm-ed-acct-confirm-wrap').style.display = 'none';
+  document.getElementById('adm-ed-acct-err').style.display = 'none';
+  document.getElementById('adm-ed-acct-match').style.display = 'none';
   document.getElementById('adm-ed-ifsc').value = b.ifsc || '';
   document.getElementById('adm-ed-holder').value = b.holder_name || '';
   document.getElementById('adm-ed-bank-label').value = b.label || '';
@@ -2011,9 +2017,13 @@ function admEditBankEdit() {
 }
 
 function admShowAddBank() {
+  admBankErr('');
   document.getElementById('adm-ed-acct').value = '';
+  document.getElementById('adm-ed-acct').dataset.original = '';
   document.getElementById('adm-ed-acct-confirm').value = '';
   document.getElementById('adm-ed-acct-confirm-wrap').style.display = 'block';
+  document.getElementById('adm-ed-acct-err').style.display = 'none';
+  document.getElementById('adm-ed-acct-match').style.display = 'none';
   document.getElementById('adm-ed-ifsc').value = '';
   document.getElementById('adm-ed-holder').value = '';
   document.getElementById('adm-ed-bank-label').value = '';
@@ -2021,32 +2031,77 @@ function admShowAddBank() {
   document.getElementById('adm-ed-bank-form').style.display = 'block';
 }
 
+function checkAdmAcctChanged() {
+  var inp = document.getElementById('adm-ed-acct');
+  var orig = inp.dataset.original || '';
+  var eid = document.getElementById('adm-ed-bank-edit-id').value;
+  var wrap = document.getElementById('adm-ed-acct-confirm-wrap');
+  if (eid && inp.value.trim() !== orig) { wrap.style.display = 'block'; }
+  else if (eid && inp.value.trim() === orig) { wrap.style.display = 'none'; document.getElementById('adm-ed-acct-match').style.display = 'none'; }
+}
+
+function checkAdmAcctMatch() {
+  var acct = document.getElementById('adm-ed-acct').value.trim();
+  var errEl = document.getElementById('adm-ed-acct-err');
+  var confirmEl = document.getElementById('adm-ed-acct-confirm');
+  var matchEl = document.getElementById('adm-ed-acct-match');
+  var wrap = document.getElementById('adm-ed-acct-confirm-wrap');
+  // Validate format
+  if (acct && acct.length > 0 && (acct.length < 9 || acct.length > 18)) {
+    errEl.textContent = 'Must be 9-18 digits (' + acct.length + ' entered)';
+    errEl.style.display = 'block';
+  } else {
+    errEl.style.display = 'none';
+  }
+  // Check match
+  if (wrap.style.display !== 'none' && confirmEl.value.trim()) {
+    if (acct === confirmEl.value.trim()) {
+      matchEl.textContent = '✓ Account numbers match';
+      matchEl.style.color = 'var(--green)';
+    } else {
+      matchEl.textContent = '✗ Account numbers do not match';
+      matchEl.style.color = 'var(--red)';
+    }
+    matchEl.style.display = 'block';
+  } else {
+    matchEl.style.display = 'none';
+  }
+}
+
+function admBankErr(msg) {
+  var el = document.getElementById('adm-ed-bank-err');
+  el.textContent = msg; el.style.display = msg ? 'block' : 'none';
+}
+
 async function admSaveBankAccount() {
   if (!admEditTraderId) return;
+  admBankErr('');
   const acct = document.getElementById('adm-ed-acct').value.trim();
   const ifsc = document.getElementById('adm-ed-ifsc').value.trim().toUpperCase();
   const label = document.getElementById('adm-ed-bank-label').value.trim();
   const holder = document.getElementById('adm-ed-holder').value.trim();
   const editBankId = document.getElementById('adm-ed-bank-edit-id').value;
-  const confirm = document.getElementById('adm-ed-acct-confirm').value.trim();
-  if (!acct) { alert('Enter account number'); return; }
-  if (!/^\d{9,18}$/.test(acct)) { alert('Account number must be 9-18 digits'); return; }
-  if (!editBankId && acct !== confirm) { alert('Account numbers do not match'); return; }
-  if (ifsc && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifsc)) { alert('Invalid IFSC (e.g., ICIC0003816)'); return; }
+  const confirmVal = document.getElementById('adm-ed-acct-confirm').value.trim();
+  const orig = (document.getElementById('adm-ed-acct').dataset.original || '').trim();
+  if (!acct) { admBankErr('Enter account number'); return; }
+  if (!/^\d{9,18}$/.test(acct)) { admBankErr('Account number must be 9-18 digits'); return; }
+  var needConfirm = !editBankId || (editBankId && acct !== orig);
+  if (needConfirm && acct !== confirmVal) { admBankErr('Account numbers do not match'); return; }
+  if (ifsc && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifsc)) { admBankErr('Invalid IFSC format (e.g. ICIC0003816)'); return; }
   try {
     let r;
     const body = { acctnum: acct, ifsc, label, holder_name: holder };
-    if (!editBankId) body.confirm_acctnum = confirm;
+    if (needConfirm) body.confirm_acctnum = confirmVal;
     if (editBankId) {
       r = await fetch(`${BASE}/api/traders/${admEditTraderId}/banks/${editBankId}`, { method: 'PUT', headers: authHeaders(), body: JSON.stringify(body) });
     } else {
       r = await fetch(`${BASE}/api/traders/${admEditTraderId}/banks`, { method: 'POST', headers: authHeaders(), body: JSON.stringify(body) });
     }
     const d = await r.json();
-    if (!r.ok) { alert(d.error || 'Failed'); return; }
+    if (!r.ok) { admBankErr(d.error || 'Failed'); return; }
     document.getElementById('adm-ed-bank-form').style.display = 'none';
     loadAdmEditBanks(admEditTraderId);
-  } catch(e) { alert('Failed'); }
+  } catch(e) { admBankErr('Failed to save'); }
 }
 
 async function admDeleteBankSel() {

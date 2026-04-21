@@ -216,8 +216,21 @@ select:focus{border-color:var(--green)}
           <span style="font-size:10px;font-weight:700;color:var(--text2);letter-spacing:.5px">SELECT LOT</span>
           <span id="le-lot-selected" style="font-size:11px;color:var(--green);font-weight:700"></span>
         </div>
-        <div id="le-lot-grid" style="display:flex;flex-wrap:wrap;gap:4px"></div>
+        <div id="le-lot-grid-wrap">
+          <div id="le-lot-grid" style="display:flex;flex-wrap:wrap;gap:4px"></div>
+        </div>
         <div id="le-lot-err" style="display:none;font-size:10px;font-weight:600;padding:2px 6px;border-radius:4px;margin-top:2px"></div>
+      </div>
+
+      <!-- Selected Lot Display (shown after selection, grid collapsed) -->
+      <div id="le-lot-banner" style="display:none;padding:8px 12px">
+        <div style="display:flex;align-items:center;gap:8px;background:var(--green-light);border:1.5px solid rgba(13,124,95,.2);border-radius:10px;padding:8px 12px">
+          <div style="flex:1">
+            <div style="font-size:9px;font-weight:700;color:var(--text3);letter-spacing:.5px;margin-bottom:2px">SELECTED LOT</div>
+            <div style="font-size:20px;font-weight:800;color:var(--green)" id="le-lot-banner-num">#001</div>
+          </div>
+          <button onclick="showLotGrid()" style="background:var(--green);color:#fff;border:none;border-radius:7px;padding:6px 14px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">Change</button>
+        </div>
       </div>
 
       <!-- Main form -->
@@ -246,8 +259,8 @@ select:focus{border-color:var(--green)}
         <!-- Bank form (hidden) -->
         <div id="le-bank-form" style="display:none;margin-bottom:6px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:8px">
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
-            <div><div class="elb">A/C NUMBER</div><input type="text" id="le-acct" placeholder="9-18 digits" oninput="sanitizeInt(this);checkAcctMatch('le')" class="ein"></div>
-            <div><div class="elb">RE-ENTER A/C</div><input type="text" id="le-acct-confirm" placeholder="Confirm" oninput="sanitizeInt(this);checkAcctMatch('le')" class="ein"></div>
+            <div><div class="elb">A/C NUMBER</div><input type="text" id="le-acct" placeholder="9-18 digits" oninput="sanitizeInt(this);checkAcctMatch('le');checkLeAcctChanged()" class="ein"></div>
+            <div id="le-confirm-col" style="display:none"><div class="elb">RE-ENTER A/C</div><input type="text" id="le-acct-confirm" placeholder="Confirm" oninput="sanitizeInt(this);checkAcctMatch('le')" class="ein"></div>
           </div>
           <div id="le-acct-err" style="display:none;font-size:9px;font-weight:600;color:var(--red)"></div>
           <div id="le-acct-match" style="display:none;font-size:9px;font-weight:600"></div>
@@ -316,7 +329,7 @@ select:focus{border-color:var(--green)}
 
 <div class="screen" id="s-mylots">
   <div class="appbar"><h1 id="ml-title"><img class="appbar-logo" src="" style="display:none"><span id="ml-title-text">My Lots</span></h1><span class="badge" id="ml-user"></span><button class="btn-icon" onclick="refreshConfig();loadMyLots();toast('Refreshed',false)" title="Refresh">🔄</button><button class="btn-icon" onclick="toggleMenu()" title="Open menu">&#x22EE;</button></div>
-  <div id="ml-alloc-bar" style="display:none;background:var(--bg2);border-bottom:1px solid var(--border);padding:8px 16px"></div>
+  <div id="ml-alloc-bar" style="display:none;background:var(--bg2);border-bottom:1px solid var(--border);padding:8px 16px;max-height:40vh;overflow-y:auto;-webkit-overflow-scrolling:touch"></div>
   <div class="ml-fixed">
     <div class="lot-stats">
       <div class="lot-stat"><div class="val" id="ml-cnt">0</div><div class="lbl">Lots</div></div>
@@ -327,7 +340,7 @@ select:focus{border-color:var(--green)}
     <div id="ml-actions" style="display:none;margin-bottom:8px;gap:6px;align-items:center;flex-wrap:wrap">
       <button style="background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;border:none;border-radius:8px;height:30px;padding:0 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;box-shadow:0 2px 6px rgba(37,99,235,.2)" onclick="printSelectedMyLots()" title="Print receipts for selected lots">🖨 Print selected</button>
       <button style="background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;border:none;border-radius:8px;height:30px;padding:0 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;box-shadow:0 2px 6px rgba(37,99,235,.2)" onclick="printAllBySellerUser()" title="Print all lots grouped by seller">🖨 Print all by seller</button>
-      <button style="background:linear-gradient(135deg,#dc3545,#b91c1c);color:#fff;border:none;border-radius:8px;height:30px;padding:0 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;box-shadow:0 2px 6px rgba(220,53,69,.2)" onclick="clearAllMyLots()" title="Delete all your lots in this session">🗑 Clear All</button>
+      <button style="background:linear-gradient(135deg,#dc3545,#b91c1c);color:#fff;border:none;border-radius:8px;height:30px;padding:0 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;box-shadow:0 2px 6px rgba(220,53,69,.2)" onclick="clearAllMyLots()" title="Delete all your lots in this session">🗑 Delete All</button>
       <span style="font-size:11px;color:var(--text3)" id="ml-sel-count"></span>
     </div>
   </div>
@@ -376,9 +389,9 @@ select:focus{border-color:var(--green)}
         <div id="ed-bank-info" style="margin-top:4px;font-size:11px;color:var(--text3)"></div>
       </div>
       <div id="ed-bank-form" style="display:none;margin-top:6px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:10px">
-        <div class="lb">A/C NUMBER</div><input type="text" id="ed-acct" placeholder="Account number (9-18 digits)" oninput="sanitizeInt(this);checkAcctMatch('ed')">
+        <div class="lb">A/C NUMBER</div><input type="text" id="ed-acct" placeholder="Account number (9-18 digits)" oninput="sanitizeInt(this);checkAcctMatch('ed');checkEdAcctChanged()">
         <div id="ed-acct-err" style="display:none;font-size:10px;font-weight:600;margin-top:2px;color:var(--red)"></div>
-        <div class="lb" id="ed-acct-confirm-lbl" style="margin-top:6px">RE-ENTER A/C NUMBER</div><input type="text" id="ed-acct-confirm" placeholder="Re-enter account number" oninput="sanitizeInt(this);checkAcctMatch('ed')">
+        <div class="lb" id="ed-acct-confirm-lbl" style="margin-top:6px;display:none">RE-ENTER A/C NUMBER</div><input type="text" id="ed-acct-confirm" placeholder="Re-enter account number" style="display:none" oninput="sanitizeInt(this);checkAcctMatch('ed')">
         <div id="ed-acct-match" style="display:none;font-size:10px;font-weight:600;margin-top:2px"></div>
         <div class="fr" style="margin-top:6px"><div><div class="lb">IFSC CODE</div><input type="text" id="ed-ifsc" placeholder="IFSC code" style="text-transform:uppercase" oninput="lookupIFSC(this,'ed-ifsc-info')"></div><div><div class="lb">HOLDER NAME</div><input type="text" id="ed-holder" placeholder="Account holder name"></div></div>
         <div id="ed-ifsc-info" style="display:none;font-size:10px;margin-top:2px;color:var(--green);font-weight:600"></div>
@@ -392,7 +405,8 @@ select:focus{border-color:var(--green)}
     </div>
     <div class="lb">GRADE</div><input type="text" id="ed-grade">
     <div class="fr" style="margin-top:12px"><div><div class="lb">BAGS</div><input type="text" id="ed-bags" inputmode="numeric" oninput="sanitizeInt(this)"></div><div><div class="lb">LITRE</div><input type="text" id="ed-litre" inputmode="numeric" oninput="sanitizeInt(this)"></div></div>
-    <div class="lb">QUANTITY (KG)</div><input type="text" id="ed-qty" inputmode="decimal" class="qi" oninput="sanitizeDec(this)">
+    <div class="lb">QUANTITY (KG)</div><input type="text" id="ed-qty" inputmode="decimal" class="qi" oninput="sanitizeDec(this);calcEditGross()">
+    <div class="fr" style="margin-top:8px"><div><div class="lb">SAMPLE WT</div><input type="text" id="ed-sample" inputmode="decimal" oninput="sanitizeDec(this);calcEditGross()" readonly style="background:var(--bg);color:var(--text3)"></div><div><div class="lb">GROSS WT</div><input type="text" id="ed-gross" readonly style="background:var(--bg);color:var(--green);font-weight:700"></div></div>
     <div id="ed-err"></div>
   </div>
   <div class="modal-foot"><button class="btn btn-sm btn-outline" onclick="closeEdit()" style="flex:1">Cancel</button><button class="btn btn-sm" onclick="saveEdit()" id="ed-save" style="flex:2">Save</button></div>
@@ -588,12 +602,37 @@ function renderLotGrid(){
   updateLotSelection();
 }
 
+function hasFormData(){
+  return !!(selT || document.getElementById('le-name').value.trim() || document.getElementById('le-bags').value || document.getElementById('le-qty').value);
+}
+
 function toggleLotChip(el){
   var lot=el.dataset.lot;
-  // Single select — deselect all others
+  if(selectedLots.length && selectedLots[0]===lot){return}
+  // Warn if form has data
+  if(hasFormData() && selectedLots.length){
+    if(!confirm('Changing lot will clear all entered details.\n\nProceed?'))return;
+    // Clear form but keep lot grid visible
+    selT=null;
+    document.getElementById('le-name').value='';
+    document.getElementById('le-grade').value='1';
+    document.getElementById('le-bags').value='';
+    document.getElementById('le-litre').value=cfgDefaultLitre||'';
+    document.getElementById('le-qty').value='';
+    document.getElementById('le-gross').value='';
+    document.getElementById('le-sample').value=cfgSampleWeight?Number(cfgSampleWeight).toFixed(3):'0.000';
+    if(document.getElementById('le-moisture'))document.getElementById('le-moisture').value='';
+    document.getElementById('le-res').style.display='none';
+    document.getElementById('le-tc').style.display='none';
+    document.getElementById('le-bank').style.display='none';
+    document.getElementById('le-bank-form').style.display='none';
+    document.getElementById('le-sw').style.display='block';
+  }
   selectedLots=[lot];
   document.querySelectorAll('#le-lot-grid .lot-chip.selected').forEach(function(c){c.classList.remove('selected')});
   el.classList.add('selected');
+  // Collapse grid, show banner
+  collapseLotGrid();
   updateLotSelection();
 }
 
@@ -604,13 +643,34 @@ function selectNextAvailableLot(){
     var chips=document.querySelectorAll('#le-lot-grid .lot-chip');
     chips.forEach(function(c){c.classList.remove('selected');if(c.dataset.lot===availableLots[0])c.classList.add('selected')});
   }
+  // After save: collapse grid, show banner
+  if(selectedLots.length) collapseLotGrid();
   updateLotSelection();
 }
 
 function updateLotSelection(){
   var el=document.getElementById('le-lot-selected');
-  if(selectedLots.length===0)el.textContent='';
-  else el.textContent='Lot #'+selectedLots[0];
+  var banner=document.getElementById('le-lot-banner');
+  var bannerNum=document.getElementById('le-lot-banner-num');
+  if(selectedLots.length===0){
+    el.textContent='';
+    banner.style.display='none';
+  } else {
+    el.textContent='Lot #'+selectedLots[0];
+    bannerNum.textContent='#'+selectedLots[0];
+  }
+}
+
+function collapseLotGrid(){
+  document.getElementById('le-lot-grid-wrap').style.display='none';
+  document.getElementById('le-lot-banner').style.display='block';
+}
+
+function showLotGrid(){
+  document.getElementById('le-lot-grid-wrap').style.display='block';
+  document.getElementById('le-lot-banner').style.display='none';
+  // Scroll to grid
+  document.getElementById('le-scroll').scrollTop=0;
 }
 
 function renderRecentLots(){
@@ -817,7 +877,7 @@ function resetFormKeepSeller(){
 }
 
 // Full reset (Clear button)
-function resetForm(){selT=null;selectedLots=[];lastSavedLot=null;document.getElementById('le-recent').innerHTML='';document.getElementById('le-name').value='';document.getElementById('le-grade').value='1';document.getElementById('le-bags').value='';document.getElementById('le-litre').value=cfgDefaultLitre||'';document.getElementById('le-qty').value='';document.getElementById('le-gross').value='';document.getElementById('le-sample').value=cfgSampleWeight?Number(cfgSampleWeight).toFixed(3):'0.000';if(document.getElementById('le-moisture'))document.getElementById('le-moisture').value='';document.getElementById('le-lot-err').style.display='none';document.getElementById('le-res').style.display='none';document.getElementById('le-tc').style.display='none';document.getElementById('le-bank').style.display='none';document.getElementById('le-bank-form').style.display='none';document.getElementById('le-sw').style.display='block';renderLotGrid();selectNextAvailableLot();document.getElementById('le-scroll').scrollTop=0}
+function resetForm(){selT=null;selectedLots=[];lastSavedLot=null;document.getElementById('le-recent').innerHTML='';document.getElementById('le-name').value='';document.getElementById('le-grade').value='1';document.getElementById('le-bags').value='';document.getElementById('le-litre').value=cfgDefaultLitre||'';document.getElementById('le-qty').value='';document.getElementById('le-gross').value='';document.getElementById('le-sample').value=cfgSampleWeight?Number(cfgSampleWeight).toFixed(3):'0.000';if(document.getElementById('le-moisture'))document.getElementById('le-moisture').value='';document.getElementById('le-lot-err').style.display='none';document.getElementById('le-res').style.display='none';document.getElementById('le-tc').style.display='none';document.getElementById('le-bank').style.display='none';document.getElementById('le-bank-form').style.display='none';document.getElementById('le-sw').style.display='block';showLotGrid();renderLotGrid();selectNextAvailableLot();document.getElementById('le-scroll').scrollTop=0}
 
 // ── MY LOTS (by branch) ──
 async function loadMyLots(){if(!aid)return;try{const r=await fetch(B+'/api/lots?auction_id='+aid+'&branch='+encodeURIComponent(br),{headers:ah()});const d=await r.json();allMyLots=d.lots||[];const stats=d.stats||{};document.getElementById('ml-cnt').textContent=stats.lotCount||0;document.getElementById('ml-bags').textContent=stats.totalBags||0;document.getElementById('ml-qty').textContent=(stats.totalQty||0).toFixed(3);document.getElementById('ml-search').value='';renderMyLots(allMyLots)}catch(e){}}
@@ -838,7 +898,7 @@ function printLot(id){window.open(B+'/api/lots/'+id+'/receipt?token='+token,'_bl
 
 var editBanks=[],editTraderId=null;
 var editLotBankId=null;
-function openEdit(id,lotNo,s,g,bags,litre,qty,traderId,bankId){editId=id;editTraderId=traderId||null;editLotBankId=bankId||null;document.getElementById('ed-lotno-display').textContent=lotNo;document.getElementById('ed-lotno').value=lotNo;document.getElementById('ed-seller-name').textContent=s;document.getElementById('ed-seller-card').style.display='flex';document.getElementById('ed-seller-search').style.display='none';document.getElementById('ed-seller-res').style.display='none';document.getElementById('ed-grade').value=g;document.getElementById('ed-bags').value=bags;document.getElementById('ed-litre').value=litre;document.getElementById('ed-qty').value=Number(qty).toFixed(3);document.getElementById('ed-err').innerHTML='';document.getElementById('ed-bank-form').style.display='none';document.getElementById('edit-modal').classList.add('show');if(traderId)loadEditBanks(traderId)}
+function openEdit(id,lotNo,s,g,bags,litre,qty,traderId,bankId){editId=id;editTraderId=traderId||null;editLotBankId=bankId||null;document.getElementById('ed-lotno-display').textContent=lotNo;document.getElementById('ed-lotno').value=lotNo;document.getElementById('ed-seller-name').textContent=s;document.getElementById('ed-seller-card').style.display='flex';document.getElementById('ed-seller-search').style.display='none';document.getElementById('ed-seller-res').style.display='none';document.getElementById('ed-grade').value=g;document.getElementById('ed-bags').value=bags;document.getElementById('ed-litre').value=litre;document.getElementById('ed-qty').value=Number(qty).toFixed(3);document.getElementById('ed-sample').value=cfgSampleWeight?Number(cfgSampleWeight).toFixed(3):'0.000';document.getElementById('ed-err').innerHTML='';document.getElementById('ed-bank-form').style.display='none';document.getElementById('edit-modal').classList.add('show');if(traderId)loadEditBanks(traderId);fetch(B+'/api/lots/'+id+'/detail',{headers:ah()}).then(r=>r.json()).then(d=>{if(d.lot){var sw=d.lot.sample_weight!=null&&d.lot.sample_weight>0?d.lot.sample_weight:cfgSampleWeight||0;document.getElementById('ed-sample').value=Number(sw).toFixed(3);document.getElementById('ed-gross').value=d.lot.gross_weight?Number(d.lot.gross_weight).toFixed(3):'0';calcEditGross()}}).catch(()=>{calcEditGross()})}
 function closeEdit(){document.getElementById('edit-modal').classList.remove('show');editId=null;editTraderId=null}
 function editSellerMode(){document.getElementById('ed-seller-card').style.display='none';document.getElementById('ed-seller-search').style.display='block';document.getElementById('ed-seller-input').value='';document.getElementById('ed-seller-input').focus()}
 let edStm;
@@ -898,33 +958,49 @@ async function deleteSelectedEditBank(){
 }
 
 function showEditBankAdd(){
-  document.getElementById('ed-acct').value='';document.getElementById('ed-acct-confirm').value='';document.getElementById('ed-acct-confirm-lbl').style.display='block';document.getElementById('ed-acct-confirm').style.display='block';document.getElementById('ed-acct-match').style.display='none';document.getElementById('ed-ifsc').value='';document.getElementById('ed-holder').value='';document.getElementById('ed-bank-label').value='';document.getElementById('ed-bank-edit-id').value='';
+  document.getElementById('ed-acct').value='';document.getElementById('ed-acct').dataset.original='';document.getElementById('ed-acct-confirm').value='';document.getElementById('ed-acct-confirm-lbl').style.display='block';document.getElementById('ed-acct-confirm').style.display='block';document.getElementById('ed-acct-match').style.display='none';document.getElementById('ed-ifsc').value='';document.getElementById('ed-holder').value='';document.getElementById('ed-bank-label').value='';document.getElementById('ed-bank-edit-id').value='';
   document.getElementById('ed-bank-form').style.display='block';document.getElementById('ed-acct').focus();
 }
 
 function editEditBank(bankId){
   var b=editBanks.find(function(x){return x.id===bankId});if(!b)return;
-  document.getElementById('ed-acct').value=b.acctnum||'';document.getElementById('ed-acct-confirm').value='';document.getElementById('ed-acct-confirm-lbl').style.display='none';document.getElementById('ed-acct-confirm').style.display='none';document.getElementById('ed-acct-match').style.display='none';document.getElementById('ed-ifsc').value=b.ifsc||'';document.getElementById('ed-holder').value=b.holder_name||'';document.getElementById('ed-bank-label').value=b.label||'';document.getElementById('ed-bank-edit-id').value=bankId;
+  document.getElementById('ed-acct').value=b.acctnum||'';document.getElementById('ed-acct').dataset.original=b.acctnum||'';document.getElementById('ed-acct-confirm').value='';document.getElementById('ed-acct-confirm-lbl').style.display='none';document.getElementById('ed-acct-confirm').style.display='none';document.getElementById('ed-acct-match').style.display='none';document.getElementById('ed-ifsc').value=b.ifsc||'';document.getElementById('ed-holder').value=b.holder_name||'';document.getElementById('ed-bank-label').value=b.label||'';document.getElementById('ed-bank-edit-id').value=bankId;
   document.getElementById('ed-bank-form').style.display='block';document.getElementById('ed-acct').focus();
 }
 
+function checkEdAcctChanged(){
+  var inp=document.getElementById('ed-acct');
+  var orig=inp.dataset.original||'';
+  var eid=document.getElementById('ed-bank-edit-id').value;
+  if(eid&&inp.value.trim()!==orig){
+    document.getElementById('ed-acct-confirm-lbl').style.display='block';
+    document.getElementById('ed-acct-confirm').style.display='block';
+  } else if(eid&&inp.value.trim()===orig){
+    document.getElementById('ed-acct-confirm-lbl').style.display='none';
+    document.getElementById('ed-acct-confirm').style.display='none';
+    document.getElementById('ed-acct-match').style.display='none';
+  }
+}
 async function saveEditBankAccount(){
   if(!editTraderId)return;
-  var acct=document.getElementById('ed-acct').value.trim();var ifsc=document.getElementById('ed-ifsc').value.trim().toUpperCase();var label=document.getElementById('ed-bank-label').value.trim();var holder=document.getElementById('ed-holder').value.trim();var eid=document.getElementById('ed-bank-edit-id').value;var confirm=document.getElementById('ed-acct-confirm').value.trim();
+  var acct=document.getElementById('ed-acct').value.trim();var ifsc=document.getElementById('ed-ifsc').value.trim().toUpperCase();var label=document.getElementById('ed-bank-label').value.trim();var holder=document.getElementById('ed-holder').value.trim();var eid=document.getElementById('ed-bank-edit-id').value;var confirmVal=document.getElementById('ed-acct-confirm').value.trim();
+  var orig=(document.getElementById('ed-acct').dataset.original||'').trim();
   if(!acct){toast('Enter account number',true);return}
   if(!/^\d{9,18}$/.test(acct)){toast('Account number must be 9-18 digits',true);return}
-  if(!eid&&acct!==confirm){toast('Account numbers do not match',true);return}
+  var needConfirm=!eid||(eid&&acct!==orig);
+  if(needConfirm&&acct!==confirmVal){toast('Account numbers do not match',true);return}
   if(ifsc&&!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifsc)){toast('Invalid IFSC (e.g., ICIC0003816)',true);return}
   try{
     var r;var body={acctnum:acct,ifsc:ifsc,label:label,holder_name:holder};
-    if(!eid)body.confirm_acctnum=confirm;
+    if(needConfirm)body.confirm_acctnum=confirmVal;
     if(eid){r=await fetch(B+'/api/traders/'+editTraderId+'/banks/'+eid,{method:'PUT',headers:ah(),body:JSON.stringify(body)})}
     else{r=await fetch(B+'/api/traders/'+editTraderId+'/banks',{method:'POST',headers:ah(),body:JSON.stringify(body)})}
     var d=await r.json();if(!r.ok){toast(d.error||'Failed',true);return}
     toast(eid?'Bank updated':'Bank added',false);document.getElementById('ed-bank-form').style.display='none';loadEditBanks(editTraderId);
   }catch(e){toast('Failed',true)}
 }
-async function saveEdit(){const lotNo=document.getElementById('ed-lotno').value.trim(),grade=document.getElementById('ed-grade').value.trim()||'1',bags=parseInt(document.getElementById('ed-bags').value),litre=parseInt(document.getElementById('ed-litre').value),qty=parseFloat(document.getElementById('ed-qty').value),er=document.getElementById('ed-err');er.innerHTML='';if(!lotNo||!bags||!litre||!qty){er.innerHTML='<div class="eb">Fill all fields</div>';return}document.getElementById('ed-save').disabled=true;try{const body={lot_no:lotNo,grade,bags,litre,qty};if(editTraderId)body.trader_id=editTraderId;var edBankSel=document.getElementById('ed-bank-select');if(edBankSel)body.bank_id=edBankSel.value?parseInt(edBankSel.value):null;const r=await fetch(B+'/api/lots/'+editId,{method:'PUT',headers:ah(),body:JSON.stringify(body)});const d=await r.json();if(!r.ok){er.innerHTML='<div class="eb">'+(d.error||'Failed')+'</div>';return}toast('Lot updated',false);closeEdit();loadMyLots();await loadStats();updUI()}catch(e){er.innerHTML='<div class="eb">Failed</div>'}finally{document.getElementById('ed-save').disabled=false}}
+function calcEditGross(){var net=parseFloat(document.getElementById('ed-qty').value)||0;var sample=parseFloat(document.getElementById('ed-sample').value)||0;document.getElementById('ed-gross').value=(net+sample).toFixed(3)}
+async function saveEdit(){const lotNo=document.getElementById('ed-lotno').value.trim(),grade=document.getElementById('ed-grade').value.trim()||'1',bags=parseInt(document.getElementById('ed-bags').value),litre=parseInt(document.getElementById('ed-litre').value),qty=parseFloat(document.getElementById('ed-qty').value),sampleWt=parseFloat(document.getElementById('ed-sample').value)||0,grossWt=parseFloat(document.getElementById('ed-gross').value)||0,er=document.getElementById('ed-err');er.innerHTML='';if(!lotNo||!bags||!litre||!qty){er.innerHTML='<div class="eb">Fill all fields</div>';return}document.getElementById('ed-save').disabled=true;try{const body={lot_no:lotNo,grade,bags,litre,qty,sample_weight:sampleWt,gross_weight:grossWt};if(editTraderId)body.trader_id=editTraderId;var edBankSel=document.getElementById('ed-bank-select');if(edBankSel)body.bank_id=edBankSel.value?parseInt(edBankSel.value):null;const r=await fetch(B+'/api/lots/'+editId,{method:'PUT',headers:ah(),body:JSON.stringify(body)});const d=await r.json();if(!r.ok){er.innerHTML='<div class="eb">'+(d.error||'Failed')+'</div>';return}toast('Lot updated',false);closeEdit();loadMyLots();await loadStats();updUI()}catch(e){er.innerHTML='<div class="eb">Failed</div>'}finally{document.getElementById('ed-save').disabled=false}}
 async function deleteLot(id,n){if(!confirm('Delete Lot #'+n+'?'))return;try{await fetch(B+'/api/lots/'+id,{method:'DELETE',headers:ah()});toast('Deleted',false);loadMyLots();await loadStats();updUI()}catch(e){}}
 
 function clearEntryForm(){
@@ -934,7 +1010,7 @@ function clearEntryForm(){
   document.getElementById('le-name').value='';
   document.getElementById('le-grade').value='1';
   document.getElementById('le-bags').value='';
-  document.getElementById('le-litre').value='';
+  document.getElementById('le-litre').value=cfgDefaultLitre||'';
   document.getElementById('le-qty').value='';
   document.getElementById('le-gross').value='';
   document.getElementById('le-sample').value=cfgSampleWeight?Number(cfgSampleWeight).toFixed(3):'0.000';
@@ -944,16 +1020,19 @@ function clearEntryForm(){
   document.getElementById('le-bank').style.display='none';
   document.getElementById('le-bank-form').style.display='none';
   document.getElementById('le-sw').style.display='block';
+  showLotGrid();
   document.getElementById('le-scroll').scrollTop=0;
   renderLotGrid();
   selectNextAvailableLot();
+  showSaveBtn();
   toast('Form cleared',false);
 }
 
 async function clearAllMyLots(){
   var count=allMyLots?allMyLots.length:0;
   if(!count){toast('No lots to clear',true);return}
-  if(!confirm('Delete all '+count+' lot(s) you entered in this session?\n\nThis cannot be undone.'))return;
+  if(!confirm('⚠️ WARNING: This will DELETE all '+count+' lot(s) you entered.\n\nThis action CANNOT be undone!'))return;
+  if(!confirm('Are you ABSOLUTELY sure?\n\nType of action: DELETE '+count+' lots permanently.\n\nClick OK to proceed or Cancel to go back.'))return;
   try{
     var r=await fetch(B+'/api/lots/clear-mine',{method:'POST',headers:ah(),body:JSON.stringify({auction_id:aid,branch:br})});
     var d=await r.json();
@@ -1060,9 +1139,9 @@ async function deleteSelectedBank() {
 
 function showAddBank() {
   document.getElementById('le-acct').value = '';
+  document.getElementById('le-acct').dataset.original = '';
   document.getElementById('le-acct-confirm').value = '';
-  document.getElementById('le-acct-confirm-lbl').style.display = 'block';
-  document.getElementById('le-acct-confirm').style.display = 'block';
+  document.getElementById('le-confirm-col').style.display = 'block';
   document.getElementById('le-acct-match').style.display = 'none';
   document.getElementById('le-ifsc').value = '';
   document.getElementById('le-holder').value = '';
@@ -1076,9 +1155,9 @@ function editBankAccount(bankId) {
   var b = sellerBanks.find(function(x) { return x.id === bankId; });
   if (!b) return;
   document.getElementById('le-acct').value = b.acctnum || '';
+  document.getElementById('le-acct').dataset.original = b.acctnum || '';
   document.getElementById('le-acct-confirm').value = '';
-  document.getElementById('le-acct-confirm-lbl').style.display = 'none';
-  document.getElementById('le-acct-confirm').style.display = 'none';
+  document.getElementById('le-confirm-col').style.display = 'none';
   document.getElementById('le-acct-match').style.display = 'none';
   document.getElementById('le-ifsc').value = b.ifsc || '';
   document.getElementById('le-holder').value = b.holder_name || '';
@@ -1092,6 +1171,18 @@ function hideBankForm() {
   document.getElementById('le-bank-form').style.display = 'none';
 }
 
+function checkLeAcctChanged(){
+  var inp=document.getElementById('le-acct');
+  var orig=inp.dataset.original||'';
+  var eid=document.getElementById('le-bank-edit-id').value;
+  if(eid&&inp.value.trim()!==orig){
+    document.getElementById('le-confirm-col').style.display='block';
+  } else if(eid&&inp.value.trim()===orig){
+    document.getElementById('le-confirm-col').style.display='none';
+    document.getElementById('le-acct-match').style.display='none';
+  }
+}
+
 async function saveBankAccount() {
   if (!selT) return;
   var acct = document.getElementById('le-acct').value.trim();
@@ -1099,10 +1190,12 @@ async function saveBankAccount() {
   var label = document.getElementById('le-bank-label').value.trim();
   var holder = document.getElementById('le-holder').value.trim();
   var editId = document.getElementById('le-bank-edit-id').value;
-  var confirm = document.getElementById('le-acct-confirm').value.trim();
+  var confirmVal = document.getElementById('le-acct-confirm').value.trim();
+  var orig = (document.getElementById('le-acct').dataset.original || '').trim();
   if (!acct) { toast('Enter account number', true); return; }
   if (!/^\d{9,18}$/.test(acct)) { toast('Account number must be 9-18 digits', true); return; }
-  if (!editId && acct !== confirm) {
+  var needConfirm = !editId || (editId && acct !== orig);
+  if (needConfirm && acct !== confirmVal) {
     var matchEl = document.getElementById('le-acct-match');
     matchEl.textContent = '✕ Account numbers do not match';
     matchEl.style.display = 'block'; matchEl.style.color = 'var(--red)';
@@ -1112,7 +1205,7 @@ async function saveBankAccount() {
   try {
     var r;
     var body = { acctnum: acct, ifsc: ifsc, label: label, holder_name: holder };
-    if (!editId) body.confirm_acctnum = confirm;
+    if (needConfirm) body.confirm_acctnum = confirmVal;
     if (editId) {
       r = await fetch(B + '/api/traders/' + selT.id + '/banks/' + editId, { method: 'PUT', headers: ah(), body: JSON.stringify(body) });
     } else {

@@ -409,8 +409,8 @@ app.get('/api/traders', requireAuth, (req, res) => {
       tel LIKE ? COLLATE NOCASE OR 
       cr LIKE ? COLLATE NOCASE OR
       pan LIKE ? COLLATE NOCASE
-    ORDER BY name ASC LIMIT ?`,
-    [`%${query}%`, `%${query}%`, `%${query}%`, `%${query}%`, limit]
+    ORDER BY name ASC`,
+    [`%${query}%`, `%${query}%`, `%${query}%`, `%${query}%`]
   );
   res.json({ traders: maskTraders(traders), total: traders.length });
 });
@@ -1187,6 +1187,15 @@ app.put('/api/lots/:id', requireAuth, (req, res) => {
   if (litre != null && litre < 0) return res.status(400).json({ error: 'Litre weight cannot be negative' });
   if (qty != null && qty < 0) return res.status(400).json({ error: 'Net weight cannot be negative' });
 
+  // Recalculate gross weight if qty changed but gross_weight not explicitly provided
+  let finalGrossWt = gross_weight;
+  let finalSampleWt = sample_weight;
+  if (qty != null && gross_weight == null) {
+    const sw = sample_weight != null ? sample_weight : (lot.sample_weight || 0);
+    finalGrossWt = qty + sw;
+    finalSampleWt = sw;
+  }
+
   // Check for duplicate lot number if it changed
   if (lot_no && String(lot_no) !== String(lot.lot_no)) {
     const dup = db.get('SELECT id FROM lots WHERE auction_id = ? AND lot_no = ? AND id != ?',
@@ -1207,8 +1216,8 @@ app.put('/api/lots/:id', requireAuth, (req, res) => {
     litre != null ? litre : lot.litre,
     qty != null ? qty : lot.qty,
     bank_id !== undefined ? (bank_id || null) : lot.bank_id,
-    gross_weight != null ? gross_weight : lot.gross_weight,
-    sample_weight != null ? sample_weight : lot.sample_weight,
+    finalGrossWt != null ? finalGrossWt : lot.gross_weight,
+    finalSampleWt != null ? finalSampleWt : lot.sample_weight,
     moisture !== undefined ? (moisture || null) : lot.moisture,
     lotId
   ]);
@@ -1450,7 +1459,7 @@ function renderSellerReceipt(doc, sellerLots, cfg) {
     const ry = doc.y;
     cx = m;
     const sw = Number(l.sample_weight) || cfg.sampleWeight || 0;
-    const rowData = [l.lot_no, l.grade || '', l.bags, l.litre, Number(l.qty).toFixed(3), sw ? sw.toFixed(3) : '', l.gross_weight ? Number(l.gross_weight).toFixed(3) : ''];
+    const rowData = [l.lot_no, l.grade || '', l.bags, l.litre, Number(l.qty).toFixed(3), sw ? sw.toFixed(3) : '', l.gross_weight != null ? Number(l.gross_weight).toFixed(3) : ''];
     if (cfg.showMoisture) rowData.push(l.moisture ? Number(l.moisture).toFixed(1) : '');
     rowData.forEach((v, i) => { doc.text(String(v), cx, ry, { width: cols[i], align: 'center' }); cx += cols[i]; });
     doc.y = ry + 13;
