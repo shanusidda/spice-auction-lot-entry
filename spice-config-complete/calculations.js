@@ -41,21 +41,21 @@ function calculateLot(lot, cfg) {
     result.puramt = lot.amount - result.com - result.sertax;
   } else {
     // e-Trade: deduction-based
-    //   grade 1 (pooler)  → deduction1  (ISPL flow)
-    //   grade 2 (dealer)  → deduction2  (ISPL flow)
-    //   other grades fall back to pooler rate
+    //   grade 1 (pooler)  → deduction1  (ISPL / TN flow)
+    //   grade 2 (dealer)  → deduction2
     //
     // KERALA + e-Trade special case: invoices are issued by ASP (sister
-    // company in Kerala), so P_Rate uses asp_profit_pooler/asp_profit_dealer
-    // instead of deduction1/deduction2. These rates are tuned for the
-    // Kerala-market margin structure.
+    // company in Kerala). P_Rate here uses ISP Profit Ratio (Pooler/Dealer),
+    // which represent the margin ISP earns on the ASP→ISP internal transfer.
+    // Additionally, PurAmt for ASP uses QTY (not P_Qty) because Sample Refund
+    // doesn't apply to inter-company transfers.
     const gradeStr = String(lot.grade || '').trim();
     const isKerala = (String(cfg.business_state || '').toUpperCase() === 'KERALA');
     let deduction;
     if (isKerala) {
       deduction = (gradeStr === '2')
-        ? Number(cfg.asp_profit_dealer || 0)
-        : Number(cfg.asp_profit_pooler || 0);
+        ? Number(cfg.isp_profit_dealer || 0)
+        : Number(cfg.isp_profit_pooler || 0);
     } else {
       deduction = (gradeStr === '2')
         ? Number(cfg.deduction2 || 0)
@@ -64,7 +64,11 @@ function calculateLot(lot, cfg) {
     const rawRate = (lot.price || 0) * (1 - deduction / 100);
     // Round to nearest rupee (half-up)
     result.prate = Math.round(rawRate);
-    result.puramt = Math.round(result.pqty * result.prate * 100) / 100;
+    // PurAmt:
+    //   ASP (Kerala) → Qty × P_Rate         (sample refund excluded)
+    //   ISP (TN)     → P_Qty × P_Rate       (P_Qty = Qty + Sample Refund)
+    const puramtQty = isKerala ? (lot.qty || 0) : result.pqty;
+    result.puramt = Math.round(puramtQty * result.prate * 100) / 100;
     result.com = 0;
     result.sertax = 0;
   }
@@ -199,13 +203,33 @@ function buildSalesInvoice(db, auctionId, buyerCode, saleType, cfg) {
   let totalQty = 0, totalBags = 0, totalAmount = 0;
   const lineItems = [];
 
+  // For ASP invoices (Kerala + e-Trade), invoice values are based on the
+  // intra-company transfer price (PurAmt / P_Rate), not the external auction
+  // price. Compute both sets of numbers per lot so the PDF can show the right
+  // ones AND the totals/GST align with what's printed.
+  const isASP = (String(cfg.business_mode || '').toLowerCase() === 'e-trade')
+             && (String(cfg.business_state || '').toUpperCase() === 'KERALA');
+
   for (const lot of lots) {
-    totalQty += lot.qty;
     totalBags += lot.bags;
-    totalAmount += lot.amount;
+    // Run calculateLot to derive prate/puramt (uses isp_profit_pooler/dealer
+    // for ASP, deduction1/deduction2 for ISP). Doing this here keeps the
+    // calculation logic in one place.
+    const calc = calculateLot(lot, cfg);
+    const prate = calc.prate;
+    const puramt = calc.puramt;
+
+    // Totals depend on which company is billing:
+    //   ASP → total qty = lot.qty (no sample refund), total = Σ puramt
+    //   ISP → total qty = lot.qty, total = Σ amount   (unchanged behavior)
+    totalQty += lot.qty;
+    totalAmount += isASP ? puramt : lot.amount;
+
     lineItems.push({
       lot: lot.lot_no, grade: lot.grade, bags: lot.bags, qty: lot.qty,
-      price: lot.price, amount: lot.amount
+      price: lot.price, amount: lot.amount,
+      // Extra fields used by ASP invoice rendering:
+      prate: prate, puramt: puramt,
     });
   }
 
@@ -229,12 +253,9 @@ function buildSalesInvoice(db, auctionId, buyerCode, saleType, cfg) {
     return 0;
   };
   const isLocal = (saleType === 'L');
-  // ASP invoices (Kerala + e-Trade) do NOT bill Transport/Insurance as
-  // separate line-items on the customer's invoice — only Cardamom + Gunny.
-  // Force both to zero so the subtotal, GST, and grand total all agree
-  // with what the PDF renders.
-  const isASP = (String(cfg.business_mode || '').toLowerCase() === 'e-trade')
-             && (String(cfg.business_state || '').toUpperCase() === 'KERALA');
+  // ASP invoices (Kerala + e-Trade, already computed in `isASP` above) do NOT
+  // bill Transport/Insurance as separate line-items — only Cardamom + Gunny.
+  // Force both to zero so subtotal, GST, and grand total agree with the PDF.
   const transportRate = isASP ? 0 : (isLocal
     ? pickRate(cfg.local_transport, cfg.transport, 2.5)
     : pickRate(cfg.transport, 2.5));

@@ -352,6 +352,10 @@ body{background:var(--bg);color:var(--text);min-height:100vh;font-size:14px}
 .icon-btn.i-view:hover{background:var(--blue);color:#fff}
 .icon-btn.i-revert{color:#B45309;border-color:var(--spice-turmeric)}
 .icon-btn.i-revert:hover{background:var(--spice-turmeric);color:#fff;border-color:var(--spice-turmeric)}
+.icon-btn.i-clone{color:var(--text2);border-color:var(--spice-line-strong)}
+.icon-btn.i-clone:hover{color:var(--spice-saffron);border-color:var(--spice-saffron)}
+.icon-btn.i-purchase{color:var(--spice-saffron);border-color:var(--spice-saffron)}
+.icon-btn.i-purchase:hover{background:var(--spice-saffron);color:#fff}
 
 /* ── Cards ───────────────────────────────────────────────── */
 .card{
@@ -1954,7 +1958,9 @@ const ICONS={
   pdf:'<svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M12 18v-6M9 15l3 3 3-3"/></svg>',
   view:'<svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
   revert:'<svg viewBox="0 0 24 24"><path d="M3 7v6h6"/><path d="M3 13a9 9 0 1 0 3-7.7L3 8"/></svg>',
-  clone:'<svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>'
+  clone:'<svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
+  // Purchase-view icon: shopping receipt with a down-arrow (outgoing to inbound flip)
+  purchase:'<svg viewBox="0 0 24 24"><path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/><path d="M14 2v6h6"/><path d="M12 12v5M9 15l3 3 3-3"/></svg>'
 };
 function iconBtn(kind,title,onclick){return `<button class="icon-btn i-${kind}" title="${title}" onclick="${onclick}">${ICONS[kind]}</button>`}
 
@@ -2787,7 +2793,7 @@ async function loadSettings(){
 // When mode = e-Trade:   hide commission, handling, SB sample refund
 const _MODE_HIDE_CATS = { 'e-Auction': ['sister'], 'e-Trade': [] };
 const _MODE_HIDE_KEYS = {
-  'e-Auction': ['deduction1','deduction2','asp_profit_pooler','asp_profit_dealer','isp_profit','refund'],
+  'e-Auction': ['deduction1','deduction2','asp_profit_pooler','asp_profit_dealer','isp_profit_pooler','isp_profit_dealer','refund'],
   'e-Trade':   ['commission','hpc','sb_refund']
 };
 
@@ -3110,9 +3116,10 @@ const FIELD_HELP = {
   hpc:             'Handling percentage applied on the commission. e.g. 10% means Handling = Commission × 10%.',
   deduction1:      'ISPL margin % on Grade 1 (Pooler) lots. Used when business state ≠ Kerala in e-Trade mode: P_Rate = round(Price × (1 − Deduction%)). Kerala uses ASP Profit Ratio settings instead.',
   deduction2:      'ISPL margin % on Grade 2 (Dealer) lots. Used when business state ≠ Kerala in e-Trade mode. Kerala uses ASP Profit Ratio (Dealer) instead.',
-  asp_profit_pooler: 'ASP margin % on Grade 1 (Pooler) lots. Used only when business state = Kerala + e-Trade mode: P_Rate = round(Price × (1 − ratio%)).',
-  asp_profit_dealer: 'ASP margin % on Grade 2 (Dealer) lots. Used only when business state = Kerala + e-Trade mode: P_Rate = round(Price × (1 − ratio%)).',
-  isp_profit:      'Profit ratio retained by ISP (main company) on each lot. Used in e-Trade profit-sharing calculations.',
+  asp_profit_pooler: 'ASP margin % on Grade 1 (Pooler) lots. Reference value — not currently used in P_Rate (ASP invoices now use ISP Profit Ratio).',
+  asp_profit_dealer: 'ASP margin % on Grade 2 (Dealer) lots. Reference value — not currently used in P_Rate (ASP invoices now use ISP Profit Ratio).',
+  isp_profit_pooler: 'ISP margin % on Grade 1 (Pooler) lots for Kerala + e-Trade (ASP invoices): P_Rate = round(Price × (1 − ratio%)). PurAmt = Qty × P_Rate (no sample refund).',
+  isp_profit_dealer: 'ISP margin % on Grade 2 (Dealer) lots for Kerala + e-Trade (ASP invoices): P_Rate = round(Price × (1 − ratio%)). PurAmt = Qty × P_Rate (no sample refund).',
   refund:          'Sample quantity (in kilograms) added to the lot qty in e-Trade mode to compute P_Qty. P_Qty = Qty + Sample Refund.',
   sb_refund:       'SB (Sample Bag) refund in kilograms, multiplied by Price to compute the Refund amount in e-Auction mode.',
   gst_goods:       'GST rate applied on goods (e.g. spices). Split equally into CGST + SGST for intra-state, or IGST for inter-state. Default 5%.',
@@ -4074,11 +4081,26 @@ async function loadInvoices(){
       { key:'tot', label:'Total', sort:'number', numeric:true,
         fmt:(n)=>fmtI(n,2),
         render:(i)=>`<strong>${fmtI(i.tot||0,2)}</strong>` },
-      { key:'_actions', label:'Actions', sortable:false, searchable:false, render:(i)=>
-          iconBtn('pdf','View / download PDF',`viewInvoicePDF(${i.id})`)
-          + iconBtn('edit','Edit invoice',`openInvoiceEdit(${JSON.stringify(i).replace(/"/g,'&quot;')})`)
-          + iconBtn('revert','Revert — delete invoice & re-enable lots for re-invoicing',`revertInvoice(${i.id},'${esc(i.buyer1||i.buyer)}','${esc(i.sale)}-${esc(i.invo)}')`)
-          + iconBtn('del','Delete invoice',`delInvoice(${i.id})`) }
+      { key:'_actions', label:'Actions', sortable:false, searchable:false, render:(i)=>{
+          // Purchase-view button is ALWAYS shown so users see the feature exists,
+          // but is DISABLED outside ASP context (not Kerala + e-Trade). The
+          // disabled state keeps the icon visible (greyed) with a tooltip
+          // explaining why — avoids "missing feature" confusion for dad.
+          const isASPCtx = (getCurrentBusinessMode && getCurrentBusinessState)
+            ? (getCurrentBusinessMode() === 'e-Trade' && String(getCurrentBusinessState() || '').toUpperCase() === 'KERALA')
+            : false;
+          const purchaseTitle = isASPCtx
+            ? 'Print Purchase Invoice (ISPL-side view of this ASP sale)'
+            : 'Purchase view \u2014 available only in ASP context (Kerala + e-Trade)';
+          const purchaseBtn = isASPCtx
+            ? iconBtn('purchase', purchaseTitle, `viewPurchaseViewPDF(${i.id})`)
+            : `<button class="icon-btn i-purchase" title="${purchaseTitle}" style="opacity:.35;cursor:not-allowed" disabled>${ICONS.purchase}</button>`;
+          return iconBtn('pdf','View / download PDF',`viewInvoicePDF(${i.id})`)
+            + purchaseBtn
+            + iconBtn('edit','Edit invoice',`openInvoiceEdit(${JSON.stringify(i).replace(/"/g,'&quot;')})`)
+            + iconBtn('revert','Revert \u2014 delete invoice & re-enable lots for re-invoicing',`revertInvoice(${i.id},'${esc(i.buyer1||i.buyer)}','${esc(i.sale)}-${esc(i.invo)}')`)
+            + iconBtn('del','Delete invoice',`delInvoice(${i.id})`);
+        } }
     ]
   });
 }
@@ -4119,6 +4141,21 @@ async function viewInvoicePDF(id){
     const url=URL.createObjectURL(blob);
     const w=window.open(url,'_blank');
     if(!w||w.closed){const a=document.createElement('a');a.href=url;a.download=`Invoice_${id}.pdf`;a.click()}
+    setTimeout(()=>URL.revokeObjectURL(url),30000);
+  }catch(e){showError(e)}
+}
+
+// Opens the ASP purchase-view PDF: mirror of the ASP sales invoice with
+// ISPL at the top, ASP as Seller (Bill from), TN bank details.
+// Only works when current business state = KERALA + e-Trade (server enforces).
+async function viewPurchaseViewPDF(id){
+  try{
+    const r=await fetch(B+`/api/invoices/purchase-pdf/${id}`,{headers:{'Authorization':'Bearer '+T}});
+    if(!r.ok){let m='Purchase view PDF failed';try{const e=await r.json();if(e.error)m=e.error}catch(x){}throw new Error(m)}
+    const blob=await r.blob();
+    const url=URL.createObjectURL(blob);
+    const w=window.open(url,'_blank');
+    if(!w||w.closed){const a=document.createElement('a');a.href=url;a.download=`PurchaseView_${id}.pdf`;a.click()}
     setTimeout(()=>URL.revokeObjectURL(url),30000);
   }catch(e){showError(e)}
 }

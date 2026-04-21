@@ -71,7 +71,8 @@ const DEFAULTS = [
   { key: 'deduction2',      value: '1.25',           category: 'rates',     label: 'Deduction (Dealer)',       type: 'number' },
   { key: 'asp_profit_pooler', value: '0.75',         category: 'rates',     label: 'ASP Profit Ratio (Pooler)', type: 'number' },
   { key: 'asp_profit_dealer', value: '0.75',         category: 'rates',     label: 'ASP Profit Ratio (Dealer)', type: 'number' },
-  { key: 'isp_profit',      value: '0.5',            category: 'rates',     label: 'ISP Profit Ratio',         type: 'number' },
+  { key: 'isp_profit_pooler', value: '0.5',          category: 'rates',     label: 'ISP Profit Ratio (Pooler)', type: 'number' },
+  { key: 'isp_profit_dealer', value: '0.5',          category: 'rates',     label: 'ISP Profit Ratio (Dealer)', type: 'number' },
   { key: 'refund',          value: '1.9',            category: 'rates',     label: 'Sample Refund (Kgs)',      type: 'number' },
   { key: 'sb_refund',       value: '2.85',           category: 'rates',     label: 'SB Sample Refund (Kgs)',   type: 'number' },
   { key: 'gst_goods',       value: '5',              category: 'rates',     label: 'GST Goods Rate %',         type: 'number' },
@@ -112,7 +113,8 @@ const DEFAULTS = [
   { key: 'separator',       value: '-',              category: 'invoice',   label: 'Separator Symbol',         type: 'text' },
   { key: 'hsn_cardamom',    value: '09083120',       category: 'invoice',   label: 'HSN/SAC — Cardamom',       type: 'text' },
   { key: 'hsn_gunny',       value: '63051040',       category: 'invoice',   label: 'HSN/SAC — Gunny',          type: 'text' },
-  { key: 'dispatched_through', value: 'JEEP',        category: 'invoice',   label: 'Dispatched Through',       type: 'text' },
+  { key: 'dispatched_through_isp', value: '',         category: 'invoice',   label: 'Dispatched Through (ISP)', type: 'text' },
+  { key: 'dispatched_through_asp', value: '',         category: 'invoice',   label: 'Dispatched Through (ASP)', type: 'text' },
   { key: 'dispatch_destination', value: 'NEDUMKANDAM', category: 'invoice', label: 'Dispatch Destination',     type: 'text' },
   { key: 'duplicate_text',  value: 'DUMMY INVOICE',  category: 'invoice',   label: 'Dummy Invoice Text',       type: 'text' },
   { key: 'commission_bill', value: 'COMMISSION BILL', category: 'invoice',  label: 'Commission Bill Name',     type: 'text' },
@@ -193,6 +195,35 @@ function initCompanySettings(db) {
     upd.run(legacy.value, 'asp_profit_dealer');
     db.prepare('DELETE FROM company_settings WHERE key = ?').run('asp_profit');
     console.log('Migrated asp_profit → asp_profit_pooler/asp_profit_dealer (value=%s)', legacy.value);
+  }
+
+  // Migration: isp_profit was split into isp_profit_pooler and isp_profit_dealer.
+  // These now drive P_Rate calculations for Kerala + e-Trade (ASP invoices).
+  // Copy the legacy value into both new keys, then remove the legacy row.
+  const legacyIsp = db.prepare('SELECT value FROM company_settings WHERE key = ?').get('isp_profit');
+  if (legacyIsp && legacyIsp.value != null && legacyIsp.value !== '') {
+    const upd = db.prepare('UPDATE company_settings SET value = ? WHERE key = ?');
+    upd.run(legacyIsp.value, 'isp_profit_pooler');
+    upd.run(legacyIsp.value, 'isp_profit_dealer');
+    db.prepare('DELETE FROM company_settings WHERE key = ?').run('isp_profit');
+    console.log('Migrated isp_profit → isp_profit_pooler/isp_profit_dealer (value=%s)', legacyIsp.value);
+  } else {
+    // No legacy value but the row may still exist from a prior install. Drop it.
+    db.prepare('DELETE FROM company_settings WHERE key = ?').run('isp_profit');
+  }
+
+  // Migration: dispatched_through was split into _isp and _asp variants.
+  // Copy the legacy value into both new keys (user can customize per company
+  // afterward), then drop the legacy row.
+  const legacyDT = db.prepare('SELECT value FROM company_settings WHERE key = ?').get('dispatched_through');
+  if (legacyDT && legacyDT.value != null && legacyDT.value !== '') {
+    const upd = db.prepare('UPDATE company_settings SET value = ? WHERE key = ?');
+    upd.run(legacyDT.value, 'dispatched_through_isp');
+    upd.run(legacyDT.value, 'dispatched_through_asp');
+    db.prepare('DELETE FROM company_settings WHERE key = ?').run('dispatched_through');
+    console.log('Migrated dispatched_through → dispatched_through_isp/_asp (value=%s)', legacyDT.value);
+  } else {
+    db.prepare('DELETE FROM company_settings WHERE key = ?').run('dispatched_through');
   }
 
   console.log('Company settings ready (%d defaults)', DEFAULTS.length);

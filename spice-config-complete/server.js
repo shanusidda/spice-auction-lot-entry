@@ -1383,6 +1383,85 @@ app.get('/api/invoices/pdf/:id', requireAdmin, async (req, res) => {
   }
 });
 
+// ASP Purchase-view PDF — renders the mirror-image of an ASP sales invoice
+// with ISPL at the top (issuer), ASP as Seller (Bill from), TN bank details.
+// Only valid when current business_mode is e-Trade and business_state is KERALA;
+// otherwise returns 400. Uses the same `generateSalesInvoicePDF` code path with
+// variant='purchase' so the math (P_Rate, PurAmt, totals, HSN) stays identical
+// to the source sales invoice.
+app.get('/api/invoices/purchase-pdf/:id', requireAdmin, async (req, res) => {
+  try {
+    const db = getDb();
+    const cfg = getSettingsFlat(db);
+    // Guard: purchase view is meaningful only for ASP invoices
+    const isASPContext = (String(cfg.business_mode || '').toLowerCase() === 'e-trade')
+                      && (String(cfg.business_state || '').toUpperCase() === 'KERALA');
+    if (!isASPContext) {
+      return res.status(400).json({
+        error: 'Purchase view is only available for ASP invoices. Switch business state to KERALA + e-Trade mode.'
+      });
+    }
+    const stored = db.get('SELECT * FROM invoices WHERE id=?', [req.params.id]);
+    if (!stored) return res.status(404).json({ error: 'Invoice not found' });
+
+    // Same enrichment pattern as the sales-invoice endpoint
+    let invoice = stored.auction_id
+      ? buildSalesInvoice(db, stored.auction_id, stored.buyer, stored.sale, cfg)
+      : null;
+
+    const enrichBuyer = (buyer) => {
+      if (!buyer) buyer = {};
+      if (!buyer.buyer1 && !buyer.buyer) {
+        const looked = db.get('SELECT * FROM buyers WHERE buyer=? OR buyer1=? LIMIT 1',
+          [stored.buyer, stored.buyer1 || stored.tradername || '']);
+        if (looked) buyer = looked;
+      }
+      if (!buyer.buyer1 && stored.buyer1)   buyer.buyer1   = stored.buyer1;
+      if (!buyer.buyer1 && stored.tradername) buyer.buyer1 = stored.tradername;
+      if (!buyer.buyer  && stored.buyer)    buyer.buyer    = stored.buyer;
+      if (!buyer.gstin  && stored.gstin)    buyer.gstin    = stored.gstin;
+      if (!buyer.pla    && stored.place)    buyer.pla      = stored.place;
+      if (!buyer.state  && stored.state)    buyer.state    = stored.state;
+      if (!buyer.add1   && stored.add_line) buyer.add1     = stored.add_line;
+      return buyer;
+    };
+
+    if (invoice) {
+      invoice.buyer = enrichBuyer(invoice.buyer);
+    } else {
+      const buyer = enrichBuyer(db.get('SELECT * FROM buyers WHERE buyer=? LIMIT 1', [stored.buyer]));
+      invoice = {
+        buyer,
+        lineItems: [{ lot: '—', grade: '', bags: stored.bag || 0, qty: stored.qty || 0, price: 0, amount: stored.amount || 0 }],
+        summary: {
+          totalBags: stored.bag || 0,
+          totalQty: stored.qty || 0,
+          totalAmount: stored.amount || 0,
+          gunnyCost: stored.gunny || 0,
+          transportCost: stored.pava_hc || 0,
+          insuranceCost: stored.ins || 0,
+          cgst: stored.cgst || 0,
+          sgst: stored.sgst || 0,
+          igst: stored.igst || 0,
+          tcs: stored.tcs || 0,
+          roundDiff: stored.rund || 0,
+          grandTotal: stored.tot || 0,
+          isInterState: stored.sale === 'I',
+        }
+      };
+    }
+
+    // variant='purchase' flips the display: ISPL at top, ASP as seller, TN bank
+    const pdf = await generateSalesInvoicePDF(invoice, cfg, stored.sale, stored.invo, stored.date, undefined, 'purchase');
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="PurchaseView_${stored.sale}_${stored.invo}.pdf"`);
+    res.send(pdf);
+  } catch (e) {
+    console.error('Purchase-view PDF error:', e);
+    res.status(500).json({ error: 'PDF generation failed: ' + e.message });
+  }
+});
+
 // Bulk Sales Invoice PDF — merges N invoices into a single PDF
 // Body: { ids: [1, 2, 3, ...] }
 // Returns: one PDF with each invoice on fresh page(s), in the order given.

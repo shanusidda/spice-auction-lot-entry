@@ -354,9 +354,24 @@ module.exports = { generatePurchaseInvoicePDF, generateCropReceiptPDF, generateA
 // When called with `externalDoc` (a PDFKit doc), appends a new page and draws
 // this invoice into it — used by the batch-print endpoint to merge many
 // invoices into a single file. Returns the Buffer only in standalone mode.
-function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceDate, externalDoc) {
-  const co = effectiveCompany(cfg);
+function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceDate, externalDoc, variant) {
   const isBatch = !!externalDoc;
+  // Variant = 'purchase' renders the mirror-image view of an ASP sales invoice:
+  //   - Top-left company block shows ISPL (the receiving company) instead of ASP
+  //   - "Buyer (Bill to)" label becomes "Seller (Bill from)" and displays ASP
+  //   - Bank details show TN bank (ISPL's)
+  //   - Title shows "Purchase Invoice" instead of "Tax Invoice"
+  // All line-item math stays identical (same P_Rate, PurAmt, totals, HSN).
+  // Only valid for ASP invoices; caller must ensure that.
+  const isPurchaseView = (variant === 'purchase');
+  // For the purchase view, we FLIP the top-of-page issuer to ISPL by pretending
+  // the effective company is the primary (not sister). Easiest way: compute
+  // effectiveCompany with a forced-TN cfg clone. The rest of the function still
+  // uses the original cfg so ASP business rules (P_Rate formula, etc.) stay in
+  // effect — only the display swaps.
+  const co = isPurchaseView
+    ? effectiveCompany({ ...cfg, business_state: 'TAMIL NADU' })
+    : effectiveCompany(cfg);
   let doc, buffers;
   if (isBatch) {
     doc = externalDoc;
@@ -388,12 +403,11 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
     if (typeof val === 'boolean') return val;
     return String(val).toLowerCase() === 'true';
   }
-  // Ship-To visibility uses a DIFFERENT flag per company:
-  //   ASP invoices  → flag_tnpa  ("ASP Ship To Address")
-  //   ISP invoices  → flag_ship  ("Show Ship To Address")
-  const showShipTo    = isASP
-    ? readFlagSafe(cfg.flag_tnpa, true)
-    : readFlagSafe(cfg.flag_ship, true);
+  // Ship-To visibility:
+  //   ASP invoices → ALWAYS hidden (Consignee block doesn't apply to the
+  //     ASP→ISP internal transfer, per user spec)
+  //   ISP invoices → toggled by flag_ship ("Show Ship To Address")
+  const showShipTo = isASP ? false : readFlagSafe(cfg.flag_ship, true);
   const showDispatch  = readFlagSafe(cfg.flag_dispatch, true); // item 2
 
   // ── Page geometry ───────────────────────────────────────────
@@ -475,7 +489,7 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
   }
 
   // ── Title ───────────────────────────────────────────────────
-  doc.font('Helvetica-Bold').fontSize(10).text('Tax Invoice', x0, y, { width: W, align: 'center' });
+  doc.font('Helvetica-Bold').fontSize(10).text(isPurchaseView ? 'Purchase Invoice' : 'Tax Invoice', x0, y, { width: W, align: 'center' });
   y += 14;
 
   // ── TOP HEADER BLOCK ────────────────────────────────────────
@@ -495,11 +509,10 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
 
   // ── LEFT BLOCK: Logo + company details ──────────────────────
   box(leftX, topY, leftW, topHeaderH);
-  // Logo area (if logo file exists, use it; else show text)
-  // Sales invoices always issued by ISPL (supplier), so use the ISPL logo.
-  // Logo: pick ASP logo when effectiveCompany resolved to ASP
-  // (Kerala + e-Trade → ASP issues the invoice, so show ASP logo).
-  const useASPLogo = (cfg.business_mode || '').toLowerCase() === 'e-trade'
+  // Logo file pick. For ASP sales invoice → ASP logo. For ASP purchase view
+  // (issuer is ISPL, not ASP) → ISPL logo.
+  const useASPLogo = !isPurchaseView
+                  && (cfg.business_mode || '').toLowerCase() === 'e-trade'
                   && (cfg.business_state || '').toUpperCase() === 'KERALA';
   const logoFile = useASPLogo ? 'logo-asp.png' : 'logo-ispl.png';
   const logoPath = require('path').join(__dirname, 'public', logoFile);
@@ -539,22 +552,30 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
   const primaryPrefix = isASP ? (cfg.inv_prefix_sister || 'ASP') : (cfg.inv_prefix || 'ISP');
   const otherPrefix   = isASP ? (cfg.inv_prefix || 'ISP')         : (cfg.inv_prefix_sister || 'ASP');
   const primaryCfg    = { ...cfg, inv_prefix: primaryPrefix };
-  labeledCell(rightX,             ry, r1W, rRow, 'Invoice No.', formatInvoiceNo(primaryCfg, saleType, invoiceNo));
-  labeledCell(rightX + r1W,       ry, r1W, rRow, 'e-Way Bill No.', '');
-  labeledCell(rightX + r1W * 2,   ry, rightW - r1W * 2, rRow, 'Dated', (() => {
+  // ASP invoices always use the "I" segment irrespective of local/interstate
+  // sale type (format: ASP/I-{invno}/{season_short}).
+  const displaySaleType = isASP ? 'I' : saleType;
+  // Row-1 height: expand to fill both rows' worth of space for ASP (since
+  // Row 2 — Reference No. + Other References — is hidden for ASP).
+  const row1H = isASP ? (rRow * 2) : rRow;
+  labeledCell(rightX,             ry, r1W, row1H, 'Invoice No.', formatInvoiceNo(primaryCfg, displaySaleType, invoiceNo));
+  labeledCell(rightX + r1W,       ry, r1W, row1H, 'e-Way Bill No.', '');
+  labeledCell(rightX + r1W * 2,   ry, rightW - r1W * 2, row1H, 'Dated', (() => {
     const d = invoiceDate ? new Date(invoiceDate) : new Date();
     const day = String(d.getDate()).padStart(2, '0');
     const mon = d.toLocaleDateString('en-US', { month: 'short' });
     const yr  = String(d.getFullYear()).slice(-2);
     return `${day}-${mon}-${yr}`;
   })());
-  ry += rRow;
+  ry += row1H;
 
-  // Row 2 — Other References = same number but mirror company's prefix
-  const otherRefCfg = { ...cfg, inv_prefix: otherPrefix };
-  const otherRefs = formatInvoiceNo(otherRefCfg, saleType, invoiceNo);
-  labeledCell(rightX,         ry, rCell, rRow, 'Reference No. & Date.', '');
-  labeledCell(rightX + rCell, ry, rCell, rRow, 'Other References', otherRefs);
+  // Row 2 — ONLY for ISP invoices (ASP omits Reference No. / Other References)
+  if (!isASP) {
+    const otherRefCfg = { ...cfg, inv_prefix: otherPrefix };
+    const otherRefs = formatInvoiceNo(otherRefCfg, saleType, invoiceNo);
+    labeledCell(rightX,         ry, rCell, rRow, 'Reference No. & Date.', '');
+    labeledCell(rightX + rCell, ry, rCell, rRow, 'Other References', otherRefs);
+  }
 
   y = topY + topHeaderH;
 
@@ -617,31 +638,50 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
     if (ship.state) writeLeft(`State Name     : ${ship.state}, Code : ${ship.stCode || ''}`, cAnchor);
   }
 
-  // Draw Buyer (Bill to) cell
+  // Draw Buyer (Bill to) / Seller (Bill from) cell
   box(leftX, buyerY, leftW, leftCellH);
   let by = buyerY + 3;
-  doc.font('Helvetica').fontSize(7).text('Buyer (Bill to)', leftX + 3, by); by += 9;
+  // Label flips for purchase view: "Seller (Bill from)" since ISPL is the buyer
+  // here, and ASP is the seller we're buying from.
+  const blockLabel = isPurchaseView ? 'Seller (Bill from)' : 'Buyer (Bill to)';
+  doc.font('Helvetica').fontSize(7).text(blockLabel, leftX + 3, by); by += 9;
 
-  // For ASP invoices, the buyer is ISP (sister→primary transfer). Bill-To
-  // always shows ISP company details, not the external customer's.
-  // isASP is established earlier based on business_mode + business_state.
-  const billTo = isASP ? {
-    name:  cfg.short_name || cfg.trade_name || 'IDEAL SPICES PRIVATE LIMITED',
-    add1:  cfg.tn_address1 || '',
-    add2:  cfg.tn_address2 || '',
-    pla:   cfg.tn_place || '',
-    gstin: cfg.tn_gstin || '',
-    state: cfg.tn_state || 'TAMIL NADU',
-    stCode: cfg.tn_st_code || '33',
-  } : {
-    name:  buyer.buyer1 || buyer.buyer || '',
-    add1:  buyer.add1 || '',
-    add2:  buyer.add2 || '',
-    pla:   buyer.pla || '',
-    gstin: buyer.gstin || '',
-    state: buyer.state || '',
-    stCode: buyer.st_code || '',
-  };
+  // Entity displayed in this block:
+  //   Purchase view (ASP sales mirrored)  → ASP sister company (seller)
+  //   ASP sales invoice (normal)          → ISP (the buyer in ASP→ISP flow)
+  //   ISP sales invoice                   → external customer
+  let billTo;
+  if (isPurchaseView) {
+    billTo = {
+      name:  cfg.s_company || 'AMAZING SPICE PARK PRIVATE LIMITED',
+      add1:  cfg.s_address1 || '',
+      add2:  cfg.s_address2 || '',
+      pla:   cfg.s_place || '',
+      gstin: cfg.s_gstin || '',
+      state: cfg.s_state || 'KERALA',
+      stCode: cfg.s_st_code || '32',
+    };
+  } else if (isASP) {
+    billTo = {
+      name:  cfg.short_name || cfg.trade_name || 'IDEAL SPICES PRIVATE LIMITED',
+      add1:  cfg.tn_address1 || '',
+      add2:  cfg.tn_address2 || '',
+      pla:   cfg.tn_place || '',
+      gstin: cfg.tn_gstin || '',
+      state: cfg.tn_state || 'TAMIL NADU',
+      stCode: cfg.tn_st_code || '33',
+    };
+  } else {
+    billTo = {
+      name:  buyer.buyer1 || buyer.buyer || '',
+      add1:  buyer.add1 || '',
+      add2:  buyer.add2 || '',
+      pla:   buyer.pla || '',
+      gstin: buyer.gstin || '',
+      state: buyer.state || '',
+      stCode: buyer.st_code || '',
+    };
+  }
 
   doc.font('Helvetica-Bold').fontSize(9).text(billTo.name, leftX + 3, by, { width: leftW - 6 });
   // Advance by ACTUAL rendered height — long company names wrap to 2+ lines.
@@ -659,7 +699,11 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
   const rSmall = 28;
   let ry2 = midY;
 
-  labeledCell(rightX,         ry2, rCell, rSmall, 'Dispatched through', cfg.dispatched_through || '');
+  // Dispatched through: pick the ISP or ASP variant based on who's issuing.
+  const dispThrough = isASP
+    ? (cfg.dispatched_through_asp || cfg.dispatched_through || '')
+    : (cfg.dispatched_through_isp || cfg.dispatched_through || '');
+  labeledCell(rightX,         ry2, rCell, rSmall, 'Dispatched through', dispThrough);
   labeledCell(rightX + rCell, ry2, rCell, rSmall, 'Destination', cfg.dispatch_destination || '');
   ry2 += rSmall;
 
@@ -807,9 +851,13 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
     doc.text(hsnCardamom, colX('hsn') + 2, y + 3, { width: colW.hsn - 4, align: 'center' });
     doc.text(`${li.qty.toFixed(3)} Kgs.`, colX('shipped') + 2, y + 3, { width: colW.shipped - 4, align: 'right' , lineBreak: false});
     doc.font('Helvetica-Bold').text(`${li.qty.toFixed(3)} Kgs.`, colX('billed') + 2, y + 3, { width: colW.billed - 4, align: 'right' , lineBreak: false});
-    doc.font('Helvetica-Bold').text(formatINR(li.price), colX('rate') + 2, y + 3, { width: colW.rate - 4, align: 'right' });
+    // ASP invoices: bill at P_Rate and show PurAmt (ASP→ISP internal transfer price)
+    // ISP invoices: bill at Price and show Amount (external customer price)
+    const lineRate = isASP ? (li.prate != null ? li.prate : li.price) : li.price;
+    const lineAmount = isASP ? (li.puramt != null ? li.puramt : li.amount) : li.amount;
+    doc.font('Helvetica-Bold').text(formatINR(lineRate), colX('rate') + 2, y + 3, { width: colW.rate - 4, align: 'right' });
     doc.font('Helvetica').text('Kgs.', colX('per') + 2, y + 3, { width: colW.per - 4, align: 'center' });
-    doc.font('Helvetica-Bold').text(formatINR(li.amount), colX('amount') + 2, y + 3, { width: colW.amount - 4, align: 'right' });
+    doc.font('Helvetica-Bold').text(formatINR(lineAmount), colX('amount') + 2, y + 3, { width: colW.amount - 4, align: 'right' });
     doc.font('Helvetica');
     y += rowH;
     sl++;
@@ -934,11 +982,14 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
     y += rowH;
   }
 
+  // GST row label prefix: "OUTPUT" for sales (tax collected by seller),
+  // "INPUT" for the purchase view (tax paid by buyer — eligible as input tax credit)
+  const gstDir = isPurchaseView ? 'INPUT' : 'OUTPUT';
   if (summary.isInterState) {
-    drawTaxRow(`OUTPUT IGST ${gstGoods}%`, summary.igst);
+    drawTaxRow(`${gstDir} IGST ${gstGoods}%`, summary.igst);
   } else {
-    drawTaxRow(`OUTPUT CGST ${gstRate}%`, summary.cgst);
-    drawTaxRow(`OUTPUT SGST ${gstRate}%`, summary.sgst);
+    drawTaxRow(`${gstDir} CGST ${gstRate}%`, summary.cgst);
+    drawTaxRow(`${gstDir} SGST ${gstRate}%`, summary.sgst);
   }
 
   // Round on/off row
@@ -1154,12 +1205,13 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
   const bkInnerW = rightW - 8;
   doc.font('Helvetica').fontSize(8).text("Company's Bank Details", bkX, bky); bky += 11;
   // Bank picks:
-  //   ASP invoices (Kerala + e-Trade) → Kerala bank details
-  //   ISP invoices (everything else)  → Tamil Nadu bank details
-  // Uses the isASP flag derived earlier from business_mode + business_state.
-  const bankName = isASP ? (cfg.bank_kl_name || '') : (cfg.bank_tn_name || '');
-  const bankAcct = isASP ? (cfg.bank_kl_acct || '') : (cfg.bank_tn_acct || '');
-  const bankIfsc = isASP ? (cfg.bank_kl_ifsc || '') : (cfg.bank_tn_ifsc || '');
+  //   Purchase view         → KL bank (ASP is still the selling company, so its bank receives payment)
+  //   ASP sales invoice     → KL bank
+  //   ISP invoices          → TN bank
+  const useKLBank = isASP; // same for both sales AND purchase view when isASP
+  const bankName = useKLBank ? (cfg.bank_kl_name || '') : (cfg.bank_tn_name || '');
+  const bankAcct = useKLBank ? (cfg.bank_kl_acct || '') : (cfg.bank_tn_acct || '');
+  const bankIfsc = useKLBank ? (cfg.bank_kl_ifsc || '') : (cfg.bank_tn_ifsc || '');
   // Align values at a fixed x so all three rows start at the same column
   const labelW = 90;
   const valX = bkX + labelW;
@@ -1182,7 +1234,13 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
   doc.lineWidth(0.5).moveTo(rightX, bky - 2).lineTo(x0 + W, bky - 2).stroke();
   bky += 2;
   // "for COMPANY NAME" right-aligned
-  doc.font('Helvetica-Bold').fontSize(8).text(`for ${co.name || ''}`, bkX, bky, { width: bkInnerW, align: 'right' });
+  // In purchase view, the issuer header is ISPL but the signatory block
+  // represents the SELLING company (ASP) — whose bank received the payment
+  // and whose authorised signatory certifies the sale.
+  const forCompanyName = isPurchaseView
+    ? (cfg.s_company || 'AMAZING SPICE PARK PRIVATE LIMITED')
+    : (co.name || '');
+  doc.font('Helvetica-Bold').fontSize(8).text(`for ${forCompanyName}`, bkX, bky, { width: bkInnerW, align: 'right' });
   // Authorised Signatory at bottom-right of footer
   doc.font('Helvetica').fontSize(8).text('Authorised Signatory', bkX, y + footerH - 12, { width: bkInnerW, align: 'right' });
 
