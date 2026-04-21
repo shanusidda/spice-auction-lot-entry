@@ -25,15 +25,15 @@ function threeDigit(n) {
 }
 
 function amountToWords(amount) {
-  if (amount === 0) return 'Zero Only';
-  
+  if (amount === 0) return 'Zero';
+
   const isNeg = amount < 0;
   amount = Math.abs(amount);
-  
+
   const rupees = Math.floor(amount);
   const paise = Math.round((amount - rupees) * 100);
 
-  if (rupees === 0 && paise === 0) return 'Zero Only';
+  if (rupees === 0 && paise === 0) return 'Zero';
 
   // Indian system: Crore, Lakh, Thousand, Hundred
   const crore = Math.floor(rupees / 10000000);
@@ -48,13 +48,15 @@ function amountToWords(amount) {
   if (hundred) words += threeDigit(hundred);
 
   words = words.trim();
-  
+
+  // Return words WITHOUT "Only" — callers append "Only" themselves.
+  // This avoids "Only Only" when the caller interpolates ` Only` at the end.
   if (words && paise) {
-    words = 'Rupees ' + words + ' and ' + twoDigit(paise) + ' Paise Only';
+    words = 'Rupees ' + words + ' and ' + twoDigit(paise) + ' Paise';
   } else if (words) {
-    words = 'Rupees ' + words + ' Only';
+    words = 'Rupees ' + words;
   } else if (paise) {
-    words = twoDigit(paise) + ' Paise Only';
+    words = twoDigit(paise) + ' Paise';
   }
 
   if (isNeg) words = 'Minus ' + words;

@@ -69,7 +69,8 @@ const DEFAULTS = [
   { key: 'hpc',             value: '10',             category: 'rates',     label: 'Handling %',               type: 'number' },
   { key: 'deduction1',      value: '1.25',           category: 'rates',     label: 'Deduction (Pooler)',       type: 'number' },
   { key: 'deduction2',      value: '1.25',           category: 'rates',     label: 'Deduction (Dealer)',       type: 'number' },
-  { key: 'asp_profit',      value: '0.75',           category: 'rates',     label: 'ASP Profit Ratio',         type: 'number' },
+  { key: 'asp_profit_pooler', value: '0.75',         category: 'rates',     label: 'ASP Profit Ratio (Pooler)', type: 'number' },
+  { key: 'asp_profit_dealer', value: '0.75',         category: 'rates',     label: 'ASP Profit Ratio (Dealer)', type: 'number' },
   { key: 'isp_profit',      value: '0.5',            category: 'rates',     label: 'ISP Profit Ratio',         type: 'number' },
   { key: 'refund',          value: '1.9',            category: 'rates',     label: 'Sample Refund (Kgs)',      type: 'number' },
   { key: 'sb_refund',       value: '2.85',           category: 'rates',     label: 'SB Sample Refund (Kgs)',   type: 'number' },
@@ -181,6 +182,19 @@ function initCompanySettings(db) {
     for (const d of DEFAULTS) insert.run(d.key, d.value, d.category, d.label, d.type);
   });
   seed();
+
+  // Migration: asp_profit was split into asp_profit_pooler and asp_profit_dealer.
+  // If an existing DB still has the old row, copy its value to both new keys
+  // (preserving the user's configured rate), then remove the legacy row.
+  const legacy = db.prepare('SELECT value FROM company_settings WHERE key = ?').get('asp_profit');
+  if (legacy && legacy.value != null && legacy.value !== '') {
+    const upd = db.prepare('UPDATE company_settings SET value = ? WHERE key = ?');
+    upd.run(legacy.value, 'asp_profit_pooler');
+    upd.run(legacy.value, 'asp_profit_dealer');
+    db.prepare('DELETE FROM company_settings WHERE key = ?').run('asp_profit');
+    console.log('Migrated asp_profit → asp_profit_pooler/asp_profit_dealer (value=%s)', legacy.value);
+  }
+
   console.log('Company settings ready (%d defaults)', DEFAULTS.length);
 }
 

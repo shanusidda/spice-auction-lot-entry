@@ -8,7 +8,7 @@ const XLSX = require('xlsx');
 const { initDb, getDb } = require('./db');
 const { initCompanySettings, CATEGORIES, getAllSettings, updateSettings, getSettingsFlat, getGSTRates } = require('./company-config');
 const { calculateLot, buildSalesInvoice, buildPurchaseInvoice, buildAgriBill, buildDebitNote, listAgriSellers, getPaymentSummary, getBankPaymentData, getTDSReturnData, getSalesJournal, getPurchaseJournal } = require('./calculations');
-const { generatePurchaseInvoicePDF, generateCropReceiptPDF, generateAgriBillPDF, generateSalesInvoicePDF } = require('./invoice-pdf');
+const { generatePurchaseInvoicePDF, generateCropReceiptPDF, generateAgriBillPDF, generateSalesInvoicePDF, generateSalesInvoicesBatchPDF } = require('./invoice-pdf');
 const { EXPORT_TYPES } = require('./exports');
 const { exportPdf: exportAnyPdf } = require('./exports-pdf');
 const { DBF_EXPORTS } = require('./dbf-exports');
@@ -1087,6 +1087,7 @@ app.get('/api/invoices/eligible-buyers/:auctionId', requireAdmin, (req, res) => 
 
   res.json(db.all(
     `SELECT l.buyer, COALESCE(b.buyer1, MAX(l.buyer1), l.buyer) as buyer1,
+        b.code as code,
         COUNT(*) as lot_count, SUM(l.qty) as total_qty, SUM(l.amount) as total_amount,
         b.gstin, b.sale as default_sale
      FROM lots l
@@ -1379,6 +1380,82 @@ app.get('/api/invoices/pdf/:id', requireAdmin, async (req, res) => {
   } catch (e) {
     console.error('Sales invoice PDF error:', e);
     res.status(500).json({ error: 'PDF generation failed: ' + e.message });
+  }
+});
+
+// Bulk Sales Invoice PDF — merges N invoices into a single PDF
+// Body: { ids: [1, 2, 3, ...] }
+// Returns: one PDF with each invoice on fresh page(s), in the order given.
+app.post('/api/invoices/pdf-bulk', requireAdmin, async (req, res) => {
+  try {
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(Number).filter(Boolean) : [];
+    if (!ids.length) return res.status(400).json({ error: 'No invoice IDs provided' });
+
+    const db = getDb();
+    const cfg = getSettingsFlat(db);
+
+    // Enrich-buyer helper (same logic as single-invoice endpoint) — ensures
+    // Bill-To / Ship-To have values even when rebuilding from stored data.
+    const enrichBuyer = (buyer, stored) => {
+      if (!buyer) buyer = {};
+      if (!buyer.buyer1 && !buyer.buyer) {
+        const looked = db.get('SELECT * FROM buyers WHERE buyer=? OR buyer1=? LIMIT 1',
+          [stored.buyer, stored.buyer1 || stored.tradername || '']);
+        if (looked) buyer = looked;
+      }
+      if (!buyer.buyer1 && stored.buyer1)   buyer.buyer1   = stored.buyer1;
+      if (!buyer.buyer1 && stored.tradername) buyer.buyer1 = stored.tradername;
+      if (!buyer.buyer  && stored.buyer)    buyer.buyer    = stored.buyer;
+      if (!buyer.gstin  && stored.gstin)    buyer.gstin    = stored.gstin;
+      if (!buyer.pla    && stored.place)    buyer.pla      = stored.place;
+      if (!buyer.state  && stored.state)    buyer.state    = stored.state;
+      if (!buyer.add1   && stored.add_line) buyer.add1     = stored.add_line;
+      return buyer;
+    };
+
+    // Build each invoice's data
+    const payloads = [];
+    for (const id of ids) {
+      const stored = db.get('SELECT * FROM invoices WHERE id=?', [id]);
+      if (!stored) continue; // silently skip missing IDs
+      let invoice = stored.auction_id
+        ? buildSalesInvoice(db, stored.auction_id, stored.buyer, stored.sale, cfg)
+        : null;
+      if (invoice) {
+        invoice.buyer = enrichBuyer(invoice.buyer, stored);
+      } else {
+        const buyer = enrichBuyer(db.get('SELECT * FROM buyers WHERE buyer=? LIMIT 1', [stored.buyer]), stored);
+        invoice = {
+          buyer,
+          lineItems: [{ lot: '—', grade: '', bags: stored.bag || 0, qty: stored.qty || 0, price: 0, amount: stored.amount || 0 }],
+          summary: {
+            totalBags: stored.bag || 0, totalQty: stored.qty || 0,
+            totalAmount: stored.amount || 0, gunnyCost: stored.gunny || 0,
+            transportCost: stored.pava_hc || 0, insuranceCost: stored.ins || 0,
+            taxableValue: (stored.amount || 0) + (stored.gunny || 0) + (stored.pava_hc || 0) + (stored.ins || 0),
+            cgst: stored.cgst || 0, sgst: stored.sgst || 0, igst: stored.igst || 0,
+            roundDiff: stored.rund || 0, grandTotal: stored.tot || 0,
+            isInterState: stored.sale === 'I',
+          }
+        };
+      }
+      payloads.push({
+        invoiceData: invoice,
+        saleType: stored.sale,
+        invoiceNo: stored.invo,
+        invoiceDate: stored.date,
+      });
+    }
+
+    if (!payloads.length) return res.status(404).json({ error: 'No invoices resolved from the provided IDs' });
+
+    const pdf = await generateSalesInvoicesBatchPDF(payloads, cfg);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="Invoices_Batch_${payloads.length}.pdf"`);
+    res.send(pdf);
+  } catch (e) {
+    console.error('Bulk sales invoice PDF error:', e);
+    res.status(500).json({ error: 'Batch PDF generation failed: ' + e.message });
   }
 });
 

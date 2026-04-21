@@ -41,11 +41,26 @@ function calculateLot(lot, cfg) {
     result.puramt = lot.amount - result.com - result.sertax;
   } else {
     // e-Trade: deduction-based
-    //   grade 1 (pooler)  → deduction1
-    //   grade 2 (dealer)  → deduction2
+    //   grade 1 (pooler)  → deduction1  (ISPL flow)
+    //   grade 2 (dealer)  → deduction2  (ISPL flow)
     //   other grades fall back to pooler rate
+    //
+    // KERALA + e-Trade special case: invoices are issued by ASP (sister
+    // company in Kerala), so P_Rate uses asp_profit_pooler/asp_profit_dealer
+    // instead of deduction1/deduction2. These rates are tuned for the
+    // Kerala-market margin structure.
     const gradeStr = String(lot.grade || '').trim();
-    const deduction = (gradeStr === '2') ? (cfg.deduction2 || 0) : (cfg.deduction1 || 0);
+    const isKerala = (String(cfg.business_state || '').toUpperCase() === 'KERALA');
+    let deduction;
+    if (isKerala) {
+      deduction = (gradeStr === '2')
+        ? Number(cfg.asp_profit_dealer || 0)
+        : Number(cfg.asp_profit_pooler || 0);
+    } else {
+      deduction = (gradeStr === '2')
+        ? Number(cfg.deduction2 || 0)
+        : Number(cfg.deduction1 || 0);
+    }
     const rawRate = (lot.price || 0) * (1 - deduction / 100);
     // Round to nearest rupee (half-up)
     result.prate = Math.round(rawRate);
@@ -214,12 +229,18 @@ function buildSalesInvoice(db, auctionId, buyerCode, saleType, cfg) {
     return 0;
   };
   const isLocal = (saleType === 'L');
-  const transportRate = isLocal
+  // ASP invoices (Kerala + e-Trade) do NOT bill Transport/Insurance as
+  // separate line-items on the customer's invoice — only Cardamom + Gunny.
+  // Force both to zero so the subtotal, GST, and grand total all agree
+  // with what the PDF renders.
+  const isASP = (String(cfg.business_mode || '').toLowerCase() === 'e-trade')
+             && (String(cfg.business_state || '').toUpperCase() === 'KERALA');
+  const transportRate = isASP ? 0 : (isLocal
     ? pickRate(cfg.local_transport, cfg.transport, 2.5)
-    : pickRate(cfg.transport, 2.5);
-  const insuranceRate = isLocal
+    : pickRate(cfg.transport, 2.5));
+  const insuranceRate = isASP ? 0 : (isLocal
     ? pickRate(cfg.local_insurance, cfg.insurance, 0.75)
-    : pickRate(cfg.insurance, 0.75);
+    : pickRate(cfg.insurance, 0.75));
 
   const transportCost = Math.round(totalQty * transportRate * 100) / 100;
 

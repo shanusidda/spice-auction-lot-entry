@@ -253,7 +253,7 @@ function generatePurchaseInvoicePDF(invoiceData, cfg, invoiceNo) {
   doc.moveTo(x, y).lineTo(x + w, y).stroke(); y += 6;
   const amtForWords = summary.tdsAmount > 0 ? summary.invoiceAmount : summary.grandTotal;
   doc.font('Helvetica-Bold').fontSize(8);
-  doc.text(amountToWords(Math.round(amtForWords)), x, y, { width: w });
+  doc.text(amountToWords(Math.round(amtForWords)) + ' Only', x, y, { width: w });
   y += 16;
 
   // Signature
@@ -333,7 +333,7 @@ function generateCropReceiptPDF(lot, cfg) {
   });
 }
 
-module.exports = { generatePurchaseInvoicePDF, generateCropReceiptPDF, generateAgriBillPDF, generateSalesInvoicePDF };
+module.exports = { generatePurchaseInvoicePDF, generateCropReceiptPDF, generateAgriBillPDF, generateSalesInvoicePDF, generateSalesInvoicesBatchPDF };
 
 /**
  * Sales Invoice PDF (Tax Invoice)
@@ -350,13 +350,51 @@ module.exports = { generatePurchaseInvoicePDF, generateCropReceiptPDF, generateA
  *   - Sale 'I' (Inter-state) → IGST
  *   - Sale 'E' (Export)      → Zero-rated
  */
-function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceDate) {
+// When called without `externalDoc`, builds a standalone PDF for one invoice.
+// When called with `externalDoc` (a PDFKit doc), appends a new page and draws
+// this invoice into it — used by the batch-print endpoint to merge many
+// invoices into a single file. Returns the Buffer only in standalone mode.
+function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceDate, externalDoc) {
   const co = effectiveCompany(cfg);
-  const doc = new PDFDocument({ size: 'A4', margin: 20 });
-  const buffers = [];
-  doc.on('data', b => buffers.push(b));
+  const isBatch = !!externalDoc;
+  let doc, buffers;
+  if (isBatch) {
+    doc = externalDoc;
+    // For invoices after the first, start on a fresh page; first call re-uses the empty initial page
+    if (doc._invoiceCount && doc._invoiceCount > 0) {
+      doc.addPage({ size: 'A4', margin: 20 });
+    }
+    doc._invoiceCount = (doc._invoiceCount || 0) + 1;
+  } else {
+    doc = new PDFDocument({ size: 'A4', margin: 20 });
+    buffers = [];
+    doc.on('data', b => buffers.push(b));
+  }
 
   const { buyer, lineItems, summary } = invoiceData;
+
+  // ── Invoice provenance flags ────────────────────────────────
+  // isASP = this invoice is issued by ASP (sister company) instead of ISPL.
+  // Triggered when business mode = e-Trade AND state = KERALA.
+  // Drives: invoice-prefix swap, Transport/Insurance hidden, bank details
+  //         picked from KL bank settings, "Dispatch From" hidden (ASP
+  //         invoices don't reference a separate dispatch), logo swap.
+  const isASP = (cfg.business_mode || '').toLowerCase() === 'e-trade'
+             && (cfg.business_state || '').toUpperCase() === 'KERALA';
+  // Read a boolean-ish flag cfg value, respecting undefined→default semantics.
+  // Used for user-facing toggle flags like flag_ship, flag_dispatch.
+  function readFlagSafe(val, defaultOn) {
+    if (val === undefined || val === null || val === '') return defaultOn;
+    if (typeof val === 'boolean') return val;
+    return String(val).toLowerCase() === 'true';
+  }
+  // Ship-To visibility uses a DIFFERENT flag per company:
+  //   ASP invoices  → flag_tnpa  ("ASP Ship To Address")
+  //   ISP invoices  → flag_ship  ("Show Ship To Address")
+  const showShipTo    = isASP
+    ? readFlagSafe(cfg.flag_tnpa, true)
+    : readFlagSafe(cfg.flag_ship, true);
+  const showDispatch  = readFlagSafe(cfg.flag_dispatch, true); // item 2
 
   // ── Page geometry ───────────────────────────────────────────
   const pageW = doc.page.width;
@@ -450,16 +488,21 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
   const rightX = x0 + leftW;
 
   // Right-side grid cell sizes — 2 rows, sized so combined height matches
-  // the left company-details block (logo + name + address + GSTIN + State + CIN).
-  const topHeaderH = 80;
-  const rRow = topHeaderH / 2;       // 40pt each row
+  // the left company-details block (logo + name + address + GSTIN + State + CIN + optional FSSAI + SBL).
+  const topHeaderH = 100;
+  const rRow = topHeaderH / 2;       // 50pt each row
   const rCell = rightW / 2;          // each cell's width for 2-col rows
 
   // ── LEFT BLOCK: Logo + company details ──────────────────────
   box(leftX, topY, leftW, topHeaderH);
   // Logo area (if logo file exists, use it; else show text)
   // Sales invoices always issued by ISPL (supplier), so use the ISPL logo.
-  const logoPath = require('path').join(__dirname, 'public', 'logo-ispl.png');
+  // Logo: pick ASP logo when effectiveCompany resolved to ASP
+  // (Kerala + e-Trade → ASP issues the invoice, so show ASP logo).
+  const useASPLogo = (cfg.business_mode || '').toLowerCase() === 'e-trade'
+                  && (cfg.business_state || '').toUpperCase() === 'KERALA';
+  const logoFile = useASPLogo ? 'logo-asp.png' : 'logo-ispl.png';
+  const logoPath = require('path').join(__dirname, 'public', logoFile);
   const fs = require('fs');
   let logoDrawn = false;
   if (fs.existsSync(logoPath)) {
@@ -480,6 +523,8 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
   if (co.gstin) { doc.text(`GSTIN/UIN: ${co.gstin}`, textX, ty, { width: textW }); ty += 10; }
   if (co.stateName) { doc.text(`State Name : ${co.stateName}, Code : ${co.stateCode}`, textX, ty, { width: textW }); ty += 10; }
   if (co.cin) { doc.text(`CIN: ${co.cin}`, textX, ty, { width: textW }); ty += 10; }
+  if (co.fssai) { doc.text(`FSSAI No.: ${co.fssai}`, textX, ty, { width: textW }); ty += 10; }
+  if (co.sbl)   { doc.text(`SBL No.: ${co.sbl}`,     textX, ty, { width: textW }); ty += 10; }
 
   // ── RIGHT BLOCK: 2-row metadata grid ────────────────────────
   // Row 1: Invoice No | e-Way Bill No | Dated
@@ -489,7 +534,12 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
   let ry = topY;
 
   // Row 1
-  labeledCell(rightX,             ry, r1W, rRow, 'Invoice No.', formatInvoiceNo(cfg, saleType, invoiceNo));
+  // Invoice No: primary prefix flips to ASP when this is an ASP-issued invoice.
+  // Other Refs is always the OTHER company (ISP vs ASP are mirrors).
+  const primaryPrefix = isASP ? (cfg.inv_prefix_sister || 'ASP') : (cfg.inv_prefix || 'ISP');
+  const otherPrefix   = isASP ? (cfg.inv_prefix || 'ISP')         : (cfg.inv_prefix_sister || 'ASP');
+  const primaryCfg    = { ...cfg, inv_prefix: primaryPrefix };
+  labeledCell(rightX,             ry, r1W, rRow, 'Invoice No.', formatInvoiceNo(primaryCfg, saleType, invoiceNo));
   labeledCell(rightX + r1W,       ry, r1W, rRow, 'e-Way Bill No.', '');
   labeledCell(rightX + r1W * 2,   ry, rightW - r1W * 2, rRow, 'Dated', (() => {
     const d = invoiceDate ? new Date(invoiceDate) : new Date();
@@ -500,9 +550,8 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
   })());
   ry += rRow;
 
-  // Row 2 — Other References = same number with ASP prefix
-  const sisterPrefix = cfg.inv_prefix_sister || 'ASP';
-  const otherRefCfg = { ...cfg, inv_prefix: sisterPrefix };
+  // Row 2 — Other References = same number but mirror company's prefix
+  const otherRefCfg = { ...cfg, inv_prefix: otherPrefix };
   const otherRefs = formatInvoiceNo(otherRefCfg, saleType, invoiceNo);
   labeledCell(rightX,         ry, rCell, rRow, 'Reference No. & Date.', '');
   labeledCell(rightX + rCell, ry, rCell, rRow, 'Other References', otherRefs);
@@ -517,10 +566,12 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
   const midH = 150; // total middle-block height
   const midY = y;
 
-  // Left column: 2 stacked cells
-  const leftCellH = midH / 2;
+  // Left column structure:
+  //   - Both blocks shown: 2 stacked cells (Consignee on top, Buyer below)
+  //   - flag_ship OFF: only Buyer block, full midH height
+  const leftCellH = showShipTo ? midH / 2 : midH;
   const consigneeY = midY;
-  const buyerY = midY + leftCellH;
+  const buyerY = showShipTo ? (midY + (midH / 2)) : midY;
 
   // Consignee (Ship to) — uses consignee fields if present, else falls back to buyer
   const hasConsignee = !!(buyer.cbuyer1 || buyer.cadd1 || buyer.cpla || buyer.cgstin);
@@ -542,36 +593,67 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
     gstin: buyer.gstin || '',
   };
 
-  // Draw Consignee cell
-  box(leftX, consigneeY, leftW, leftCellH);
-  let cy = consigneeY + 3;
-  doc.font('Helvetica').fontSize(7).text('Consignee (Ship to)', leftX + 3, cy); cy += 9;
-  doc.font('Helvetica-Bold').fontSize(9).text(ship.name, leftX + 3, cy, { width: leftW - 6 }); cy += 11;
-  doc.font('Helvetica').fontSize(8);
+  // Shared helper for left-column writing, advancing the anchor by actual height
   const lW = leftW - 6;
   const writeLeft = (txt, anchor) => {
     if (!txt) return;
     doc.text(txt, leftX + 3, anchor.v, { width: lW });
     anchor.v += doc.heightOfString(txt, { width: lW }) + 1;
   };
-  const cAnchor = { v: cy };
-  writeLeft(ship.addr, cAnchor);
-  writeLeft(ship.pla,  cAnchor);
-  if (ship.gstin) writeLeft(`GSTIN/UIN      : ${ship.gstin}`, cAnchor);
-  if (ship.state) writeLeft(`State Name     : ${ship.state}, Code : ${ship.stCode || ''}`, cAnchor);
+
+  // Draw Consignee cell (skip when flag_ship is OFF — item 1)
+  if (showShipTo) {
+    box(leftX, consigneeY, leftW, (midH / 2));
+    let cy = consigneeY + 3;
+    doc.font('Helvetica').fontSize(7).text('Consignee (Ship to)', leftX + 3, cy); cy += 9;
+    doc.font('Helvetica-Bold').fontSize(9).text(ship.name, leftX + 3, cy, { width: leftW - 6 });
+    // Advance by actual rendered height (prevents overlap for long company names)
+    cy += doc.heightOfString(ship.name, { width: leftW - 6 }) + 2;
+    doc.font('Helvetica').fontSize(8);
+    const cAnchor = { v: cy };
+    writeLeft(ship.addr, cAnchor);
+    writeLeft(ship.pla,  cAnchor);
+    if (ship.gstin) writeLeft(`GSTIN/UIN      : ${ship.gstin}`, cAnchor);
+    if (ship.state) writeLeft(`State Name     : ${ship.state}, Code : ${ship.stCode || ''}`, cAnchor);
+  }
 
   // Draw Buyer (Bill to) cell
   box(leftX, buyerY, leftW, leftCellH);
   let by = buyerY + 3;
   doc.font('Helvetica').fontSize(7).text('Buyer (Bill to)', leftX + 3, by); by += 9;
-  doc.font('Helvetica-Bold').fontSize(9).text(buyer.buyer1 || buyer.buyer || '', leftX + 3, by, { width: leftW - 6 }); by += 11;
+
+  // For ASP invoices, the buyer is ISP (sister→primary transfer). Bill-To
+  // always shows ISP company details, not the external customer's.
+  // isASP is established earlier based on business_mode + business_state.
+  const billTo = isASP ? {
+    name:  cfg.short_name || cfg.trade_name || 'IDEAL SPICES PRIVATE LIMITED',
+    add1:  cfg.tn_address1 || '',
+    add2:  cfg.tn_address2 || '',
+    pla:   cfg.tn_place || '',
+    gstin: cfg.tn_gstin || '',
+    state: cfg.tn_state || 'TAMIL NADU',
+    stCode: cfg.tn_st_code || '33',
+  } : {
+    name:  buyer.buyer1 || buyer.buyer || '',
+    add1:  buyer.add1 || '',
+    add2:  buyer.add2 || '',
+    pla:   buyer.pla || '',
+    gstin: buyer.gstin || '',
+    state: buyer.state || '',
+    stCode: buyer.st_code || '',
+  };
+
+  doc.font('Helvetica-Bold').fontSize(9).text(billTo.name, leftX + 3, by, { width: leftW - 6 });
+  // Advance by ACTUAL rendered height — long company names wrap to 2+ lines.
+  // Using a fixed advance caused subsequent address lines to overlap the name.
+  by += doc.heightOfString(billTo.name, { width: leftW - 6 }) + 2;
   doc.font('Helvetica').fontSize(8);
-  const bAddr = [buyer.add1, buyer.add2].filter(Boolean).join(',');
+  const bAddr = [billTo.add1, billTo.add2].filter(Boolean).join(',');
   const bAnchor = { v: by };
   writeLeft(bAddr, bAnchor);
-  writeLeft(buyer.pla, bAnchor);
-  if (buyer.gstin) writeLeft(`GSTIN/UIN      : ${buyer.gstin}`, bAnchor);
-  if (buyer.state) writeLeft(`State Name     : ${buyer.state}, Code : ${buyer.st_code || ''}`, bAnchor);
+  writeLeft(billTo.pla, bAnchor);
+  if (billTo.gstin) writeLeft(`GSTIN/UIN      : ${billTo.gstin}`, bAnchor);
+  if (billTo.state) writeLeft(`State Name     : ${billTo.state}, Code : ${billTo.stCode || ''}`, bAnchor);
 
   // Right column: 2 rows now (Dispatched through | Destination, Dispatch From)
   const rSmall = 28;
@@ -581,25 +663,32 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
   labeledCell(rightX + rCell, ry2, rCell, rSmall, 'Destination', cfg.dispatch_destination || '');
   ry2 += rSmall;
 
-  // Dispatch From block (sister company) — fills remaining middle height
+  // Dispatch From block (sister company) — fills remaining middle height.
+  // Hidden when flag_dispatch is OFF (item 2) — draw an empty bordered cell so
+  // the right-column visual frame still matches the left column's height.
   const dispatchFromH = midH - rSmall;
-  box(rightX, ry2, rightW, dispatchFromH);
-  const dispatchY = ry2;
-  doc.font('Helvetica-Bold').fontSize(8).text('Dispatch From:', rightX + 3, dispatchY + 4, { width: rightW - 6 });
-  doc.font('Helvetica-Bold').fontSize(9).text(cfg.s_company || 'AMAZING SPICE PARK PRIVATE LIMITED', rightX + 3, dispatchY + 14, { width: rightW - 6 });
-  doc.font('Helvetica').fontSize(8);
-  // Advance dy by actual rendered height so wrapped text doesn't overlap next line.
-  let dy = dispatchY + 26;
-  const dispW = rightW - 6;
-  const writeLine = (txt) => {
-    if (!txt) return;
-    doc.text(txt, rightX + 3, dy, { width: dispW });
-    dy += doc.heightOfString(txt, { width: dispW }) + 1;
-  };
-  writeLine(cfg.s_address1);
-  writeLine(cfg.s_address2);
-  if (cfg.s_state) writeLine(`${cfg.s_state} Code:${cfg.s_st_code || '32'}`);
-  if (cfg.s_gstin) writeLine(`GSTIN.${cfg.s_gstin}`);
+  if (showDispatch) {
+    box(rightX, ry2, rightW, dispatchFromH);
+    const dispatchY = ry2;
+    doc.font('Helvetica-Bold').fontSize(8).text('Dispatch From:', rightX + 3, dispatchY + 4, { width: rightW - 6 });
+    doc.font('Helvetica-Bold').fontSize(9).text(cfg.s_company || 'AMAZING SPICE PARK PRIVATE LIMITED', rightX + 3, dispatchY + 14, { width: rightW - 6 });
+    doc.font('Helvetica').fontSize(8);
+    // Advance dy by actual rendered height so wrapped text doesn't overlap next line.
+    let dy = dispatchY + 26;
+    const dispW = rightW - 6;
+    const writeLine = (txt) => {
+      if (!txt) return;
+      doc.text(txt, rightX + 3, dy, { width: dispW });
+      dy += doc.heightOfString(txt, { width: dispW }) + 1;
+    };
+    writeLine(cfg.s_address1);
+    writeLine(cfg.s_address2);
+    if (cfg.s_state) writeLine(`${cfg.s_state} Code:${cfg.s_st_code || '32'}`);
+    if (cfg.s_gstin) writeLine(`GSTIN.${cfg.s_gstin}`);
+  } else {
+    // Empty bordered cell to keep the frame consistent with the left column
+    box(rightX, ry2, rightW, dispatchFromH);
+  }
 
   y = midY + midH;
 
@@ -689,7 +778,7 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
     y = margin;
     // Small top note that this is a continuation
     doc.font('Helvetica-Oblique').fontSize(7)
-       .text(`Tax Invoice — ${formatInvoiceNo(cfg, saleType, invoiceNo)} (continued)`,
+       .text(`Tax Invoice — ${formatInvoiceNo(primaryCfg, saleType, invoiceNo)} (continued)`,
              x0, y, { width: W, align: 'center' });
     doc.font('Helvetica');
     y += 12;
@@ -781,8 +870,10 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
   const transportRate = isLocalSale
     ? pickRate(cfg.local_transport, cfg.transport, 2.5)
     : pickRate(cfg.transport, 2.5);
+  // ASP invoices never bill Transport/Insurance separately (item 5).
+  // Wrap both rows + their HSN summary entries in an isASP guard.
   const sacTransport = cfg.sac_transport || '996791';
-  if (summary.transportCost > 0) {
+  if (summary.transportCost > 0 && !isASP) {
     stripeFill(y, rowH, sl - 1);
     rowVerticals(y, rowH);
     doc.text(String(sl), colX('sl') + 2, y + 3, { width: colW.sl - 4, align: 'center' });
@@ -805,7 +896,7 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
     ? pickRate(cfg.local_insurance, cfg.insurance, 0.75)
     : pickRate(cfg.insurance, 0.75);
   const sacInsurance = cfg.sac_insurance || '997136';
-  if (summary.insuranceCost > 0) {
+  if (summary.insuranceCost > 0 && !isASP) {
     stripeFill(y, rowH, sl - 1);
     rowVerticals(y, rowH);
     doc.text(String(sl), colX('sl') + 2, y + 3, { width: colW.sl - 4, align: 'center' });
@@ -818,6 +909,12 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
     y += rowH;
     sl++;
   }
+
+  // Horizontal line under the last line-item's Amount cell — visually groups
+  // the line-items (Cardamom/Gunny/Transport/Insurance) and separates them
+  // from the subtotal that follows. Drawn ONLY in the Amount column so it
+  // doesn't disrupt the description/HSN/Qty cells to the left.
+  doc.lineWidth(0.5).moveTo(colX('amount'), y).lineTo(colX('amount') + colW.amount, y).stroke();
 
   // Subtotal row = taxable value (cardamom + gunny + transport + insurance)
   const subtotal = summary.taxableValue;
@@ -894,8 +991,9 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
   }
   hsnRows.push(hsnRow(hsnCardamom, summary.totalAmount));
   if (summary.gunnyCost > 0)     hsnRows.push(hsnRow(hsnGunny, summary.gunnyCost));
-  if (summary.transportCost > 0) hsnRows.push(hsnRow(sacTransport, summary.transportCost));
-  if (summary.insuranceCost > 0) hsnRows.push(hsnRow(sacInsurance, summary.insuranceCost));
+  // ASP invoices: Transport/Insurance are not billed, so skip them from HSN summary too
+  if (summary.transportCost > 0 && !isASP) hsnRows.push(hsnRow(sacTransport, summary.transportCost));
+  if (summary.insuranceCost > 0 && !isASP) hsnRows.push(hsnRow(sacInsurance, summary.insuranceCost));
 
   const hsnHdrH = 20;
   const hsnRowH = 12;
@@ -1013,6 +1111,8 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
   }
 
   for (let i = 0; i < hsnRows.length; i++) drawHsnRow(hsnRows[i], false, i);
+  // Horizontal line above Total row — visual separator between data rows and total
+  doc.lineWidth(0.5).moveTo(x0, y).lineTo(x0 + W, y).stroke();
   // Total row
   const totRow = {
     hsn: 'Total',
@@ -1053,9 +1153,13 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
   const bkX = rightX + 4;
   const bkInnerW = rightW - 8;
   doc.font('Helvetica').fontSize(8).text("Company's Bank Details", bkX, bky); bky += 11;
-  const bankName = cfg.business_state === 'KERALA' ? (cfg.bank_kl_name || '') : (cfg.bank_tn_name || '');
-  const bankAcct = cfg.business_state === 'KERALA' ? (cfg.bank_kl_acct || '') : (cfg.bank_tn_acct || '');
-  const bankIfsc = cfg.business_state === 'KERALA' ? (cfg.bank_kl_ifsc || '') : (cfg.bank_tn_ifsc || '');
+  // Bank picks:
+  //   ASP invoices (Kerala + e-Trade) → Kerala bank details
+  //   ISP invoices (everything else)  → Tamil Nadu bank details
+  // Uses the isASP flag derived earlier from business_mode + business_state.
+  const bankName = isASP ? (cfg.bank_kl_name || '') : (cfg.bank_tn_name || '');
+  const bankAcct = isASP ? (cfg.bank_kl_acct || '') : (cfg.bank_tn_acct || '');
+  const bankIfsc = isASP ? (cfg.bank_kl_ifsc || '') : (cfg.bank_tn_ifsc || '');
   // Align values at a fixed x so all three rows start at the same column
   const labelW = 90;
   const valX = bkX + labelW;
@@ -1073,12 +1177,19 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
   const branchLbl = (bankName.split('-')[1] || bankName).trim();
   doc.font('Helvetica-Bold').text(`${branchLbl} & ${bankIfsc}`, valX, bky, { width: valW });
   bky += 14;
+  // Horizontal line above "for COMPANY NAME" — separates bank details from signatory section.
+  // Drawn only in the right cell (bank details column), not across the Declaration block.
+  doc.lineWidth(0.5).moveTo(rightX, bky - 2).lineTo(x0 + W, bky - 2).stroke();
+  bky += 2;
   // "for COMPANY NAME" right-aligned
   doc.font('Helvetica-Bold').fontSize(8).text(`for ${co.name || ''}`, bkX, bky, { width: bkInnerW, align: 'right' });
   // Authorised Signatory at bottom-right of footer
   doc.font('Helvetica').fontSize(8).text('Authorised Signatory', bkX, y + footerH - 12, { width: bkInnerW, align: 'right' });
 
   y += footerH;
+
+  // Batch mode: caller owns the doc lifecycle; just return (no buffer).
+  if (isBatch) return null;
 
   return new Promise((resolve) => {
     doc.on('end', () => resolve(Buffer.concat(buffers)));
@@ -1198,7 +1309,7 @@ function generateAgriBillPDF(billData, cfg, billNo) {
 
   // Amount in words
   doc.moveTo(x, y).lineTo(x + w, y).stroke(); y += 6;
-  doc.fontSize(8).text(amountToWords(summary.netAmount), x, y, { width: w });
+  doc.fontSize(8).text(amountToWords(summary.netAmount) + ' Only', x, y, { width: w });
   y += 20;
 
   // Certification statement
@@ -1214,6 +1325,40 @@ function generateAgriBillPDF(billData, cfg, billNo) {
   y += 40;
   doc.text('Signature of Seller', x, y);
   doc.text('Authorised Signatory', x + w - 150, y, { width: 150, align: 'right' });
+
+  return new Promise((resolve) => {
+    doc.on('end', () => resolve(Buffer.concat(buffers)));
+    doc.end();
+  });
+}
+
+/**
+ * Generate ONE merged PDF containing multiple sales invoices (one per page
+ * group, with continuation pages for long ones). Used by the bulk-print
+ * endpoint so the user gets a single file they can print in one go.
+ *
+ * invoices: array of { invoiceData, saleType, invoiceNo, invoiceDate }
+ * cfg: shared company-settings config (same for all)
+ */
+function generateSalesInvoicesBatchPDF(invoices, cfg) {
+  if (!Array.isArray(invoices) || invoices.length === 0) {
+    return Promise.reject(new Error('No invoices to print'));
+  }
+  const doc = new PDFDocument({ size: 'A4', margin: 20 });
+  const buffers = [];
+  doc.on('data', b => buffers.push(b));
+  doc._invoiceCount = 0; // tracked so subsequent invoices addPage before drawing
+
+  for (const inv of invoices) {
+    generateSalesInvoicePDF(
+      inv.invoiceData,
+      cfg,
+      inv.saleType,
+      inv.invoiceNo,
+      inv.invoiceDate,
+      doc // externalDoc — triggers batch mode
+    );
+  }
 
   return new Promise((resolve) => {
     doc.on('end', () => resolve(Buffer.concat(buffers)));

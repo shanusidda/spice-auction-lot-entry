@@ -205,14 +205,18 @@ body{background:var(--bg);color:var(--text);min-height:100vh;font-size:14px}
 .login-box p{font-size:14px;color:var(--spice-text-mute);text-align:center;margin-bottom:28px}
 .fg{margin-bottom:14px}
 .fg label{display:block;font-size:12px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px}
-.fg input,.fg select,.fg textarea{
+.fg input:not([type="checkbox"]):not([type="radio"]),.fg select,.fg textarea{
   width:100%;height:44px;padding:0 14px;border:1.5px solid var(--spice-line);border-radius:10px;
   font-size:15px;font-family:inherit;background:#fff;outline:none;transition:all .15s;
   -webkit-appearance:none;appearance:none
 }
+/* Checkboxes & radios inside forms should keep their native size (not stretched to 100%) */
+.fg input[type="checkbox"],.fg input[type="radio"]{
+  width:16px;height:16px;margin:0;cursor:pointer;accent-color:var(--green)
+}
 .fg textarea{height:auto;padding:10px 14px;min-height:60px}
 .fg input[type="date"]{padding:0 12px}
-.fg input:focus,.fg select:focus,.fg textarea:focus{border-color:var(--spice-saffron);box-shadow:0 0 0 3px rgba(16,185,129,.20)}
+.fg input:not([type="checkbox"]):not([type="radio"]):focus,.fg select:focus,.fg textarea:focus{border-color:var(--spice-saffron);box-shadow:0 0 0 3px rgba(16,185,129,.20)}
 .fg select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='10'%3E%3Cpath d='M1 1l6 6 6-6' stroke='%23666' fill='none' stroke-width='2'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center}
 
 /* ── Buttons ─────────────────────────────────────────────── */
@@ -260,9 +264,16 @@ body{background:var(--bg);color:var(--text);min-height:100vh;font-size:14px}
   width:36px;height:36px;border-radius:10px;
   background:linear-gradient(135deg,var(--spice-saffron) 0%,#84CC16 100%);
   display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px;font-weight:800;
-  animation:none;box-shadow:0 3px 10px rgba(16,185,129,.22)
+  animation:none;box-shadow:0 3px 10px rgba(16,185,129,.22);
+  overflow:hidden;
+  position:relative;
 }
-.topbar h1 .dot::before{content:'IS'}
+/* When a logo image is present, let it fill the box and hide the text fallback */
+.topbar h1 .dot img{
+  width:100%;height:100%;object-fit:cover;display:block
+}
+/* Text fallback ONLY appears when no img is present inside the dot (new install / missing logo file) */
+.topbar h1 .dot:not(:has(img))::before{content:'IS'}
 .topbar-user{
   font-size:13px;background:var(--spice-saffron-lt);color:var(--spice-clove);
   padding:8px 14px;border-radius:10px;font-weight:600;
@@ -906,10 +917,11 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
       <button class="hamburger" onclick="toggleSidebar()" aria-label="Menu">
         <svg viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
       </button>
-      <h1><span class="dot"></span> Spice Config</h1>
+      <h1><span class="dot"><img id="topbar-logo-img" alt="" onerror="this.remove()"></span> Spice Config</h1>
     </div>
     <div style="display:flex;gap:10px;align-items:center">
       <span id="sync-indicator" class="sync-pill sync-ok" title="Last successful sync"></span>
+      <span id="logo-badge" style="font-size:11px;font-weight:700;color:var(--green);background:var(--green-bg);padding:4px 10px;border-radius:12px;border:1px solid var(--green-border);display:none" title="Active company for invoices & calculations"></span>
       <span id="user-lbl" class="topbar-user"></span>
       <button class="btn btn-o" onclick="logout()">Logout</button>
     </div>
@@ -1155,15 +1167,20 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
     <!-- INVOICES -->
     <div class="tc" id="tc-invoices">
       <div class="card">
-        <h2>Sales Invoices</h2>
-        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
-          <select id="inv-auction" onchange="loadInvoices();loadInvEligibleBuyers()" style="padding:6px;border:1px solid var(--border);border-radius:6px"></select>
-          <button class="btn btn-g" onclick="openGenInvModal()">+ Generate Invoice</button>
-          <button class="btn btn-a" onclick="openGenAllModal('invoices')">⚡ Generate for All Buyers</button>
-          <button class="btn" style="background:var(--spice-turmeric);color:#fff" onclick="revertAllInvoices()">⟲ Revert All</button>
-          <button class="btn" style="background:#c0392b;color:#fff;margin-left:auto" onclick="deleteAll('invoices','Invoices')">Delete All</button>
+        <h2>Sales Invoices <span id="inv-count-badge" style="font-size:12px;font-weight:500;color:var(--text2);background:var(--green-bg);padding:3px 10px;border-radius:10px;margin-left:8px;display:none"></span></h2>
+        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
+          <select id="inv-auction" onchange="loadInvoices();loadInvEligibleBuyers()" style="padding:6px 10px;height:36px;border:1px solid var(--border);border-radius:6px"></select>
+          <!-- Primary generation actions -->
+          <button class="btn btn-g" style="height:36px;padding:0 14px" onclick="openGenInvModal()">+ Generate Invoice</button>
+          <button class="btn btn-a" style="height:36px;padding:0 14px" onclick="openGenAllModal('invoices')">⚡ Generate for All Buyers</button>
+          <!-- Selection + print group — visually separated by a divider -->
+          <span style="width:1px;height:24px;background:var(--border);margin:0 2px"></span>
+          <button class="btn" style="height:36px;padding:0 14px;background:var(--spice-saffron);color:#fff" onclick="printSelectedInvoices()" title="Print all ticked invoices">🖨 Print Selected</button>
+          <!-- Destructive actions — pushed to the right -->
+          <button class="btn" style="height:36px;padding:0 12px;background:var(--spice-turmeric);color:#fff;margin-left:auto" onclick="revertAllInvoices()" title="Revert all invoices — deletes them and re-enables lots for re-invoicing">⟲ Revert All</button>
+          <button class="btn" style="height:36px;padding:0 12px;background:#c0392b;color:#fff" onclick="deleteAll('invoices','Invoices')" title="Permanently delete all invoices">🗑 Delete All</button>
         </div>
-        <div style="overflow-x:auto"><table><thead><tr><th>Sale</th><th>Inv#</th><th>Buyer</th><th>Qty</th><th>Amount</th><th>CGST</th><th>SGST</th><th>IGST</th><th>Total</th><th>Actions</th></tr></thead><tbody id="invoices-list"></tbody></table></div>
+        <div style="overflow-x:auto"><table><thead><tr><th style="width:32px"></th><th>Sale</th><th>Inv#</th><th>Buyer</th><th>Qty</th><th>Amount</th><th>CGST</th><th>SGST</th><th>IGST</th><th>Total</th><th>Actions</th></tr></thead><tbody id="invoices-list"></tbody></table></div>
       </div>
     </div>
 
@@ -1423,14 +1440,23 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
   <div class="actions"><button class="btn btn-o" onclick="hideModal('lot-modal')">Cancel</button><button class="btn btn-g" onclick="saveLot()">Save</button></div>
 </div></div>
 
-<div class="modal-bg" id="gen-inv-modal"><div class="modal">
-  <h2>Generate Sales Invoice</h2>
-  <div class="fg"><label>Sale Type</label><select id="gi-sale"><option value="L">Local (L)</option><option value="I">Inter-state (I)</option><option value="E">Export (E)</option></select></div>
-  <div class="fg"><label>Buyer</label>
-    <select id="gi-buyer"><option value="">— Select buyer —</option></select>
+<div class="modal-bg" id="gen-inv-modal"><div class="modal" style="max-width:580px">
+  <h2>Generate Sales Invoice(s)</h2>
+  <div class="fg"><label>Sale Type — filters eligible buyers below</label><select id="gi-sale" onchange="loadInvEligibleBuyers()"><option value="L">Local (L)</option><option value="I">Inter-state (I)</option><option value="E">Export (E)</option></select></div>
+  <div class="fg">
+    <label style="display:flex;justify-content:space-between;align-items:center">
+      <span>Buyers <span style="color:var(--text3);font-weight:400">— tick one or more</span></span>
+      <span style="font-size:11px">
+        <a href="#" onclick="toggleAllBuyers(true);return false" style="color:var(--green);text-decoration:none;margin-right:8px">Select all</a>
+        <a href="#" onclick="toggleAllBuyers(false);return false" style="color:var(--text3);text-decoration:none">Clear</a>
+      </span>
+    </label>
+    <div id="gi-buyer-list" style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:6px;background:var(--bg)">
+      <div style="color:var(--text3);font-size:12px;padding:10px;text-align:center">Select an auction first</div>
+    </div>
   </div>
   <div id="gi-hint" style="font-size:11px;color:var(--text3);padding:4px 0"></div>
-  <div class="fg"><label>Invoice No</label><input id="gi-invno" type="number"></div>
+  <div class="fg"><label>Starting Invoice No <span style="color:var(--text3);font-weight:400">— auto-increments for each selected buyer</span></label><input id="gi-invno" type="number" placeholder="e.g. 6"></div>
   <div class="actions">
     <button class="btn btn-o" onclick="hideModal('gen-inv-modal')">Cancel</button>
     <button class="btn btn-a" onclick="previewInvoice('sales')">Preview</button>
@@ -1877,6 +1903,26 @@ function toggleDark(){
 function showModal(id){document.getElementById(id).classList.add('show')}
 function hideModal(id){document.getElementById(id).classList.remove('show')}
 function esc(s){return s?String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'):''}
+// ── Indian number formatter (lakhs grouping) ──────────────────
+// fmtI(1234567.89)    → "12,34,567.89"
+// fmtI(1234567)       → "12,34,567"
+// fmtI(0) / null      → "0"
+// fmtI("abc")         → ""
+function fmtI(v, decimals){
+  if(v===null||v===undefined||v==='')return '';
+  const n=typeof v==='number'?v:parseFloat(v);
+  if(!isFinite(n))return '';
+  const sign=n<0?'-':'';
+  const abs=Math.abs(n);
+  const hasDec = decimals!==undefined ? decimals : (abs%1===0?0:2);
+  const parts=abs.toFixed(hasDec).split('.');
+  const ip=parts[0], dp=parts[1];
+  // Indian grouping: last 3 then pairs
+  const last3=ip.length>3?ip.slice(-3):ip;
+  const rest =ip.length>3?ip.slice(0,-3).replace(/\B(?=(\d{2})+(?!\d))/g,','):'';
+  const formatted=rest?rest+','+last3:last3;
+  return sign+formatted+(dp?'.'+dp:'');
+}
 // Format any date-ish value → dd/mm/yyyy. Handles ISO, Excel serial numbers, dd/mm/yyyy, Date objects.
 function fmtD(v){
   if(v===null||v===undefined||v==='')return '';
@@ -1907,7 +1953,8 @@ const ICONS={
   del:'<svg viewBox="0 0 24 24"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/></svg>',
   pdf:'<svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M12 18v-6M9 15l3 3 3-3"/></svg>',
   view:'<svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
-  revert:'<svg viewBox="0 0 24 24"><path d="M3 7v6h6"/><path d="M3 13a9 9 0 1 0 3-7.7L3 8"/></svg>'
+  revert:'<svg viewBox="0 0 24 24"><path d="M3 7v6h6"/><path d="M3 13a9 9 0 1 0 3-7.7L3 8"/></svg>',
+  clone:'<svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>'
 };
 function iconBtn(kind,title,onclick){return `<button class="icon-btn i-${kind}" title="${title}" onclick="${onclick}">${ICONS[kind]}</button>`}
 
@@ -2037,7 +2084,9 @@ const DataTable = (function(){
       const arrow = isSort ? (s.sort.dir === 'asc' ? ' ▲' : ' ▼') : '';
       const cls = 'dt-th' + (sortable ? ' dt-sortable' : '') + (c.numeric ? ' num' : '');
       const onc = sortable ? `onclick="DataTable._sort('${tbodyId}','${c.key}')"` : '';
-      return `<th class="${cls}" ${onc}>${esc(c.label)}${arrow}</th>`;
+      // labelHTML bypasses escaping (use only for trusted markup like a checkbox)
+      const labelContent = c.labelHTML != null ? c.labelHTML : esc(c.label);
+      return `<th class="${cls}" ${onc}>${labelContent}${arrow}</th>`;
     }).join('');
 
     // Body rows
@@ -2641,6 +2690,65 @@ async function changeMyPassword(){
 
 // ── Settings ──────────────────────────────────────────────
 let _cats={},_sdata={},_activeCat='',_setFilter='';
+
+// Update sidebar labels based on business_mode setting.
+// e-Trade  → the "Auctions" menu item displays as "Trades"
+// e-Auction → displays as "Auctions" (default)
+function applyModeLabels(){
+  const mode = (_sdata.mode||[]).find(f=>f.key==='business_mode')?.value
+            || (_sdata.flags||[]).find(f=>f.key==='business_mode')?.value
+            || 'e-Auction';
+  const btn = document.querySelector('.side-item[data-tab="auctions"]');
+  if(!btn) return;
+  // Replace the trailing text node (the label after the SVG)
+  const label = (mode === 'e-Trade') ? 'Trades' : 'Auctions';
+  for(const n of btn.childNodes){
+    if(n.nodeType === Node.TEXT_NODE && n.textContent.trim()){
+      n.textContent = ' '+label;
+      return;
+    }
+  }
+  // Fallback: append if not found
+  btn.appendChild(document.createTextNode(' '+label));
+}
+
+// Update the topbar logo-code badge to show which company is active.
+// Mirrors server-side effectiveCompany(): Kerala + e-Trade → sister (ASP);
+// otherwise primary (ISP). Invoked after settings load and whenever
+// business mode or state changes.
+function applyLogoBadge(){
+  const badge = document.getElementById('logo-badge');
+  const img   = document.getElementById('topbar-logo-img');
+  const code = getCurrentLogoCode();
+
+  // Pill text: "ISP" / "ASP"
+  if(badge){
+    if(!code){badge.style.display='none'}
+    else{badge.textContent = code; badge.style.display = 'inline-block'}
+  }
+
+  // Topbar dot image: /logo-ispl.png or /logo-asp.png
+  // If the img element was removed (404 fallback on earlier render), recreate it.
+  if(!code) return;
+  const src = (String(code).toUpperCase() === 'ASP') ? '/logo-asp.png' : '/logo-ispl.png';
+  let el = img;
+  if(!el){
+    // img was removed by its onerror handler (missing file). Re-insert so we
+    // try again on every mode/state change — helps after the user drops the
+    // logo files into public/.
+    const dot = document.querySelector('.topbar .dot');
+    if(dot){
+      el = document.createElement('img');
+      el.id = 'topbar-logo-img';
+      el.alt = '';
+      el.onerror = function(){this.remove()};
+      dot.appendChild(el);
+    }
+  }
+  if(el && el.getAttribute('src') !== src){
+    el.src = src;
+  }
+}
 async function loadSettings(){
   const root=document.getElementById('settings-root');
   const title=document.getElementById('set-panel-title');
@@ -2650,6 +2758,8 @@ async function loadSettings(){
     // Company and Sister Company fields are edited INDEPENDENTLY in Settings.
     // No mutation on load — at read time (invoices, exports, PDFs),
     // effectiveCompany() picks the right set based on state + mode.
+    applyModeLabels();
+    applyLogoBadge();
     renderSettingsNav();
     // Open first category by default
     const firstKey=Object.keys(_cats).sort((a,b)=>_cats[a].order-_cats[b].order).find(k=>(_sdata[k]||[]).length);
@@ -2677,7 +2787,7 @@ async function loadSettings(){
 // When mode = e-Trade:   hide commission, handling, SB sample refund
 const _MODE_HIDE_CATS = { 'e-Auction': ['sister'], 'e-Trade': [] };
 const _MODE_HIDE_KEYS = {
-  'e-Auction': ['deduction1','deduction2','asp_profit','isp_profit','refund'],
+  'e-Auction': ['deduction1','deduction2','asp_profit_pooler','asp_profit_dealer','isp_profit','refund'],
   'e-Trade':   ['commission','hpc','sb_refund']
 };
 
@@ -2697,6 +2807,23 @@ function getCurrentBusinessState(){
   const modeFields = _sdata.mode || [];
   const f = modeFields.find(x => x.key === 'business_state');
   return f ? f.value : 'TAMIL NADU';
+}
+
+// Returns the logo/company code ("ISP" or "ASP") that represents which
+// company is ACTIVELY issuing invoices/doing calculations.
+// Mirrors server-side effectiveCompany(): Kerala + e-Trade → sister company
+// (ASP); otherwise use primary (ISP). Falls back to configured codes.
+function getCurrentLogoCode(){
+  const mode  = getCurrentBusinessMode();
+  const state = (getCurrentBusinessState() || '').toUpperCase();
+  const useSister = (mode === 'e-Trade' && state === 'KERALA');
+  const findVal = (cat, key, fallback) => {
+    const arr = _sdata[cat] || [];
+    const f = arr.find(x => x.key === key);
+    return (f && f.value) || fallback;
+  };
+  if (useSister) return findVal('sister',  's_logo', 'ASP');
+  return           findVal('company', 'logo',   'ISP');
 }
 
 function isCategoryHiddenByMode(catKey){
@@ -2924,6 +3051,10 @@ function onBusinessModeChanged(newMode){
   // Re-render nav + panel: categories/fields appear or disappear based on mode
   renderSettingsNav();
   renderSettingsPanel();
+  // Update the sidebar label (Auctions ↔ Trades) immediately
+  applyModeLabels();
+  // Logo code may have flipped (ASP ↔ ISP)
+  applyLogoBadge();
   toast(`Mode: ${newMode}`);
 }
 
@@ -2934,8 +3065,41 @@ async function onBusinessStateChanged(newState){
   // Persist state change to server LIVE — all downstream reads (PDFs,
   // invoice headers) now use the right TN/ISP or KL/ASP data set
   await applyStateToCompanyProfile(newState);
+
+  // Auto-enable Ship-To and Dispatch flags when switching to TAMIL NADU.
+  // Rationale: ISP invoices (TN) normally include these addresses; default ON
+  // so the user doesn't have to manually re-enable them after a state swap.
+  // Flags are NOT touched when switching to KERALA — ASP has its own flag
+  // (flag_tnpa) and the user may have intentionally turned flag_dispatch off.
+  if (String(newState || '').toUpperCase() === 'TAMIL NADU') {
+    const toEnable = {};
+    for (const key of ['flag_ship', 'flag_dispatch']) {
+      const flagField = (_sdata.flags || []).find(x => x.key === key);
+      // Only flip if currently off; skip if already true (avoids noise)
+      if (flagField && String(flagField.value).toLowerCase() !== 'true') {
+        flagField.value = 'true';
+        toEnable[key] = 'true';
+      }
+    }
+    if (Object.keys(toEnable).length) {
+      try {
+        await j('/api/company-settings', {
+          method: 'PUT',
+          body: JSON.stringify({ settings: toEnable })
+        });
+      } catch (e) {
+        console.error('Failed to auto-enable flags:', e);
+      }
+      // Re-render the Flags panel if it's currently open so the UI reflects
+      // the new state immediately
+      if (_activeCat === 'flags') renderSettingsPanel();
+    }
+  }
+
   // If the user is currently viewing the Company tab, re-render so they see the new values
   if (_activeCat === 'company' || _activeCat === 'mode') renderSettingsPanel();
+  // Logo code may have flipped (ASP ↔ ISP)
+  applyLogoBadge();
   toast(`State: ${newState} · Logo: ${newState==='TAMIL NADU'?'ISP':'ASP'}`);
 }
 function renderSettings(){renderSettingsNav();renderSettingsPanel()}
@@ -2944,9 +3108,10 @@ function renderSettings(){renderSettingsNav();renderSettingsPanel()}
 const FIELD_HELP = {
   commission:      'In e-Auction mode, the percentage commission charged on (Amount + Refund). Default 1%.',
   hpc:             'Handling percentage applied on the commission. e.g. 10% means Handling = Commission × 10%.',
-  deduction1:      'In e-Trade mode, the % reduction applied to the lot price for grade 1 (Pooler). P_Rate = Price × (1 − Deduction%).',
-  deduction2:      'In e-Trade mode, the % reduction applied for grade 2 (Dealer).',
-  asp_profit:      'Profit ratio retained by ASP (sister company) on each lot. Used in e-Trade profit-sharing calculations.',
+  deduction1:      'ISPL margin % on Grade 1 (Pooler) lots. Used when business state ≠ Kerala in e-Trade mode: P_Rate = round(Price × (1 − Deduction%)). Kerala uses ASP Profit Ratio settings instead.',
+  deduction2:      'ISPL margin % on Grade 2 (Dealer) lots. Used when business state ≠ Kerala in e-Trade mode. Kerala uses ASP Profit Ratio (Dealer) instead.',
+  asp_profit_pooler: 'ASP margin % on Grade 1 (Pooler) lots. Used only when business state = Kerala + e-Trade mode: P_Rate = round(Price × (1 − ratio%)).',
+  asp_profit_dealer: 'ASP margin % on Grade 2 (Dealer) lots. Used only when business state = Kerala + e-Trade mode: P_Rate = round(Price × (1 − ratio%)).',
   isp_profit:      'Profit ratio retained by ISP (main company) on each lot. Used in e-Trade profit-sharing calculations.',
   refund:          'Sample quantity (in kilograms) added to the lot qty in e-Trade mode to compute P_Qty. P_Qty = Qty + Sample Refund.',
   sb_refund:       'SB (Sample Bag) refund in kilograms, multiplied by Price to compute the Refund amount in e-Auction mode.',
@@ -3194,6 +3359,7 @@ async function searchBuyers(q){const d=await j(`/api/buyers?search=${encodeURICo
       { key:'_actions', label:'Actions', sortable:false, searchable:false, render:(b)=>
           iconBtn('view','View details',`viewBuyerDetails(${JSON.stringify(b).replace(/"/g,'&quot;')})`)
           + iconBtn('edit','Edit buyer',`openBuyerEdit(${JSON.stringify(b).replace(/"/g,'&quot;')})`)
+          + iconBtn('clone','Clone buyer (copy all fields except code)',`openBuyerClone(${JSON.stringify(b).replace(/"/g,'&quot;')})`)
           + iconBtn('del','Delete buyer',`delBuyer(${b.id})`) }
     ]
   });
@@ -3227,6 +3393,29 @@ function openBuyerEdit(b){
   document.getElementById('buyer-modal-title').textContent='Edit Buyer';
   document.getElementById('b-id').value=b.id;
   B_FIELDS.forEach(f=>{const el=document.getElementById(B_IDS[f]);if(el)el.value=b[f]||''});
+  showModal('buyer-modal');
+}
+// Clone: pre-fill all fields from an existing buyer. The primary key
+// ("buyer" code) must be unique, so we suggest "<SRC>_COPY" as a placeholder
+// and select it so the user can just start typing to replace it.
+// User edits the code then saves as a new buyer.
+function openBuyerClone(b){
+  document.getElementById('buyer-modal-title').textContent='Clone Buyer — edit the Buyer Code';
+  document.getElementById('b-id').value=''; // empty id => POST, treated as Add
+  B_FIELDS.forEach(f=>{
+    const el=document.getElementById(B_IDS[f]);
+    if(!el) return;
+    // Primary "buyer" code: suggest "<src>_COPY" so user has a starting point
+    // (must be unique — suffix keeps it legible and distinct from the source).
+    if(f === 'buyer'){
+      el.value = b.buyer ? (b.buyer + '_COPY') : '';
+    } else {
+      el.value = b[f] || '';
+    }
+  });
+  // Focus + select the Buyer Code input so typing replaces the suggestion
+  const codeEl=document.getElementById(B_IDS.buyer);
+  if(codeEl){setTimeout(()=>{codeEl.focus();codeEl.select();},60)}
   showModal('buyer-modal');
 }
 async function saveBuyer(){
@@ -3414,21 +3603,59 @@ function loadPurAuctions(){fillAucSelect('pur-auction').then(()=>{loadPurchases(
 
 async function loadInvEligibleBuyers(){
   const aid=document.getElementById('inv-auction').value;
-  const dd=document.getElementById('gi-buyer');if(!dd)return;
-  if(!aid){dd.innerHTML='<option value="">— Select buyer —</option>';return}
+  const list=document.getElementById('gi-buyer-list');if(!list)return;
+  const saleType=document.getElementById('gi-sale')?.value || '';
+  if(!aid){list.innerHTML='<div style="color:var(--text3);font-size:12px;padding:10px;text-align:center">Select an auction first</div>';return}
   try{
-    const buyers=await j(`/api/invoices/eligible-buyers/${aid}`);
-    if(!buyers.length){
-      dd.innerHTML='<option value="">— No buyers with lots —</option>';
-      const h=document.getElementById('gi-hint');if(h)h.innerHTML='<span style="color:var(--amber)">⚠ No buyers have lots in this auction.</span>';
+    const all=await j(`/api/invoices/eligible-buyers/${aid}`);
+    // Hard filter by selected Sale Type:
+    //  - If buyer has a default_sale, it MUST match the selected type
+    //  - If buyer has no default_sale, include it (user can still invoice them)
+    const buyers = saleType
+      ? all.filter(b => !b.default_sale || String(b.default_sale).trim() === saleType)
+      : all;
+    if(!all.length){
+      list.innerHTML='<div style="color:var(--amber);font-size:12px;padding:10px;text-align:center">⚠ No buyers have lots in this auction.</div>';
+      const h=document.getElementById('gi-hint');if(h)h.textContent='';
       return;
     }
-    dd.innerHTML='<option value="">— Select buyer —</option>'+buyers.map(b=>
-      `<option value="${esc(b.buyer)}" data-sale="${esc(b.default_sale||'')}">${esc(b.buyer)} · ${esc(b.buyer1||'')} — ${b.lot_count} lot(s), ₹${(b.total_amount||0).toFixed(2)}</option>`).join('');
-    const h=document.getElementById('gi-hint');if(h)h.textContent=`${buyers.length} buyer(s) with lots`;
-    // Auto-pick sale type when buyer selected
-    dd.onchange=()=>{const opt=dd.options[dd.selectedIndex];const s=opt?.dataset.sale;if(s){document.getElementById('gi-sale').value=s}};
-  }catch(e){console.warn(e)}
+    if(!buyers.length){
+      list.innerHTML=`<div style="color:var(--amber);font-size:12px;padding:10px;text-align:center">No buyers with default Sale Type &ldquo;${esc(saleType)}&rdquo; in this auction.<br><span style="color:var(--text3)">Try a different Sale Type, or assign a default in the Buyers tab.</span></div>`;
+      const h=document.getElementById('gi-hint');if(h)h.textContent='';
+      return;
+    }
+    const rows=buyers.map(b=>{
+      const bSale=(b.default_sale||'').trim();
+      const amount=Number(b.total_amount||0);
+      const saleBadge=bSale?`<span style="font-size:10px;color:var(--text3);background:var(--green-bg);padding:1px 6px;border-radius:8px;margin-left:4px">${bSale}</span>`:'';
+      // Show: CODE (small, distinct) · BUYER_CODE · TRADE_NAME
+      // b.code is the short alias (e.g., "FLORA"); b.buyer is the primary key; b.buyer1 is the trade name.
+      const codePill=b.code?`<span style="font-size:11px;color:var(--green);background:var(--green-bg);padding:1px 6px;border-radius:4px;font-weight:700;margin-right:4px">${esc(b.code)}</span>`:'';
+      return `<label style="display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:4px;cursor:pointer;font-size:13px" class="gi-row" onmouseover="this.style.background='var(--green-bg)'" onmouseout="this.style.background='transparent'">
+        <input type="checkbox" class="gi-cb" value="${esc(b.buyer)}" data-sale="${esc(bSale)}" style="margin:0">
+        <span style="flex:1">${codePill}<strong>${esc(b.buyer)}</strong> &middot; ${esc(b.buyer1||'')}${saleBadge}</span>
+        <span style="color:var(--text2);font-size:12px;white-space:nowrap">${b.lot_count} lot(s) &middot; ₹${fmtI(amount,2)}</span>
+      </label>`;
+    }).join('');
+    list.innerHTML=rows;
+    updateBuyerSelectionHint();
+    // Attach change listeners
+    list.querySelectorAll('.gi-cb').forEach(cb=>cb.addEventListener('change',updateBuyerSelectionHint));
+  }catch(e){console.warn(e);list.innerHTML=`<div style="color:var(--spice-chili);font-size:12px;padding:10px;text-align:center">Failed to load: ${esc(e.message||e)}</div>`}
+}
+function toggleAllBuyers(state){
+  const list=document.getElementById('gi-buyer-list');if(!list)return;
+  list.querySelectorAll('.gi-cb').forEach(cb=>{cb.checked=state});
+  updateBuyerSelectionHint();
+}
+function updateBuyerSelectionHint(){
+  const list=document.getElementById('gi-buyer-list');if(!list)return;
+  const boxes=list.querySelectorAll('.gi-cb');
+  const selected=list.querySelectorAll('.gi-cb:checked');
+  const h=document.getElementById('gi-hint');if(!h)return;
+  if(selected.length===0){h.innerHTML=`<span style="color:var(--amber)">No buyers selected</span>`}
+  else if(selected.length===1){h.textContent=`1 buyer selected of ${boxes.length}`}
+  else{h.textContent=`${selected.length} buyers selected of ${boxes.length} — will create ${selected.length} invoices`}
 }
 
 async function loadPurEligibleSellers(){
@@ -3630,9 +3857,11 @@ async function loadLots(){const aid=document.getElementById('lot-auction').value
   const d=await j(`/api/lots/${aid}?_=${Date.now()}`);
   const mode = getCurrentBusinessMode();
   const isAuction = (mode === 'e-Auction');
-  // Update the Calculate All button label to show which mode will be applied
+  // Update the Calculate All button label to show which mode + company will be applied.
+  // Including the logo code (ISP / ASP) makes it obvious whose calculation is running —
+  // avoids confusion when business mode + state map to different companies.
   const calcBtn = document.getElementById('btn-calculate-all');
-  if (calcBtn) calcBtn.textContent = `Calculate All (${mode})`;
+  if (calcBtn) calcBtn.textContent = `Calculate All (${getCurrentLogoCode()} · ${mode})`;
   // Column set depends on mode:
   //   e-Auction: show Refund, Commission, Handling; HIDE P_Qty, P_Rate, PurAmt, Discount
   //   e-Trade:   show Discount, P_Qty, P_Rate, PurAmt; HIDE Refund, Commission, Handling
@@ -3647,40 +3876,40 @@ async function loadLots(){const aid=document.getElementById('lot-auction').value
     { key:'grade', label:'Grade', sort:'text' },
     { key:'bags', label:'Bags', sort:'number', numeric:true },
     { key:'qty', label:'Qty', sort:'number', numeric:true,
-      fmt:(n)=>n.toFixed(3) },
+      fmt:(n)=>fmtI(n,3) },
     { key:'price', label:'Price', sort:'number', numeric:true, noTotal:true,
-      fmt:(n)=>n.toFixed(2) },
+      fmt:(n)=>fmtI(n,2) },
     { key:'amount', label:'Amount', sort:'number', numeric:true,
-      fmt:(n)=>n.toFixed(2) },
+      fmt:(n)=>fmtI(n,2) },
   ];
   const auctionCols = [
     { key:'refund', label:'Refund', sort:'number', numeric:true,
-      fmt:(n)=>n.toFixed(2) },
+      fmt:(n)=>fmtI(n,2) },
     { key:'com', label:'Commission', sort:'number', numeric:true,
-      fmt:(n)=>n.toFixed(2) },
+      fmt:(n)=>fmtI(n,2) },
     { key:'sertax', label:'Handling', sort:'number', numeric:true,
-      fmt:(n)=>n.toFixed(2) },
+      fmt:(n)=>fmtI(n,2) },
   ];
   const tradeCols = [
     { key:'pqty', label:'P_Qty', sort:'number', numeric:true,
-      fmt:(n)=>n.toFixed(3) },
+      fmt:(n)=>fmtI(n,3) },
     { key:'prate', label:'P_Rate', sort:'number', numeric:true, noTotal:true,
-      fmt:(n)=>n.toFixed(2) },
+      fmt:(n)=>fmtI(n,2) },
     { key:'puramt', label:'PurAmt', sort:'number', numeric:true,
-      fmt:(n)=>n.toFixed(2) },
+      fmt:(n)=>fmtI(n,2) },
     { key:'refund', label:'Discount', sort:'number', numeric:true,
-      fmt:(n)=>n.toFixed(2) },
+      fmt:(n)=>fmtI(n,2) },
   ];
   const taxCols = [
     { key:'cgst', label:'CGST', sort:'number', numeric:true,
-      fmt:(n)=>n.toFixed(2) },
+      fmt:(n)=>fmtI(n,2) },
     { key:'sgst', label:'SGST', sort:'number', numeric:true,
-      fmt:(n)=>n.toFixed(2) },
+      fmt:(n)=>fmtI(n,2) },
     { key:'igst', label:'IGST', sort:'number', numeric:true,
-      fmt:(n)=>n.toFixed(2) },
+      fmt:(n)=>fmtI(n,2) },
     { key:'balance', label:'Payable', sort:'number', numeric:true,
-      fmt:(n)=>n.toFixed(2),
-      render:(l)=>`<strong>${(l.balance||0).toFixed(2)}</strong>` },
+      fmt:(n)=>fmtI(n,2),
+      render:(l)=>`<strong>${fmtI(l.balance||0,2)}</strong>` },
     { key:'_actions', label:'Actions', sortable:false, searchable:false, render:(l)=>
         iconBtn('edit','Edit lot',`openLotEdit(${JSON.stringify(l).replace(/"/g,'&quot;')})`)
         + iconBtn('del','Delete lot',`delLot(${l.id})`) }
@@ -3753,44 +3982,98 @@ async function generateInvoice(){
   const aid=document.getElementById('inv-auction').value;
   if(!aid){alert('Please select an auction first');return}
   const saleType=document.getElementById('gi-sale').value;
-  const buyerCode=document.getElementById('gi-buyer').value.trim();
-  const invoiceNo=document.getElementById('gi-invno').value.trim();
-  if(!buyerCode){alert('Enter buyer code');return}
-  if(!invoiceNo){alert('Enter invoice number');return}
+  const startInvNo=parseInt(document.getElementById('gi-invno').value.trim(),10);
+  if(!startInvNo||isNaN(startInvNo)||startInvNo<1){alert('Enter a valid starting invoice number');return}
+  const list=document.getElementById('gi-buyer-list');
+  const checked=Array.from(list?.querySelectorAll('.gi-cb:checked')||[]);
+  if(!checked.length){alert('Select at least one buyer');return}
+  const buyers=checked.map(cb=>cb.value);
+
+  // Single buyer: keep old behavior (immediate feedback, quick)
+  if(buyers.length===1){
+    const buyerCode=buyers[0];
+    try{
+      await withOverlay('Generating invoice…', async () => {
+        const r=await fetch(B+`/api/invoices/generate/${aid}`,{
+          method:'POST',
+          headers:{'Content-Type':'application/json','Authorization':'Bearer '+T},
+          body:JSON.stringify({saleType,buyerCode,invoiceNo:String(startInvNo)})});
+        const d=await r.json();
+        if(!r.ok)throw new Error(d.error||'Failed to generate invoice');
+        hideModal('gen-inv-modal');
+        toast('Invoice generated — Total: ₹'+fmtI(Number(d.invoice.grandTotal),2));
+        await loadInvoices();
+      });
+    }catch(e){showError(e)}
+    return;
+  }
+
+  // Multiple buyers: loop + auto-increment invoice number per iteration
+  if(!confirm(`Generate ${buyers.length} invoices starting at #${startInvNo}?\n\nEach buyer gets sequential numbers (${startInvNo}, ${startInvNo+1}, …, ${startInvNo+buyers.length-1}).`))return;
+  const results={success:[],failed:[]};
   try{
-    await withOverlay('Generating invoice…', async () => {
-      const r=await fetch(B+`/api/invoices/generate/${aid}`,{
-        method:'POST',
-        headers:{'Content-Type':'application/json','Authorization':'Bearer '+T},
-        body:JSON.stringify({saleType,buyerCode,invoiceNo})});
-      const d=await r.json();
-      if(!r.ok)throw new Error(d.error||'Failed to generate invoice');
-      hideModal('gen-inv-modal');
-      toast('Invoice generated — Total: ₹'+Number(d.invoice.grandTotal).toFixed(2));
-      await loadInvoices();
+    await withOverlay(`Generating ${buyers.length} invoices…`, async () => {
+      for(let i=0;i<buyers.length;i++){
+        const buyerCode=buyers[i];
+        const invNo=String(startInvNo+i);
+        try{
+          const r=await fetch(B+`/api/invoices/generate/${aid}`,{
+            method:'POST',
+            headers:{'Content-Type':'application/json','Authorization':'Bearer '+T},
+            body:JSON.stringify({saleType,buyerCode,invoiceNo:invNo})});
+          const d=await r.json();
+          if(!r.ok)throw new Error(d.error||'Generation failed');
+          results.success.push({buyerCode,invNo,total:Number(d.invoice.grandTotal)});
+        }catch(err){
+          results.failed.push({buyerCode,invNo,error:err.message||String(err)});
+        }
+      }
     });
-  }catch(e){showError(e)}}
+    hideModal('gen-inv-modal');
+    // Summary
+    const okN=results.success.length, failN=results.failed.length;
+    const totalSum=results.success.reduce((a,r)=>a+r.total,0);
+    if(failN===0){
+      toast(`✓ ${okN} invoice${okN===1?'':'s'} generated — Total: ₹${fmtI(totalSum,2)}`);
+    }else{
+      const failLines=results.failed.map(f=>`• ${f.buyerCode} (Inv#${f.invNo}): ${f.error}`).join('\n');
+      alert(`Done — ${okN} ok, ${failN} failed.\n\nFailures:\n${failLines}`);
+    }
+    await loadInvoices();
+  }catch(e){showError(e)}
+}
 
 async function loadInvoices(){
   const aid=document.getElementById('inv-auction')?.value;
   const url=aid?`/api/invoices?auction_id=${aid}`:'/api/invoices';
   const d=await j(url);
+  // Invoice count badge
+  const badge=document.getElementById('inv-count-badge');
+  if(badge){
+    const n=Array.isArray(d)?d.length:0;
+    const totalValue=Array.isArray(d)?d.reduce((a,i)=>a+(Number(i.tot)||0),0):0;
+    badge.style.display=n>0?'inline-block':'none';
+    badge.innerHTML=`${n} invoice${n===1?'':'s'} &middot; Total: ₹${fmtI(totalValue,2)}`;
+  }
   DataTable.mount('invoices-list', d, {
     emptyState: { icon: 'invoices', title: "No invoices yet", body: "Once you have calculated lots for a buyer, use Generate Invoice to create one." }, 
     columns: [
-      { key:'sale', label:'Sale', sort:'text' },
+      { key:'_select', label:'', labelHTML:'<input type="checkbox" id="inv-select-all" onclick="event.stopPropagation();toggleAllInvoices(this.checked)" title="Select / clear all visible" style="cursor:pointer;width:16px;height:16px;vertical-align:middle;accent-color:var(--green)">', sortable:false, searchable:false,
+        render:(i)=>`<input type="checkbox" class="inv-select-cb" value="${i.id}" onclick="event.stopPropagation()" style="cursor:pointer">` },
+      { key:'sale', label:'Sale', sort:'text', totalKind:'count',
+        totalLabel: (n)=> String(n) },
       { key:'invo', label:'Inv#', sort:'text' },
       { key:'_buyer', label:'Buyer', sort:'text',
         value:(i)=>i.buyer1||i.buyer,
         render:(i)=>esc(i.buyer1||i.buyer) },
-      { key:'qty', label:'Qty', sort:'number', numeric:true, fmt:(n)=>n.toFixed(3) },
-      { key:'amount', label:'Amount', sort:'number', numeric:true, fmt:(n)=>n.toFixed(2) },
-      { key:'cgst', label:'CGST', sort:'number', numeric:true, fmt:(n)=>n.toFixed(2) },
-      { key:'sgst', label:'SGST', sort:'number', numeric:true, fmt:(n)=>n.toFixed(2) },
-      { key:'igst', label:'IGST', sort:'number', numeric:true, fmt:(n)=>n.toFixed(2) },
+      { key:'qty', label:'Qty', sort:'number', numeric:true, fmt:(n)=>fmtI(n,3) },
+      { key:'amount', label:'Amount', sort:'number', numeric:true, fmt:(n)=>fmtI(n,2) },
+      { key:'cgst', label:'CGST', sort:'number', numeric:true, fmt:(n)=>fmtI(n,2) },
+      { key:'sgst', label:'SGST', sort:'number', numeric:true, fmt:(n)=>fmtI(n,2) },
+      { key:'igst', label:'IGST', sort:'number', numeric:true, fmt:(n)=>fmtI(n,2) },
       { key:'tot', label:'Total', sort:'number', numeric:true,
-        fmt:(n)=>n.toFixed(2),
-        render:(i)=>`<strong>${(i.tot||0).toFixed(2)}</strong>` },
+        fmt:(n)=>fmtI(n,2),
+        render:(i)=>`<strong>${fmtI(i.tot||0,2)}</strong>` },
       { key:'_actions', label:'Actions', sortable:false, searchable:false, render:(i)=>
           iconBtn('pdf','View / download PDF',`viewInvoicePDF(${i.id})`)
           + iconBtn('edit','Edit invoice',`openInvoiceEdit(${JSON.stringify(i).replace(/"/g,'&quot;')})`)
@@ -3837,6 +4120,80 @@ async function viewInvoicePDF(id){
     const w=window.open(url,'_blank');
     if(!w||w.closed){const a=document.createElement('a');a.href=url;a.download=`Invoice_${id}.pdf`;a.click()}
     setTimeout(()=>URL.revokeObjectURL(url),30000);
+  }catch(e){showError(e)}
+}
+
+// Master "select all visible" checkbox sits in the table header (added via
+// DataTable's labelHTML on the _select column). Ticking it selects every
+// row currently visible (respects active search filter).
+function toggleAllInvoices(state){
+  const body=document.getElementById('invoices-list');
+  if(!body)return;
+  body.querySelectorAll('.inv-select-cb').forEach(cb=>{
+    const row=cb.closest('tr');
+    if(row && row.style.display !== 'none') cb.checked=state;
+  });
+  syncInvoiceMaster();
+}
+// Sync the master checkbox to reflect the state of visible row checkboxes:
+//  - all visible ticked  → checked
+//  - none visible ticked → unchecked
+//  - partial             → indeterminate (dash-style UI)
+function syncInvoiceMaster(){
+  const master=document.getElementById('inv-select-all');
+  if(!master)return;
+  const body=document.getElementById('invoices-list');
+  if(!body){master.checked=false;master.indeterminate=false;return}
+  const visible=Array.from(body.querySelectorAll('.inv-select-cb')).filter(cb=>{
+    const row=cb.closest('tr');return row && row.style.display !== 'none';
+  });
+  const ticked=visible.filter(cb=>cb.checked).length;
+  master.indeterminate = ticked>0 && ticked<visible.length;
+  master.checked       = visible.length>0 && ticked===visible.length;
+}
+// Delegate: any click on a row checkbox updates the master's indeterminate state
+document.addEventListener('change', (e)=>{
+  if(e.target && e.target.classList && e.target.classList.contains('inv-select-cb')){
+    syncInvoiceMaster();
+  }
+});
+
+// Print Selected: POST ticked invoice IDs to the bulk endpoint, which returns
+// a single merged PDF with one invoice per page group. Opens in a new tab.
+async function printSelectedInvoices(){
+  const body=document.getElementById('invoices-list');
+  if(!body){alert('No invoice list found');return}
+  const checked=Array.from(body.querySelectorAll('.inv-select-cb:checked'));
+  if(!checked.length){alert('Tick one or more invoices first (use the checkbox column)');return}
+  const ids=checked.map(cb=>Number(cb.value)).filter(Boolean);
+
+  // Single: reuse the single-invoice endpoint for fewest moving parts
+  if(ids.length===1){return viewInvoicePDF(ids[0])}
+
+  try{
+    await withOverlay(`Building merged PDF for ${ids.length} invoices…`, async () => {
+      const r=await fetch(B+`/api/invoices/pdf-bulk`,{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+T},
+        body:JSON.stringify({ids})
+      });
+      if(!r.ok){
+        let m='Merge failed';
+        try{const e=await r.json();if(e.error)m=e.error}catch(_){}
+        throw new Error(m);
+      }
+      const blob=await r.blob();
+      const url=URL.createObjectURL(blob);
+      const w=window.open(url,'_blank');
+      if(!w||w.closed){
+        // Popup blocked: force download
+        const a=document.createElement('a');a.href=url;a.download=`Invoices_Batch_${ids.length}.pdf`;a.click();
+        toast(`Popup blocked — downloaded instead (${ids.length} invoices merged)`);
+      }else{
+        toast(`Merged PDF opened — ${ids.length} invoices`);
+      }
+      setTimeout(()=>URL.revokeObjectURL(url),60000);
+    });
   }catch(e){showError(e)}
 }
 
@@ -3893,15 +4250,15 @@ async function loadPurchases(){
     columns: [
       { key:'invo', label:'Inv#', sort:'text' },
       { key:'name', label:'Name', sort:'text' },
-      { key:'qty', label:'Qty', sort:'number', numeric:true, fmt:(n)=>n.toFixed(3) },
-      { key:'amount', label:'Amount', sort:'number', numeric:true, fmt:(n)=>n.toFixed(2) },
-      { key:'cgst', label:'CGST', sort:'number', numeric:true, fmt:(n)=>n.toFixed(2) },
-      { key:'sgst', label:'SGST', sort:'number', numeric:true, fmt:(n)=>n.toFixed(2) },
-      { key:'igst', label:'IGST', sort:'number', numeric:true, fmt:(n)=>n.toFixed(2) },
-      { key:'tds', label:'TDS', sort:'number', numeric:true, fmt:(n)=>n.toFixed(2) },
+      { key:'qty', label:'Qty', sort:'number', numeric:true, fmt:(n)=>fmtI(n,3) },
+      { key:'amount', label:'Amount', sort:'number', numeric:true, fmt:(n)=>fmtI(n,2) },
+      { key:'cgst', label:'CGST', sort:'number', numeric:true, fmt:(n)=>fmtI(n,2) },
+      { key:'sgst', label:'SGST', sort:'number', numeric:true, fmt:(n)=>fmtI(n,2) },
+      { key:'igst', label:'IGST', sort:'number', numeric:true, fmt:(n)=>fmtI(n,2) },
+      { key:'tds', label:'TDS', sort:'number', numeric:true, fmt:(n)=>fmtI(n,2) },
       { key:'total', label:'Total', sort:'number', numeric:true,
-        fmt:(n)=>n.toFixed(2),
-        render:(p)=>`<strong>${(p.total||0).toFixed(2)}</strong>` },
+        fmt:(n)=>fmtI(n,2),
+        render:(p)=>`<strong>${fmtI(p.total||0,2)}</strong>` },
       { key:'_actions', label:'Actions', sortable:false, searchable:false, render:(p)=>
           iconBtn('pdf','View PDF',`viewPurchasePDF(${p.auction_id},'${encodeURIComponent(p.name)}','${encodeURIComponent(p.invo)}')`)
           + iconBtn('edit','Edit purchase',`openPurchaseEdit(${JSON.stringify(p).replace(/"/g,'&quot;')})`)
@@ -3977,13 +4334,13 @@ async function loadPayments(){
       columns: [
         { key:'name', label:'Seller', sort:'text' },
         { key:'lot_count', label:'Lots', sort:'number', numeric:true },
-        { key:'total_qty', label:'Qty', sort:'number', numeric:true, fmt:(n)=>n.toFixed(3) },
-        { key:'total_amount', label:'Amount', sort:'number', numeric:true, fmt:(n)=>n.toFixed(2) },
-        { key:'total_puramt', label:'Purchase', sort:'number', numeric:true, fmt:(n)=>n.toFixed(2) },
-        { key:'total_discount', label:'Discount', sort:'number', numeric:true, fmt:(n)=>n.toFixed(2) },
+        { key:'total_qty', label:'Qty', sort:'number', numeric:true, fmt:(n)=>fmtI(n,3) },
+        { key:'total_amount', label:'Amount', sort:'number', numeric:true, fmt:(n)=>fmtI(n,2) },
+        { key:'total_puramt', label:'Purchase', sort:'number', numeric:true, fmt:(n)=>fmtI(n,2) },
+        { key:'total_discount', label:'Discount', sort:'number', numeric:true, fmt:(n)=>fmtI(n,2) },
         { key:'total_payable', label:'Payable', sort:'number', numeric:true,
-          fmt:(n)=>n.toFixed(2),
-          render:(p)=>`<strong>${(p.total_payable||0).toFixed(2)}</strong>` }
+          fmt:(n)=>fmtI(n,2),
+          render:(p)=>`<strong>${fmtI(p.total_payable||0,2)}</strong>` }
       ]
     });
   }catch(e){
@@ -4024,8 +4381,8 @@ async function loadTDS(){const f=document.getElementById('tds-from').value,t=doc
       { key:'date', label:'Date', sort:'date', render:(r)=>fmtD(r.date) },
       { key:'name', label:'Name', sort:'text' },
       { key:'pan', label:'PAN', sort:'text' },
-      { key:'assess_value', label:'Assess Value', sort:'number', numeric:true, fmt:(n)=>n.toFixed(2) },
-      { key:'tds', label:'TDS', sort:'number', numeric:true, fmt:(n)=>n.toFixed(2) }
+      { key:'assess_value', label:'Assess Value', sort:'number', numeric:true, fmt:(n)=>fmtI(n,2) },
+      { key:'tds', label:'TDS', sort:'number', numeric:true, fmt:(n)=>fmtI(n,2) }
     ]
   });
 }
@@ -4067,11 +4424,11 @@ async function loadBills(){
       { key:'date', label:'Date', sort:'date', render:(b)=>fmtD(b.date) },
       { key:'name', label:'Name', sort:'text' },
       { key:'pla', label:'Place', sort:'text' },
-      { key:'qty', label:'Qty', sort:'number', numeric:true, fmt:(n)=>n.toFixed(3) },
-      { key:'cost', label:'Cost', sort:'number', numeric:true, fmt:(n)=>n.toFixed(2) },
+      { key:'qty', label:'Qty', sort:'number', numeric:true, fmt:(n)=>fmtI(n,3) },
+      { key:'cost', label:'Cost', sort:'number', numeric:true, fmt:(n)=>fmtI(n,2) },
       { key:'net', label:'Net', sort:'number', numeric:true,
-        fmt:(n)=>n.toFixed(2),
-        render:(b)=>`<strong>${(b.net||0).toFixed(2)}</strong>` },
+        fmt:(n)=>fmtI(n,2),
+        render:(b)=>`<strong>${fmtI(b.net||0,2)}</strong>` },
       { key:'_actions', label:'Actions', sortable:false, searchable:false, render:(b)=>
           iconBtn('pdf','View PDF',`viewBillPDF('${b.auction_id||1}','${encodeURIComponent(b.name)}','${b.bil}')`)
           + iconBtn('edit','Edit bill',`openBillEdit(${JSON.stringify(b).replace(/"/g,'&quot;')})`)
@@ -4137,13 +4494,13 @@ async function loadDebitNotes(){
       { key:'date', label:'Date', sort:'date', render:(n)=>fmtD(n.date) },
       { key:'ano', label:'Auction', sort:'text', render:(n)=>n.ano?('#'+esc(n.ano)):'—' },
       { key:'name', label:'Name', sort:'text' },
-      { key:'amount', label:'Amount', sort:'number', numeric:true, fmt:(v)=>v.toFixed(2) },
-      { key:'cgst', label:'CGST', sort:'number', numeric:true, fmt:(v)=>v.toFixed(2) },
-      { key:'sgst', label:'SGST', sort:'number', numeric:true, fmt:(v)=>v.toFixed(2) },
-      { key:'igst', label:'IGST', sort:'number', numeric:true, fmt:(v)=>v.toFixed(2) },
+      { key:'amount', label:'Amount', sort:'number', numeric:true, fmt:(v)=>fmtI(v,2) },
+      { key:'cgst', label:'CGST', sort:'number', numeric:true, fmt:(v)=>fmtI(v,2) },
+      { key:'sgst', label:'SGST', sort:'number', numeric:true, fmt:(v)=>fmtI(v,2) },
+      { key:'igst', label:'IGST', sort:'number', numeric:true, fmt:(v)=>fmtI(v,2) },
       { key:'total', label:'Total', sort:'number', numeric:true,
-        fmt:(v)=>v.toFixed(2),
-        render:(n)=>`<strong>${(n.total||0).toFixed(2)}</strong>` },
+        fmt:(v)=>fmtI(v,2),
+        render:(n)=>`<strong>${fmtI(n.total||0,2)}</strong>` },
       { key:'_actions', label:'Actions', sortable:false, searchable:false, render:(n)=>
           iconBtn('edit','Edit debit note',`openDebitEdit(${JSON.stringify(n).replace(/"/g,'&quot;')})`)
           + iconBtn('del','Delete debit note',`delDebitNote(${n.id})`) }
@@ -4248,8 +4605,14 @@ async function previewInvoice(type){
   let aid,body;
   if(type==='sales'){
     aid=document.getElementById('inv-auction').value;
-    body={saleType:document.getElementById('gi-sale').value,buyerCode:document.getElementById('gi-buyer').value.trim(),type:'sales'};
-    if(!body.buyerCode){alert('Enter buyer code');return}
+    // New UI: buyer is a checkbox list — preview uses the first checked buyer
+    const list=document.getElementById('gi-buyer-list');
+    const checked=list?list.querySelectorAll('.gi-cb:checked'):[];
+    if(!checked||checked.length===0){alert('Tick at least one buyer to preview');return}
+    if(checked.length>1){
+      if(!confirm(`Preview shows ONE buyer at a time. Showing "${checked[0].value}".\n\nContinue?`))return;
+    }
+    body={saleType:document.getElementById('gi-sale').value,buyerCode:checked[0].value,type:'sales'};
   }else if(type==='purchase'){
     aid=document.getElementById('pur-auction').value;
     body={buyerCode:document.getElementById('gp-seller').value.trim(),type:'purchase'};
