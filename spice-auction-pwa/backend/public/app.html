@@ -609,24 +609,16 @@ function hasFormData(){
 function toggleLotChip(el){
   var lot=el.dataset.lot;
   if(selectedLots.length && selectedLots[0]===lot){return}
-  // Warn if form has data
-  if(hasFormData() && selectedLots.length){
-    if(!confirm('Changing lot will clear all entered details.\n\nProceed?'))return;
-    // Clear form but keep lot grid visible
-    selT=null;
-    document.getElementById('le-name').value='';
-    document.getElementById('le-grade').value='1';
+  // Warn if form has data (only bags/qty filled)
+  if((document.getElementById('le-bags').value || document.getElementById('le-qty').value) && selectedLots.length){
+    if(!confirm('Changing lot will clear bags, litre and weight fields.\n\nSeller will be kept.\n\nProceed?'))return;
+    // Clear only entry fields, keep seller + grade + bank
     document.getElementById('le-bags').value='';
     document.getElementById('le-litre').value=cfgDefaultLitre||'';
     document.getElementById('le-qty').value='';
     document.getElementById('le-gross').value='';
     document.getElementById('le-sample').value=cfgSampleWeight?Number(cfgSampleWeight).toFixed(3):'0.000';
     if(document.getElementById('le-moisture'))document.getElementById('le-moisture').value='';
-    document.getElementById('le-res').style.display='none';
-    document.getElementById('le-tc').style.display='none';
-    document.getElementById('le-bank').style.display='none';
-    document.getElementById('le-bank-form').style.display='none';
-    document.getElementById('le-sw').style.display='block';
   }
   selectedLots=[lot];
   document.querySelectorAll('#le-lot-grid .lot-chip.selected').forEach(function(c){c.classList.remove('selected')});
@@ -951,7 +943,8 @@ async function deleteSelectedEditBank(){
   if(!editTraderId)return;
   if(!confirm('Delete this bank account?'))return;
   try{
-    await fetch(B+'/api/traders/'+editTraderId+'/banks/'+sel.value,{method:'DELETE',headers:ah()});
+    var r=await fetch(B+'/api/traders/'+editTraderId+'/banks/'+sel.value,{method:'DELETE',headers:ah()});
+    if(!r.ok){var d=await r.json();toast(d.error||'Delete failed',true);return}
     toast('Bank account deleted',false);
     loadEditBanks(editTraderId);
   }catch(e){toast('Failed',true)}
@@ -1131,7 +1124,8 @@ async function deleteSelectedBank() {
   if (!selT) return;
   if (!confirm('Delete this bank account?')) return;
   try {
-    await fetch(B + '/api/traders/' + selT.id + '/banks/' + sel.value, { method: 'DELETE', headers: ah() });
+    var r = await fetch(B + '/api/traders/' + selT.id + '/banks/' + sel.value, { method: 'DELETE', headers: ah() });
+    if (!r.ok) { var d = await r.json(); toast(d.error || 'Delete failed', true); return; }
     toast('Bank account deleted', false);
     fetchSellerTemplate(selT.id);
   } catch (e) { toast('Failed', true); }

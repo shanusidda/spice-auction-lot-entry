@@ -2107,12 +2107,14 @@ async function admSaveBankAccount() {
 
 async function admDeleteBankSel() {
   const sel = document.getElementById('adm-ed-bank-select');
-  if (!sel.value || !admEditTraderId) { alert('Select a bank account first'); return; }
+  if (!sel.value || !admEditTraderId) { admBankErr('Select a bank account first'); return; }
   if (!confirm('Delete this bank account?')) return;
   try {
-    await fetch(`${BASE}/api/traders/${admEditTraderId}/banks/${sel.value}`, { method: 'DELETE', headers: authHeaders() });
+    const r = await fetch(`${BASE}/api/traders/${admEditTraderId}/banks/${sel.value}`, { method: 'DELETE', headers: authHeaders() });
+    if (!r.ok) { const d = await r.json(); admBankErr(d.error || 'Delete failed'); return; }
+    admBankErr('');
     loadAdmEditBanks(admEditTraderId);
-  } catch(e) {}
+  } catch(e) { admBankErr('Delete failed'); }
 }
 
 async function saveAdmEdit() {

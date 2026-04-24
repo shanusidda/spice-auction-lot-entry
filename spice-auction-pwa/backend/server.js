@@ -489,6 +489,9 @@ function syncTraderBank(traderId) {
   const def = db.get('SELECT acctnum, ifsc FROM trader_banks WHERE trader_id = ? ORDER BY is_default DESC, id DESC LIMIT 1', [traderId]);
   if (def) {
     db.run('UPDATE traders SET acctnum = ?, ifsc = ? WHERE id = ?', [def.acctnum || '', def.ifsc || '', traderId]);
+  } else {
+    // No banks left — clear traders table so auto-migrate doesn't re-create
+    db.run('UPDATE traders SET acctnum = ?, ifsc = ? WHERE id = ?', ['', '', traderId]);
   }
   scheduleSyncSource();
 }
@@ -1426,8 +1429,8 @@ function renderSellerReceipt(doc, sellerLots, cfg) {
     [lb('seller','Seller'), lot.trader_name],
     [lb('place','Place'), [lot.ppla, lot.pin].filter(Boolean).join(', ')],
     [lb('gstin','GSTIN'), lot.cr],
-    [lb('acct_no','A/C No'), maskedAcct],
-    [lb('ifsc','IFSC'), lot.ifsc],
+    [lb('acct_no','A/C No'), maskedAcct || '--NIL--'],
+    [lb('ifsc','IFSC'), lot.ifsc || '--NIL--'],
   ];
   doc.fontSize(9);
   sellerFields.forEach(([label, value]) => {

@@ -1,21 +1,21 @@
 {
-  "name": "spice-auction-backend",
+  "name": "spice-auction",
   "version": "1.0.0",
-  "description": "Spice Auction Lot Entry System — Backend API",
+  "description": "Spice Auction Lot Entry & Invoicing System",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "import": "node import-source.js",
-    "setup": "npm install && node import-source.js"
+    "start": "node server.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
-    "dbffile": "^1.12.0",
+    "dbffile": "^1.13.0",
     "exceljs": "^4.4.0",
     "express": "^4.21.0",
     "multer": "^1.4.5-lts.1",
-    "pdfkit": "^0.18.0",
-    "sql.js": "^1.10.0",
-    "xlsx": "^0.18.5"
+    "pdfkit": "^0.15.0",
+    "sql.js": "^1.11.0"
+  },
+  "engines": {
+    "node": ">=18"
   }
 }
