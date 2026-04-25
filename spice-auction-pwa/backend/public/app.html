@@ -238,7 +238,10 @@ select:focus{border-color:var(--green)}
         <!-- Seller -->
         <div id="le-sw" style="margin-bottom:6px">
           <div class="elb" id="elb-seller">SELLER</div>
-          <input type="text" id="le-name" placeholder="Search seller by name, phone, GSTIN..." autocomplete="off" onfocus="showSaveBtn()" oninput="searchTrader(this.value)" style="height:36px;font-size:13px">
+          <div style="position:relative">
+            <input type="text" id="le-name" placeholder="Search seller by name, phone, GSTIN..." autocomplete="off" onfocus="showSaveBtn()" oninput="searchTrader(this.value);document.getElementById('le-name-clear').style.display=this.value?'flex':'none'" style="height:36px;font-size:13px;padding-right:30px">
+            <span id="le-name-clear" onclick="document.getElementById('le-name').value='';document.getElementById('le-res').style.display='none';this.style.display='none';document.getElementById('le-name').focus()" style="display:none;position:absolute;right:8px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--text3);font-size:14px;font-weight:700;width:20px;height:20px;align-items:center;justify-content:center;border-radius:50%;background:var(--border)">✕</span>
+          </div>
           <div class="sr" id="le-res" style="display:none"></div>
         </div>
         <div id="le-tc" style="display:none"></div>
@@ -336,7 +339,7 @@ select:focus{border-color:var(--green)}
       <div class="lot-stat"><div class="val" id="ml-bags">0</div><div class="lbl">Bags</div></div>
       <div class="lot-stat"><div class="val" id="ml-qty">0</div><div class="lbl">Kg</div></div>
     </div>
-    <div class="lot-search"><input type="text" id="ml-search" placeholder="Search seller name..." oninput="filterMyLots(this.value)"></div>
+    <div class="lot-search" style="position:relative"><input type="text" id="ml-search" placeholder="Search seller name..." oninput="filterMyLots(this.value);document.getElementById('ml-search-clear').style.display=this.value?'flex':'none'" style="padding-right:30px"><span id="ml-search-clear" onclick="document.getElementById('ml-search').value='';filterMyLots('');this.style.display='none'" style="display:none;position:absolute;right:8px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--text3);font-size:14px;font-weight:700;width:20px;height:20px;align-items:center;justify-content:center;border-radius:50%;background:var(--border)">✕</span></div>
     <div id="ml-actions" style="display:none;margin-bottom:8px;gap:6px;align-items:center;flex-wrap:wrap">
       <button style="background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;border:none;border-radius:8px;height:30px;padding:0 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;box-shadow:0 2px 6px rgba(37,99,235,.2)" onclick="printSelectedMyLots()" title="Print receipts for selected lots">🖨 Print selected</button>
       <button style="background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;border:none;border-radius:8px;height:30px;padding:0 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;box-shadow:0 2px 6px rgba(37,99,235,.2)" onclick="printAllBySellerUser()" title="Print all lots grouped by seller">🖨 Print all by seller</button>
@@ -703,7 +706,7 @@ document.getElementById('le-grade').value=grade;
 cacheTrader(t);
 fetchSellerTemplate(t.id);
 document.getElementById('le-bags').focus()}
-function clearTrader(){selT=null;document.getElementById('le-tc').style.display='none';document.getElementById('le-bank').style.display='none';document.getElementById('le-bank-form').style.display='none';document.getElementById('le-sw').style.display='block';document.getElementById('le-name').value='';document.getElementById('le-res').style.display='none';document.getElementById('le-name').focus()}
+function clearTrader(){selT=null;document.getElementById('le-tc').style.display='none';document.getElementById('le-bank').style.display='none';document.getElementById('le-bank-form').style.display='none';document.getElementById('le-sw').style.display='block';document.getElementById('le-name').value='';document.getElementById('le-name-clear').style.display='none';document.getElementById('le-res').style.display='none';document.getElementById('le-name').focus()}
 
 function openSellerModal(n,p){document.getElementById('le-res').style.display='none';document.getElementById('ns-name').value=n||'';document.getElementById('ns-cr').value='';document.getElementById('ns-pan').value='';document.getElementById('ns-tel').value=p||'';document.getElementById('ns-padd').value='';document.getElementById('ns-ppla').value='';document.getElementById('ns-pin').value='';document.getElementById('ns-pstate').value='TAMIL NADU';document.getElementById('ns-pst').value='33';document.getElementById('ns-err').innerHTML='';document.getElementById('seller-modal').classList.add('show')}
 function closeSellerModal(){document.getElementById('seller-modal').classList.remove('show')}
