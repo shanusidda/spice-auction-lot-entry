@@ -6,15 +6,30 @@ const multer = require('multer');
 const ExcelJS = require('exceljs');
 const XLSX = require('xlsx');
 const { initDb, getDb } = require('./db');
-const { initCompanySettings, CATEGORIES, getAllSettings, updateSettings, getSettingsFlat, getGSTRates } = require('./company-config');
+const { initCompanySettings, CATEGORIES, getAllSettings, updateSettings, getSettingsFlat, getGSTRates, getAllPresets, setActivePresetCode, savePreset, getActivePresetCode } = require('./company-config');
 const { calculateLot, buildSalesInvoice, buildPurchaseInvoice, buildAgriBill, buildDebitNote, listAgriSellers, getPaymentSummary, getBankPaymentData, getTDSReturnData, getSalesJournal, getPurchaseJournal } = require('./calculations');
-const { generatePurchaseInvoicePDF, generateCropReceiptPDF, generateAgriBillPDF, generateSalesInvoicePDF, generateSalesInvoicesBatchPDF } = require('./invoice-pdf');
+const { generatePurchaseInvoicePDF, generateCropReceiptPDF, generateAgriBillPDF, generateSalesInvoicePDF, generateSalesInvoicesBatchPDF, generatePurchaseInvoicesBatchPDF, generateAgriBillsBatchPDF } = require('./invoice-pdf');
 const { EXPORT_TYPES } = require('./exports');
 const { exportPdf: exportAnyPdf } = require('./exports-pdf');
 const { DBF_EXPORTS } = require('./dbf-exports');
 
 const app = express();
 app.use(express.json({ limit: '50mb' }));
+
+// Disable caching of HTML files so users always get the latest UI without
+// needing a hard-reload. This is critical for ngrok-tunnelled deployments
+// where intermediate proxies may cache aggressively. JavaScript/CSS/
+// images can still be cached normally (handled by the static middleware
+// after this).
+app.use((req, res, next) => {
+  if (req.path === '/' || req.path.endsWith('.html')) {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+  }
+  next();
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Prevent browser/proxy caching of API responses so Refresh buttons actually
@@ -26,8 +41,16 @@ app.use('/api', (req, res, next) => {
   next();
 });
 
+// Health check — used by the Electron wrapper to wait until the server
+// is ready to accept requests before loading the window URL. Returns a
+// minimal 200 with no auth required.
+app.get('/api/health', (req, res) => {
+  res.json({ ok: true, ts: Date.now() });
+});
+
 // File upload setup
-const uploadDir = path.join(__dirname, 'data', 'uploads');
+// Honor SPICE_DATA_DIR so uploads also land in userData when packaged.
+const uploadDir = path.join(process.env.SPICE_DATA_DIR || path.join(__dirname, 'data'), 'uploads');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 const upload = multer({ dest: uploadDir, limits: { fileSize: 20 * 1024 * 1024 } });
 
@@ -86,19 +109,34 @@ function withFmtDate(rows, field = 'date') {
   return rows.map(r => ({ ...r, date_fmt: fmtDate(r[field]) }));
 }
 
-function requireAdmin(req, res, next) {
+// Auth middleware: verify a valid session, attach req.user/req.session.
+// DOES NOT check role — use this for endpoints that any logged-in user
+// (admin OR regular user) should be able to hit (GET list endpoints mostly).
+function requireAuth(req, res, next) {
   const token = (req.headers.authorization || '').replace('Bearer ', '');
   if (!token) return res.status(401).json({ error: 'No token' });
   const db = getDb();
   const session = db.get('SELECT * FROM sessions WHERE token = ?', [token]);
   if (!session) return res.status(403).json({ error: 'Session expired — please sign in again' });
-  const user = db.get('SELECT * FROM users WHERE id = ? AND role = ?', [session.user_id, 'admin']);
+  const user = db.get('SELECT * FROM users WHERE id = ?', [session.user_id]);
   if (!user) return res.status(403).json({ error: 'Unauthorized' });
   // Touch last_used_at for cleanup / activity display
   db.run(`UPDATE sessions SET last_used_at = datetime('now','localtime') WHERE token = ?`, [token]);
   req.user = user;
   req.session = session;
   next();
+}
+
+// Admin-only middleware: gates mutations, settings, deletes, user management.
+// Runs requireAuth first, then verifies role.
+function requireAdmin(req, res, next) {
+  requireAuth(req, res, (err) => {
+    if (err) return next(err);
+    if (!req.user || req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required for this action' });
+    }
+    next();
+  });
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -149,7 +187,7 @@ app.post('/api/users', requireAdmin, (req, res) => {
   if (existing) return res.status(400).json({ error: 'Username already exists' });
   db.run(
     'INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)',
-    [username, hash(password), role === 'admin' ? 'admin' : 'admin']  // all users are admin in this app
+    [username, hash(password), role === 'user' ? 'user' : 'admin']  // default admin if not explicitly 'user'
   );
   const created = db.get('SELECT id, username FROM users WHERE username = ?', [username]);
   res.json({ success: true, id: created ? created.id : null, username });
@@ -233,6 +271,56 @@ app.put('/api/company-settings', requireAdmin, (req, res) => {
 });
 app.get('/api/company-settings/flat', requireAdmin, (req, res) => res.json(getSettingsFlat(getDb())));
 
+// ── Company identity presets (ISP / ASP) ─────────────────────────────
+// Two named snapshots of the 8 fields in category='company'. The active
+// preset's values overlay onto company_settings so invoice PDFs and
+// exports continue reading from the flat settings object. Dad edits each
+// preset independently; the Logo Code dropdown in Settings flips which
+// one is active.
+
+// Returns: {ISP: {logo:..., trade_name:..., ...}, ASP: {...}, active: 'ISP'}
+app.get('/api/company-presets', requireAdmin, (req, res) => {
+  try { res.json(getAllPresets(getDb())); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Switch which preset is active. Overlay values are pushed into
+// company_settings immediately so downstream reads reflect the switch
+// without a server restart.
+// Body: {code: 'ASP'}
+// NOTE: This route MUST be declared before PUT /:code because Express
+// routes match in declaration order. If /:code comes first, 'active'
+// gets captured as the code parameter and this route is unreachable.
+app.put('/api/company-presets/active', requireAdmin, (req, res) => {
+  try {
+    const code = req.body.code;
+    if (code !== 'ISP' && code !== 'ASP') {
+      return res.status(400).json({ error: 'Invalid preset code — must be ISP or ASP' });
+    }
+    setActivePresetCode(getDb(), code);
+    res.json({ success: true, active: code });
+  } catch (e) {
+    console.error('[presets/active] Failed to switch preset:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Save values to a specific preset (does not change the active preset).
+// Body: {values: {logo: 'ASP', trade_name: 'AMAZING SPICE PARK', ...}}
+app.put('/api/company-presets/:code', requireAdmin, (req, res) => {
+  try {
+    const code = req.params.code;
+    if (code !== 'ISP' && code !== 'ASP') {
+      return res.status(400).json({ error: 'Invalid preset code — must be ISP or ASP' });
+    }
+    savePreset(getDb(), code, req.body.values || {});
+    res.json({ success: true });
+  } catch (e) {
+    console.error('[presets/save] Failed to save preset:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── Logo upload/delete ────────────────────────────────────────
 // Supports two logos: 'ispl' (main company) and 'asp' (sister company).
 // Files are saved to public/ so the PDF generator can read them at runtime.
@@ -300,7 +388,24 @@ function makeDeleteAll(table) {
     }
   };
 }
-app.delete('/api/traders/delete-all',     requireAdmin, makeDeleteAll('traders'));
+// Traders have a FK from trader_banks.trader_id → traders.id. A plain
+// DELETE FROM traders fails with "FOREIGN KEY constraint failed" whenever
+// any seller has a row in trader_banks. Wipe children first, then parents.
+app.delete('/api/traders/delete-all', requireAdmin, (req, res) => {
+  try {
+    const db = getDb();
+    const before = db.get('SELECT COUNT(*) as c FROM traders').c;
+    db.run('DELETE FROM trader_banks');
+    db.run('DELETE FROM traders');
+    try {
+      db.exec("DELETE FROM sqlite_sequence WHERE name = 'traders'");
+      db.exec("DELETE FROM sqlite_sequence WHERE name = 'trader_banks'");
+    } catch(_) {}
+    res.json({ success: true, deleted: before });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 app.delete('/api/buyers/delete-all',      requireAdmin, makeDeleteAll('buyers'));
 app.delete('/api/invoices/delete-all',    requireAdmin, makeDeleteAll('invoices'));
 app.delete('/api/purchases/delete-all',   requireAdmin, makeDeleteAll('purchases'));
@@ -386,6 +491,27 @@ app.get('/api/gst-lookup/:gstin', requireAdmin, async (req, res) => {
 app.get('/api/traders', requireAdmin, (req, res) => {
   const { search, limit } = req.query;
   const db = getDb();
+  // Helper: attach the `banks` array to each trader row (from trader_banks
+  // table). Kept as a post-query hydration step so we don't bloat the main
+  // query with joins or GROUP_CONCAT — easier to read, and the N+1 is fine
+  // for the small trader counts this app handles (~few hundred max).
+  const hydrateBanks = (rows) => {
+    if (!rows.length) return rows;
+    const ids = rows.map(r => r.id);
+    const placeholders = ids.map(() => '?').join(',');
+    const banks = db.all(
+      `SELECT trader_id, bank_name, acctnum, ifsc, holder_name
+       FROM trader_banks WHERE trader_id IN (${placeholders})
+       ORDER BY trader_id, id`, ids
+    );
+    const byTrader = new Map();
+    for (const b of banks) {
+      if (!byTrader.has(b.trader_id)) byTrader.set(b.trader_id, []);
+      byTrader.get(b.trader_id).push(b);
+    }
+    for (const r of rows) r.banks = byTrader.get(r.id) || [];
+    return rows;
+  };
   if (search) {
     const q = `%${search}%`;
     const rows = db.all(
@@ -394,30 +520,73 @@ app.get('/api/traders', requireAdmin, (req, res) => {
        ORDER BY name LIMIT ?`,
       [q, q, q, q, q, q, parseInt(limit)||50]
     );
-    return res.json(rows);
+    return res.json(hydrateBanks(rows));
   }
-  res.json(db.all('SELECT * FROM traders ORDER BY name LIMIT 500'));
+  res.json(hydrateBanks(db.all('SELECT * FROM traders ORDER BY name LIMIT 500')));
 });
 app.get('/api/traders/:id', requireAdmin, (req, res) => {
-  const row = getDb().get('SELECT * FROM traders WHERE id = ?', [req.params.id]);
+  const db = getDb();
+  const row = db.get('SELECT * FROM traders WHERE id = ?', [req.params.id]);
   if (!row) return res.status(404).json({ error: 'Not found' });
+  // Attach banks array so the edit modal sees all bank accounts.
+  row.banks = db.all(
+    'SELECT trader_id, bank_name, acctnum, ifsc, holder_name FROM trader_banks WHERE trader_id = ? ORDER BY id',
+    [row.id]
+  );
   res.json(row);
 });
+// Sync a trader's banks array into the trader_banks table.
+// Strategy: clear existing rows for this trader, reinsert. Simple and
+// correct; the number of banks per trader is tiny (typically 1-3) so
+// the delete+reinsert cost is negligible.
+// Also mirrors the FIRST bank back into the parent traders.ifsc/acctnum/
+// holder_name columns so older code paths that haven't been migrated to
+// read trader_banks yet still see a valid primary account.
+function syncTraderBanks(db, traderId, banks) {
+  const arr = Array.isArray(banks) ? banks.filter(b => b && (b.acctnum || b.ifsc)) : [];
+  db.run('DELETE FROM trader_banks WHERE trader_id = ?', [traderId]);
+  for (const b of arr) {
+    db.run(
+      'INSERT INTO trader_banks (trader_id, bank_name, acctnum, ifsc, holder_name) VALUES (?,?,?,?,?)',
+      [traderId, b.bank_name||'', String(b.acctnum||''), String(b.ifsc||''), b.holder_name||'']
+    );
+  }
+  // Mirror first bank into traders row for legacy compatibility
+  const first = arr[0] || {};
+  db.run(
+    'UPDATE traders SET ifsc=?, acctnum=?, holder_name=? WHERE id=?',
+    [first.ifsc||'', first.acctnum||'', first.holder_name||'', traderId]
+  );
+}
+
 app.post('/api/traders', requireAdmin, (req, res) => {
   const t = req.body;
-  getDb().run(`INSERT INTO traders (name,cr,pan,tel,aadhar,padd,ppla,pin,pstate,pst_code,ifsc,acctnum,holder_name) 
+  const db = getDb();
+  const info = db.run(`INSERT INTO traders (name,cr,pan,tel,aadhar,padd,ppla,pin,pstate,pst_code,ifsc,acctnum,holder_name) 
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     [t.name,t.cr||'',t.pan||'',t.tel||'',t.aadhar||'',t.padd||'',t.ppla||'',t.pin||'',t.pstate||'',t.pst_code||'',t.ifsc||'',t.acctnum||'',t.holder_name||'']);
-  res.json({ success: true });
+  // If the client sent a banks array (new multi-bank UI), persist them.
+  // Otherwise honor the legacy single-bank fields already inserted above.
+  if (Array.isArray(t.banks)) {
+    syncTraderBanks(db, info.lastInsertRowid, t.banks);
+  }
+  res.json({ success: true, id: info.lastInsertRowid });
 });
 app.put('/api/traders/:id', requireAdmin, (req, res) => {
   const t = req.body;
-  getDb().run(`UPDATE traders SET name=?,cr=?,pan=?,tel=?,aadhar=?,padd=?,ppla=?,pin=?,pstate=?,pst_code=?,ifsc=?,acctnum=?,holder_name=? WHERE id=?`,
+  const db = getDb();
+  db.run(`UPDATE traders SET name=?,cr=?,pan=?,tel=?,aadhar=?,padd=?,ppla=?,pin=?,pstate=?,pst_code=?,ifsc=?,acctnum=?,holder_name=? WHERE id=?`,
     [t.name,t.cr||'',t.pan||'',t.tel||'',t.aadhar||'',t.padd||'',t.ppla||'',t.pin||'',t.pstate||'',t.pst_code||'',t.ifsc||'',t.acctnum||'',t.holder_name||'',req.params.id]);
+  if (Array.isArray(t.banks)) {
+    syncTraderBanks(db, parseInt(req.params.id), t.banks);
+  }
   res.json({ success: true });
 });
 app.delete('/api/traders/:id', requireAdmin, (req, res) => {
-  getDb().run('DELETE FROM traders WHERE id = ?', [req.params.id]);
+  const db = getDb();
+  // Clear child rows first (trader_banks FK) before deleting the parent
+  db.run('DELETE FROM trader_banks WHERE trader_id = ?', [req.params.id]);
+  db.run('DELETE FROM traders WHERE id = ?', [req.params.id]);
   res.json({ success: true });
 });
 
@@ -433,7 +602,11 @@ app.post('/api/traders/import', requireAdmin, upload.single('file'), async (req,
 
     const db = getDb();
     const mode = req.body.mode || 'append';
-    if (mode === 'replace') db.run('DELETE FROM traders');
+    if (mode === 'replace') {
+      // Wipe child rows (trader_banks FK) before parents — avoids FK error
+      db.run('DELETE FROM trader_banks');
+      db.run('DELETE FROM traders');
+    }
 
     // Build flexible header map — normalize all keys to uppercase
     const mapCol = (row, ...names) => {
@@ -1014,6 +1187,26 @@ app.post('/api/lots/calculate/:auctionId', requireAdmin, (req, res) => {
   res.json({ success: true, calculated: count });
 });
 
+// Recalculate every lot in every auction with the CURRENT business
+// settings. Used by the client when business_state changes — calculations
+// like CGST/SGST/IGST and prate are state-sensitive (intra vs inter), so
+// the saved values become stale on a state flip and must be refreshed.
+//
+// Only touches lots with `amount > 0` (skips empty/auction-floor entries).
+// Returns total lots calculated across all auctions.
+app.post('/api/lots/calculate-all', requireAdmin, (req, res) => {
+  const db = getDb(); const cfg = getSettingsFlat(db);
+  const lots = db.all('SELECT * FROM lots WHERE amount > 0');
+  let count = 0;
+  for (const lot of lots) {
+    const calc = calculateLot(lot, cfg);
+    db.run(`UPDATE lots SET pqty=?,prate=?,puramt=?,com=?,sertax=?,cgst=?,sgst=?,igst=?,advance=?,balance=?,bilamt=?,refund=?,refud=? WHERE id=?`,
+      [calc.pqty,calc.prate,calc.puramt,calc.com,calc.sertax,calc.cgst,calc.sgst,calc.igst,calc.advance,calc.balance,calc.bilamt,calc.refund||0,calc.refud||0,lot.id]);
+    count++;
+  }
+  res.json({ success: true, calculated: count });
+});
+
 // ── Data validation (PRICHECK.PRG) ───────────────────────────
 app.get('/api/lots/validate/:auctionId', requireAdmin, (req, res) => {
   const rows = getDb().all(
@@ -1027,12 +1220,44 @@ app.get('/api/lots/validate/:auctionId', requireAdmin, (req, res) => {
 // ══════════════════════════════════════════════════════════════
 app.get('/api/invoices', requireAdmin, (req, res) => {
   const { ano, auction_id, from, to } = req.query;
+  const db = getDb();
+  const cfg = getSettingsFlat(db);
+  // Filter list by active business context: when state=KERALA show only
+  // ASP-stamped invoices, when state=TAMIL NADU show only ISP-stamped.
+  // This avoids the "two rows per buyer" confusion in users who run the
+  // ASP→ISP flow on the same auction.
+  const businessState = String(cfg.business_state || 'TAMIL NADU').toUpperCase();
   let q = 'SELECT * FROM invoices WHERE 1=1'; const p = [];
   if (auction_id) { q += ' AND auction_id = ?'; p.push(parseInt(auction_id)); }
   if (ano) { q += ' AND ano = ?'; p.push(ano); }
   if (from && to) { q += ' AND date BETWEEN ? AND ?'; p.push(from, to); }
+  // Match the invoice's stamped state to the current business context.
+  // We allow both spellings (TAMIL NADU / Tamil Nadu / TN) just in case.
+  if (businessState === 'KERALA') {
+    q += " AND UPPER(state) = 'KERALA'";
+  } else {
+    q += " AND UPPER(state) IN ('TAMIL NADU', 'TAMILNADU', 'TN')";
+  }
   q += ' ORDER BY date DESC, invo DESC LIMIT 500';
-  res.json(getDb().all(q, p));
+  const rows = db.all(q, p);
+  // Hydrate asp_invo: for each invoice, find the ASP invoice number
+  // recorded on its lots. Multiple distinct asp_invos are concatenated
+  // (rare — usually one ASP invoice maps 1:1 to one ISP invoice for the
+  // same buyer/auction). Empty for ASP invoices themselves.
+  const aspStmt = db.prepare(
+    `SELECT DISTINCT asp_invo FROM lots
+     WHERE auction_id = ? AND buyer = ? AND invo = ?
+       AND asp_invo IS NOT NULL AND asp_invo != ''`
+  );
+  for (const r of rows) {
+    // For ASP invoices (state contains "Kerala"), the asp_invo column
+    // would just be a copy of `invo` — show blank instead of duplicating.
+    const isASPRow = String(r.state || '').toLowerCase().includes('kerala');
+    if (isASPRow) { r.asp_invo = ''; continue; }
+    const aspRows = aspStmt.all(r.auction_id, r.buyer, r.invo);
+    r.asp_invo = aspRows.map(x => x.asp_invo).filter(Boolean).join(', ');
+  }
+  res.json(rows);
 });
 
 app.post('/api/invoices/generate/:auctionId', requireAdmin, (req, res) => {
@@ -1056,16 +1281,51 @@ app.post('/api/invoices/generate/:auctionId', requireAdmin, (req, res) => {
   
   const auction = db.get('SELECT * FROM auctions WHERE id = ?', [req.params.auctionId]);
   const s = invoice.summary;
+  // Store the BUSINESS context state (TAMIL NADU=ISP, KERALA=ASP), not
+  // the auction's physical state. This lets us distinguish ASP invoices
+  // from ISP invoices in the same auction, which matters for the sales
+  // list cross-reference (ASP Inv# column).
+  const invoiceState = cfg.business_state || auction.state || '';
   db.run(`INSERT INTO invoices (auction_id,ano,date,state,sale,invo,buyer,buyer1,gstin,place,bag,qty,amount,gunny,pava_hc,ins,cgst,sgst,igst,tcs,rund,tot)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-    [req.params.auctionId,auction.ano,auction.date,auction.state||'',saleType,String(invoiceNo),buyerCode,invoice.buyer.buyer1||'',
+    [req.params.auctionId,auction.ano,auction.date,invoiceState,saleType,String(invoiceNo),buyerCode,invoice.buyer.buyer1||'',
      invoice.buyer.gstin||'',invoice.buyer.pla||'',s.totalBags,s.totalQty,s.totalAmount,s.gunnyCost,s.transportCost,s.insuranceCost,
      s.cgst,s.sgst,s.igst,0,s.roundDiff,s.grandTotal]);
   
-  // Update lots with sale type and invoice number
+  // Update lots with sale type and invoice number.
+  // Workflow trace:
+  //   - In Kerala (ASP) context: set `invo` AND `asp_invo` to the new ASP
+  //     invoice number. DON'T update `lots.sale` — sale type is determined
+  //     by the ISP→external transaction (could be Local/Inter-state/Export
+  //     depending on buyer's GST state). ASP→ISP is a fixed intra-Kerala
+  //     transfer, so any `sale` value would constrain the later ISP step.
+  //     EXCEPT: if `invo` already holds a non-ASP value (i.e., an ISP
+  //     invoice was already generated), preserve `invo` and only refresh
+  //     `asp_invo`. This prevents accidentally destroying the ISP invoice
+  //     number when re-running ASP after the full ASP→ISP cycle.
+  //   - In Tamil Nadu (ISP) context: update `sale` and `invo` — `asp_invo`
+  //     retains the prior ASP number from the earlier ASP-state generation.
+  const isASPState = String(cfg.business_state || '').toUpperCase() === 'KERALA';
   for (const li of invoice.lineItems) {
-    db.run('UPDATE lots SET sale=?, invo=? WHERE auction_id=? AND lot_no=? AND buyer=?',
-      [saleType, String(invoiceNo), req.params.auctionId, li.lot, buyerCode]);
+    if (isASPState) {
+      const existing = db.get(
+        'SELECT invo, asp_invo FROM lots WHERE auction_id=? AND lot_no=? AND buyer=? LIMIT 1',
+        [req.params.auctionId, li.lot, buyerCode]
+      );
+      const hasIspInvo = existing && existing.invo && existing.invo !== existing.asp_invo;
+      if (hasIspInvo) {
+        // Preserve invo (ISP); refresh only asp_invo. Sale stays as set by ISP step.
+        db.run('UPDATE lots SET asp_invo=? WHERE auction_id=? AND lot_no=? AND buyer=?',
+          [String(invoiceNo), req.params.auctionId, li.lot, buyerCode]);
+      } else {
+        // First-time ASP: don't touch `sale` so ISP step has a clean slate
+        db.run('UPDATE lots SET invo=?, asp_invo=? WHERE auction_id=? AND lot_no=? AND buyer=?',
+          [String(invoiceNo), String(invoiceNo), req.params.auctionId, li.lot, buyerCode]);
+      }
+    } else {
+      db.run('UPDATE lots SET sale=?, invo=? WHERE auction_id=? AND lot_no=? AND buyer=?',
+        [saleType, String(invoiceNo), req.params.auctionId, li.lot, buyerCode]);
+    }
   }
   res.json({ success: true, invoice: invoice.summary });
 });
@@ -1074,16 +1334,36 @@ app.post('/api/invoices/generate/:auctionId', requireAdmin, (req, res) => {
 app.get('/api/invoices/eligible-buyers/:auctionId', requireAdmin, (req, res) => {
   const { saleType } = req.query;
   const db = getDb();
+  const cfg = getSettingsFlat(db);
   const params = [req.params.auctionId];
 
   // Match buyers by sale type via their default (b.sale) when a type is specified.
   // A buyer is eligible when any of their lots in this auction isn't yet invoiced
-  // (so user can always see/regenerate; server endpoint has stricter filter).
+  // for the current state context (so user can always see/regenerate; server
+  // endpoint has stricter filter).
   let saleClause = '';
   if (saleType) {
     saleClause = ` AND (COALESCE(NULLIF(l.sale,''), b.sale, 'L') = ?)`;
     params.push(saleType);
   }
+
+  // State-aware eligibility:
+  //   - In Kerala (ASP) context: a lot is eligible if no `invo` set yet,
+  //     OR if `invo == asp_invo` (i.e., it was previously invoiced in
+  //     ASP — user is regenerating).
+  //   - In Tamil Nadu (ISP) context: a lot is eligible if `invo` is empty
+  //     OR if `invo == asp_invo` (lot only has its ASP invoice, still
+  //     needs ISP invoicing). This is the key case that was broken.
+  // In both states, lots with `invo != asp_invo AND invo != ''` are
+  // considered "fully invoiced" for the current state and excluded.
+  const isASPState = String(cfg.business_state || '').toUpperCase() === 'KERALA';
+  // Both states share the same eligibility expression — what differs is
+  // the meaning. The expression: lot is eligible if no `invo` OR `invo
+  // matches asp_invo` (meaning the only existing invoice on this lot is
+  // an ASP one, which doesn't count toward "ISP-invoiced" status).
+  const eligibleExpr = isASPState
+    ? `(l.invo IS NULL OR l.invo = '')`
+    : `(l.invo IS NULL OR l.invo = '' OR (l.asp_invo IS NOT NULL AND l.asp_invo != '' AND l.invo = l.asp_invo))`;
 
   res.json(db.all(
     `SELECT l.buyer, COALESCE(b.buyer1, MAX(l.buyer1), l.buyer) as buyer1,
@@ -1096,7 +1376,7 @@ app.get('/api/invoices/eligible-buyers/:auctionId', requireAdmin, (req, res) => 
        AND l.buyer IS NOT NULL AND l.buyer != ''
        ${saleClause}
      GROUP BY l.buyer
-     HAVING COUNT(CASE WHEN l.invo IS NULL OR l.invo = '' THEN 1 END) > 0
+     HAVING COUNT(CASE WHEN ${eligibleExpr} THEN 1 END) > 0
      ORDER BY l.buyer`,
     params
   ));
@@ -1184,6 +1464,14 @@ app.post('/api/invoices/generate-all/:auctionId', requireAdmin, (req, res) => {
   
   // Get distinct buyers. When saleType filter is set, only buyers whose
   // default sale matches (or whose lots already have that sale assigned) are included.
+  // The "un-invoiced" check is state-aware:
+  //   - In Tamil Nadu (ISP): a lot is un-invoiced if `invo` is empty OR
+  //     if the only existing invoice is the ASP one (invo == asp_invo).
+  //   - In Kerala (ASP): un-invoiced means `invo` is empty.
+  const isASPState = String(cfg.business_state || '').toUpperCase() === 'KERALA';
+  const uninvoicedExpr = isASPState
+    ? `(l.invo IS NULL OR l.invo = '')`
+    : `(l.invo IS NULL OR l.invo = '' OR (l.asp_invo IS NOT NULL AND l.asp_invo != '' AND l.invo = l.asp_invo))`;
   const params = [req.params.auctionId];
   let saleClause = '';
   if (saleType) {
@@ -1194,7 +1482,7 @@ app.post('/api/invoices/generate-all/:auctionId', requireAdmin, (req, res) => {
     `SELECT DISTINCT l.buyer, b.sale as default_sale
      FROM lots l LEFT JOIN buyers b ON b.buyer = l.buyer
      WHERE l.auction_id = ? AND l.buyer IS NOT NULL AND l.buyer != '' AND l.amount > 0
-       AND (l.invo IS NULL OR l.invo = '')
+       AND ${uninvoicedExpr}
        ${saleClause}`,
     params
   );
@@ -1212,14 +1500,34 @@ app.post('/api/invoices/generate-all/:auctionId', requireAdmin, (req, res) => {
       if (!invoice) { errors.push({ buyer: row.buyer, error: 'No matching lots' }); continue; }
       const s = invoice.summary;
       const invoNo = String(nextNo);
+      // Store BUSINESS context state — see single-invoice handler for rationale
+      const invoiceState = cfg.business_state || auction.state || '';
       db.run(`INSERT INTO invoices (auction_id,ano,date,state,sale,invo,buyer,buyer1,gstin,place,bag,qty,amount,gunny,pava_hc,ins,cgst,sgst,igst,tcs,rund,tot)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-        [req.params.auctionId,auction.ano,auction.date,auction.state||'',useSaleType,invoNo,row.buyer,invoice.buyer.buyer1||'',
+        [req.params.auctionId,auction.ano,auction.date,invoiceState,useSaleType,invoNo,row.buyer,invoice.buyer.buyer1||'',
          invoice.buyer.gstin||'',invoice.buyer.pla||'',s.totalBags,s.totalQty,s.totalAmount,s.gunnyCost,s.transportCost,s.insuranceCost,
          s.cgst,s.sgst,s.igst,0,s.roundDiff,s.grandTotal]);
+      // ASP-aware lot update: see single-invoice handler above for rationale.
+      const isASPStateBulk = String(cfg.business_state || '').toUpperCase() === 'KERALA';
       for (const li of invoice.lineItems) {
-        db.run('UPDATE lots SET sale=?, invo=? WHERE auction_id=? AND lot_no=? AND buyer=?',
-          [useSaleType, invoNo, req.params.auctionId, li.lot, row.buyer]);
+        if (isASPStateBulk) {
+          const existing = db.get(
+            'SELECT invo, asp_invo FROM lots WHERE auction_id=? AND lot_no=? AND buyer=? LIMIT 1',
+            [req.params.auctionId, li.lot, row.buyer]
+          );
+          const hasIspInvo = existing && existing.invo && existing.invo !== existing.asp_invo;
+          if (hasIspInvo) {
+            db.run('UPDATE lots SET asp_invo=? WHERE auction_id=? AND lot_no=? AND buyer=?',
+              [invoNo, req.params.auctionId, li.lot, row.buyer]);
+          } else {
+            // Don't set `sale` in ASP context — ISP step decides
+            db.run('UPDATE lots SET invo=?, asp_invo=? WHERE auction_id=? AND lot_no=? AND buyer=?',
+              [invoNo, invoNo, req.params.auctionId, li.lot, row.buyer]);
+          }
+        } else {
+          db.run('UPDATE lots SET sale=?, invo=? WHERE auction_id=? AND lot_no=? AND buyer=?',
+            [useSaleType, invoNo, req.params.auctionId, li.lot, row.buyer]);
+        }
       }
       results.push({ buyer: row.buyer, invoiceNo: invoNo, sale: useSaleType, grandTotal: s.grandTotal });
       nextNo++;
@@ -1373,6 +1681,24 @@ app.get('/api/invoices/pdf/:id', requireAdmin, async (req, res) => {
       };
     }
 
+    // Optional dispatched-through override from print modal (URL-encoded)
+    const dispatchedThrough = req.query.dispatchedThrough || '';
+    if (dispatchedThrough) invoice.dispatchedThrough = dispatchedThrough;
+
+    // Look up the ASP invoice number from lots so the ISP PDF can show
+    // the cross-reference under "Other References" as ASP/I-{asp}/{season}.
+    // When this invoice IS an ASP one (state=KERALA), aspInvo stays empty.
+    if (String(stored.state || '').toUpperCase() !== 'KERALA') {
+      const aspRow = db.get(
+        `SELECT asp_invo FROM lots
+         WHERE auction_id = ? AND buyer = ? AND invo = ?
+           AND asp_invo IS NOT NULL AND asp_invo != ''
+         LIMIT 1`,
+        [stored.auction_id, stored.buyer, stored.invo]
+      );
+      if (aspRow && aspRow.asp_invo) invoice.aspInvo = aspRow.asp_invo;
+    }
+
     const pdf = await generateSalesInvoicePDF(invoice, cfg, stored.sale, stored.invo, stored.date);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="Invoice_${stored.sale}_${stored.invo}.pdf"`);
@@ -1469,6 +1795,8 @@ app.post('/api/invoices/pdf-bulk', requireAdmin, async (req, res) => {
   try {
     const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(Number).filter(Boolean) : [];
     if (!ids.length) return res.status(400).json({ error: 'No invoice IDs provided' });
+    // Optional dispatched-through override applied to every invoice in the batch.
+    const dispatchedThrough = (req.body?.dispatchedThrough || '').toString();
 
     const db = getDb();
     const cfg = getSettingsFlat(db);
@@ -1518,6 +1846,18 @@ app.post('/api/invoices/pdf-bulk', requireAdmin, async (req, res) => {
           }
         };
       }
+      if (dispatchedThrough) invoice.dispatchedThrough = dispatchedThrough;
+      // ASP cross-reference for ISP invoices — see single endpoint for rationale
+      if (String(stored.state || '').toUpperCase() !== 'KERALA') {
+        const aspRow = db.get(
+          `SELECT asp_invo FROM lots
+           WHERE auction_id = ? AND buyer = ? AND invo = ?
+             AND asp_invo IS NOT NULL AND asp_invo != ''
+           LIMIT 1`,
+          [stored.auction_id, stored.buyer, stored.invo]
+        );
+        if (aspRow && aspRow.asp_invo) invoice.aspInvo = aspRow.asp_invo;
+      }
       payloads.push({
         invoiceData: invoice,
         saleType: stored.sale,
@@ -1534,6 +1874,89 @@ app.post('/api/invoices/pdf-bulk', requireAdmin, async (req, res) => {
     res.send(pdf);
   } catch (e) {
     console.error('Bulk sales invoice PDF error:', e);
+    res.status(500).json({ error: 'Batch PDF generation failed: ' + e.message });
+  }
+});
+
+// Bulk Purchase-View PDF — like /pdf-bulk but renders each invoice with
+// variant='purchase' so the buyer (ISPL) appears as the issuing company
+// and the active ASP company appears as the seller. ASP context only.
+// Body: { ids: [1, 2, 3, ...] }
+app.post('/api/invoices/purchase-pdf-bulk', requireAdmin, async (req, res) => {
+  try {
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(Number).filter(Boolean) : [];
+    if (!ids.length) return res.status(400).json({ error: 'No invoice IDs provided' });
+
+    const db = getDb();
+    const cfg = getSettingsFlat(db);
+
+    const isASPContext = (String(cfg.business_mode || '').toLowerCase() === 'e-trade')
+                      && (String(cfg.business_state || '').toUpperCase() === 'KERALA');
+    if (!isASPContext) {
+      return res.status(400).json({
+        error: 'Purchase view is only available for ASP invoices. Switch business state to KERALA + e-Trade mode.'
+      });
+    }
+
+    // Same enrichBuyer pattern as /pdf-bulk
+    const enrichBuyer = (buyer, stored) => {
+      if (!buyer) buyer = {};
+      if (!buyer.buyer1 && !buyer.buyer) {
+        const looked = db.get('SELECT * FROM buyers WHERE buyer=? OR buyer1=? LIMIT 1',
+          [stored.buyer, stored.buyer1 || stored.tradername || '']);
+        if (looked) buyer = looked;
+      }
+      if (!buyer.buyer1 && stored.buyer1)   buyer.buyer1   = stored.buyer1;
+      if (!buyer.buyer1 && stored.tradername) buyer.buyer1 = stored.tradername;
+      if (!buyer.buyer  && stored.buyer)    buyer.buyer    = stored.buyer;
+      if (!buyer.gstin  && stored.gstin)    buyer.gstin    = stored.gstin;
+      if (!buyer.pla    && stored.place)    buyer.pla      = stored.place;
+      if (!buyer.state  && stored.state)    buyer.state    = stored.state;
+      if (!buyer.add1   && stored.add_line) buyer.add1     = stored.add_line;
+      return buyer;
+    };
+
+    const payloads = [];
+    for (const id of ids) {
+      const stored = db.get('SELECT * FROM invoices WHERE id=?', [id]);
+      if (!stored) continue;
+      let invoice = stored.auction_id
+        ? buildSalesInvoice(db, stored.auction_id, stored.buyer, stored.sale, cfg)
+        : null;
+      if (invoice) {
+        invoice.buyer = enrichBuyer(invoice.buyer, stored);
+      } else {
+        const buyer = enrichBuyer(db.get('SELECT * FROM buyers WHERE buyer=? LIMIT 1', [stored.buyer]), stored);
+        invoice = {
+          buyer,
+          lineItems: [{ lot: '—', grade: '', bags: stored.bag || 0, qty: stored.qty || 0, price: 0, amount: stored.amount || 0 }],
+          summary: {
+            totalBags: stored.bag || 0, totalQty: stored.qty || 0,
+            totalAmount: stored.amount || 0, gunnyCost: stored.gunny || 0,
+            transportCost: stored.pava_hc || 0, insuranceCost: stored.ins || 0,
+            taxableValue: (stored.amount || 0) + (stored.gunny || 0) + (stored.pava_hc || 0) + (stored.ins || 0),
+            cgst: stored.cgst || 0, sgst: stored.sgst || 0, igst: stored.igst || 0,
+            roundDiff: stored.rund || 0, grandTotal: stored.tot || 0,
+            isInterState: stored.sale === 'I',
+          }
+        };
+      }
+      payloads.push({
+        invoiceData: invoice,
+        saleType: stored.sale,
+        invoiceNo: stored.invo,
+        invoiceDate: stored.date,
+      });
+    }
+    if (!payloads.length) return res.status(404).json({ error: 'No invoices resolved from the provided IDs' });
+
+    // 'purchase' variant: ISPL at top, ASP as seller, TN bank — applied to every page
+    const pdf = await generateSalesInvoicesBatchPDF(payloads, cfg, 'purchase');
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="PurchaseView_Batch_${payloads.length}.pdf"`);
+    res.send(pdf);
+  } catch (e) {
+    console.error('Bulk purchase-view PDF error:', e);
     res.status(500).json({ error: 'Batch PDF generation failed: ' + e.message });
   }
 });
@@ -1692,13 +2115,118 @@ app.get('/api/purchases/pdf/:auctionId/:sellerName', requireAdmin, async (req, r
       };
     }
     
-    const pdf = await generatePurchaseInvoicePDF(invoice, cfg, invoiceNo);
+    const pdf = await generatePurchaseInvoicePDF(
+      enrichPurchaseForPDF(invoice, cfg, db, auctionId), cfg, invoiceNo
+    );
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="PurchaseInvoice_${sellerName.replace(/[^\w]/g, '_')}_${invoiceNo}.pdf"`);
     res.send(pdf);
   } catch (e) {
     console.error('PDF generation error:', e);
     res.status(500).json({ error: 'PDF generation failed: ' + e.message });
+  }
+});
+
+// Attach buyer block + e-TRADE No + invoice date to a purchase invoice
+// object so the new renderer can show the full BILLED/SHIPPED TO + top
+// grid correctly. The buyer is whichever identity is currently active in
+// the app (ASP when Kerala+e-Trade, else ISP from company_settings).
+function enrichPurchaseForPDF(invoice, cfg, db, auctionId) {
+  if (!invoice) return invoice;
+  // Stamp auction date + e-TRADE no
+  if (!invoice.invoiceDate && auctionId) {
+    const auction = db.get('SELECT date FROM auctions WHERE id = ?', [auctionId]);
+    if (auction && auction.date) {
+      const d = new Date(auction.date);
+      if (!isNaN(d)) invoice.invoiceDate = d.toLocaleDateString('en-GB');
+    }
+  }
+  if (!invoice.invoiceDate) invoice.invoiceDate = new Date().toLocaleDateString('en-GB');
+  if (!invoice.eTradeNo) invoice.eTradeNo = String(auctionId || '');
+
+  // Buyer block — ISPL or ASP depending on active context
+  const isASP = cfg.business_mode === 'e-Trade' && String(cfg.business_state || '').toUpperCase() === 'KERALA';
+  if (!invoice.buyer) {
+    invoice.buyer = isASP ? {
+      name: cfg.s_company || 'AMAZING SPICE PARK PRIVATE LIMITED',
+      address: cfg.s_address1 || '',
+      place: cfg.s_place || '',
+      pin: cfg.s_pin || '',
+      state: cfg.s_state || 'Kerala',
+      st_code: cfg.s_st_code || '32',
+      gstin: cfg.s_gstin || '',
+      pan: cfg.s_pan || cfg.pan || '',
+    } : {
+      name: cfg.short_name || cfg.trade_name || 'IDEAL SPICES PRIVATE LIMITED',
+      address: cfg.tn_address1 || '',
+      place: cfg.tn_place || '',
+      pin: cfg.tn_pin || '',
+      state: cfg.tn_state || 'Tamil Nadu',
+      st_code: cfg.tn_st_code || '33',
+      gstin: cfg.tn_gstin || '',
+      pan: cfg.pan || '',
+    };
+  }
+  return invoice;
+}
+
+// Bulk Purchase Invoice PDF — merges N purchases into a single PDF
+// Body: { ids: [1, 2, 3, ...] } — database row IDs from `purchases` table.
+// Returns: one PDF with each purchase on its own page(s), in the order given.
+// Same rebuild-from-lots OR fallback-to-stored pattern as the single route.
+app.post('/api/purchases/pdf-bulk', requireAdmin, async (req, res) => {
+  try {
+    const db = getDb();
+    const cfg = getSettingsFlat(db);
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.filter(Boolean) : [];
+    if (!ids.length) return res.status(400).json({ error: 'No purchase IDs provided' });
+
+    const placeholders = ids.map(() => '?').join(',');
+    const rows = db.all(`SELECT * FROM purchases WHERE id IN (${placeholders})`, ids);
+    if (!rows.length) return res.status(404).json({ error: 'No matching purchases found' });
+
+    // Preserve the order the user ticked them in by looking up each ID in
+    // the returned set (the IN query doesn't preserve order).
+    const byId = new Map(rows.map(r => [r.id, r]));
+    const ordered = ids.map(id => byId.get(Number(id))).filter(Boolean);
+
+    const payloads = [];
+    for (const stored of ordered) {
+      // Try fresh rebuild from lots first (richer line-item detail)
+      let invoice = stored.auction_id
+        ? buildPurchaseInvoice(db, stored.auction_id, stored.name, cfg)
+        : null;
+      if (!invoice) {
+        // Fallback: stored summary only (one line item)
+        invoice = {
+          seller: {
+            name: stored.name, address: stored.add_line, place: stored.place,
+            cr: stored.gstin, pan: '', state: stored.state
+          },
+          lineItems: [{
+            lot: '—', qty: stored.qty, pqty: stored.qty, price: 0, prate: 0,
+            amount: stored.amount, puramt: stored.amount,
+            com: 0, sertax: 0, cgst: stored.cgst, sgst: stored.sgst, igst: stored.igst
+          }],
+          summary: {
+            totalQty: stored.qty, totalPuramt: stored.amount,
+            totalCgst: stored.cgst, totalSgst: stored.sgst, totalIgst: stored.igst,
+            roundDiff: stored.rund, grandTotal: stored.total,
+            tdsAmount: stored.tds, invoiceAmount: stored.total - stored.tds,
+            isInter: stored.igst > 0
+          }
+        };
+      }
+      payloads.push({ invoiceData: enrichPurchaseForPDF(invoice, cfg, db, stored.auction_id), invoiceNo: stored.invo });
+    }
+
+    const pdf = await generatePurchaseInvoicesBatchPDF(payloads, cfg);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="PurchaseInvoices_Batch_${payloads.length}.pdf"`);
+    res.send(pdf);
+  } catch (e) {
+    console.error('Bulk purchase PDF error:', e);
+    res.status(500).json({ error: 'Bulk PDF generation failed: ' + e.message });
   }
 });
 
@@ -1809,12 +2337,24 @@ app.get('/api/bills/pdf/:auctionId/:sellerName', requireAdmin, async (req, res) 
       const stored = db.get('SELECT * FROM bills WHERE name = ? AND bil = ? LIMIT 1', [sellerName, parseInt(billNo)]);
       if (!stored) return res.status(404).json({ error: bill?.error || `No bill data found for "${sellerName}"` });
       bill = {
-        seller: { name: stored.name, address: stored.add_line, place: stored.pla, state: stored.pstate, st_code: stored.st_code, cr: stored.crr, pan: stored.pan },
+        seller: { name: stored.name, address: stored.add_line, place: stored.pla, state: stored.pstate, st_code: stored.st_code, cr: stored.crr, crno: stored.crr, pan: stored.pan },
         lineItems: [{ lot: '—', qty: stored.qty, pqty: stored.qty, prate: 0, amount: stored.cost, puramt: stored.cost }],
         summary: { totalQty: stored.qty, totalPuramt: stored.cost, roundDiff: 0, netAmount: stored.net, cgst: 0, sgst: 0, igst: 0, tax: 0 }
       };
     }
-    
+    // Enrich seller.crno so the new renderer can display "CR.<n>" in the
+    // details block when CR/GSTIN-style id is available on the trader row
+    if (bill.seller && !bill.seller.crno) bill.seller.crno = bill.seller.cr || '';
+    // Stamp the bill date + e-TRADE number so the new layout can render them
+    // in the top strip (Invoice No / e-TRADE No / Date).
+    const auction = db.get('SELECT date FROM auctions WHERE id = ?', [req.params.auctionId]);
+    if (auction && auction.date) {
+      const d = new Date(auction.date);
+      if (!isNaN(d)) bill.billDate = d.toLocaleDateString('en-GB');
+    }
+    if (!bill.billDate) bill.billDate = new Date().toLocaleDateString('en-GB');
+    bill.eTradeNo = req.query.eTradeNo || req.params.auctionId;
+
     const pdf = await generateAgriBillPDF(bill, cfg, billNo);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="BillOfSupply_${sellerName.replace(/[^\w]/g,'_')}_${billNo}.pdf"`);
@@ -1822,6 +2362,67 @@ app.get('/api/bills/pdf/:auctionId/:sellerName', requireAdmin, async (req, res) 
   } catch(e) {
     console.error('Agri Bill PDF error:', e);
     res.status(500).json({ error: 'PDF generation failed: ' + e.message });
+  }
+});
+
+// Bulk Agri Bill PDF — merges N bills into a single PDF.
+// Body: { ids: [1, 2, 3, ...] } — DB row IDs from the `bills` table.
+app.post('/api/bills/pdf-bulk', requireAdmin, async (req, res) => {
+  try {
+    const db = getDb();
+    const cfg = getSettingsFlat(db);
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.filter(Boolean) : [];
+    if (!ids.length) return res.status(400).json({ error: 'No bill IDs provided' });
+
+    const placeholders = ids.map(() => '?').join(',');
+    const rows = db.all(`SELECT * FROM bills WHERE id IN (${placeholders})`, ids);
+    if (!rows.length) return res.status(404).json({ error: 'No matching bills found' });
+
+    const byId = new Map(rows.map(r => [r.id, r]));
+    const ordered = ids.map(id => byId.get(Number(id))).filter(Boolean);
+
+    const payloads = [];
+    for (const stored of ordered) {
+      let bill = stored.auction_id
+        ? buildAgriBill(db, stored.auction_id, stored.name, cfg)
+        : null;
+      if (!bill || bill.error) {
+        bill = {
+          seller: {
+            name: stored.name, address: stored.add_line, place: stored.pla,
+            state: stored.pstate, st_code: stored.st_code, cr: stored.crr, crno: stored.crr, pan: stored.pan
+          },
+          lineItems: [{
+            lot: '—', qty: stored.qty, pqty: stored.qty, prate: 0,
+            amount: stored.cost, puramt: stored.cost
+          }],
+          summary: {
+            totalQty: stored.qty, totalPuramt: stored.cost, roundDiff: 0,
+            netAmount: stored.net, cgst: 0, sgst: 0, igst: 0, tax: 0
+          }
+        };
+      }
+      // Enrich for new renderer layout (Invoice No / e-TRADE No / Date strip)
+      if (bill.seller && !bill.seller.crno) bill.seller.crno = bill.seller.cr || '';
+      if (stored.auction_id) {
+        const auction = db.get('SELECT date FROM auctions WHERE id = ?', [stored.auction_id]);
+        if (auction && auction.date) {
+          const d = new Date(auction.date);
+          if (!isNaN(d)) bill.billDate = d.toLocaleDateString('en-GB');
+        }
+      }
+      if (!bill.billDate) bill.billDate = new Date().toLocaleDateString('en-GB');
+      bill.eTradeNo = stored.auction_id || '';
+      payloads.push({ billData: bill, billNo: stored.bil });
+    }
+
+    const pdf = await generateAgriBillsBatchPDF(payloads, cfg);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="BillsOfSupply_Batch_${payloads.length}.pdf"`);
+    res.send(pdf);
+  } catch (e) {
+    console.error('Bulk bill PDF error:', e);
+    res.status(500).json({ error: 'Bulk PDF generation failed: ' + e.message });
   }
 });
 
@@ -1966,7 +2567,9 @@ app.post('/api/invoices/preview/:auctionId', requireAdmin, (req, res) => {
 // PAYMENTS (PAYCHECK.PRG)
 // ══════════════════════════════════════════════════════════════
 app.get('/api/payments/:auctionId', requireAdmin, (req, res) => {
-  const summary = getPaymentSummary(getDb(), req.params.auctionId, req.query.state);
+  const db = getDb();
+  const cfg = getSettingsFlat(db);
+  const summary = getPaymentSummary(db, req.params.auctionId, req.query.state, cfg);
   res.json(summary);
 });
 
@@ -2020,8 +2623,12 @@ app.get('/api/exports/:type/:auctionId', requireAdmin, async (req, res) => {
     } else {
       buffer = await exportDef.fn(db, auctionId, req.query.state);
     }
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename="${exportDef.name}_${auctionId}.xlsx"`);
+    // Per-export-type content-type/extension override (defaults to xlsx).
+    // CSV exports like Praman use ext:'csv', mime:'text/csv'.
+    const ext  = exportDef.ext  || 'xlsx';
+    const mime = exportDef.mime || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    res.setHeader('Content-Type', mime);
+    res.setHeader('Content-Disposition', `attachment; filename="${exportDef.name}_${auctionId}.${ext}"`);
     res.send(Buffer.from(buffer));
   } catch(e) {
     res.status(500).json({ error: e.message });

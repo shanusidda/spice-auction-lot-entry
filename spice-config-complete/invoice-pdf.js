@@ -6,6 +6,14 @@
 const PDFDocument = require('pdfkit');
 const { amountToWords } = require('./amount-words');
 
+// Shared flag-reader: cfg flags can be `true|false` (booleans), `'true'|'false'`
+// (strings, from JSON storage), or `undefined`/empty (treat as defaultOn).
+function readFlag(val, defaultOn) {
+  if (val === undefined || val === null || val === '') return defaultOn;
+  if (typeof val === 'boolean') return val;
+  return String(val).toLowerCase() === 'true';
+}
+
 // ── Invoice number formatter ──────────────────────────────────────
 // Format: {inv_prefix}/{saleType}-{invoiceNo}/{season_short}
 // Examples:
@@ -97,177 +105,423 @@ function effectiveCompany(cfg) {
   };
 }
 
-function generatePurchaseInvoicePDF(invoiceData, cfg, invoiceNo) {
-  const co = effectiveCompany(cfg);
-  const doc = new PDFDocument({ size: 'A4', margin: 30 });
-  const buffers = [];
-  doc.on('data', b => buffers.push(b));
-  
-  const w = doc.page.width - 60; // usable width
-  const x = 30;
-  let y = 30;
-  const { seller, lineItems, summary } = invoiceData;
-  const isRegistered = seller.cr && seller.cr.includes('GSTIN');
+// Purchase Invoice — layout matches ALL_PURCHASES-1-2.pdf reference.
+// Structure: TAX INVOICE title → seller (supplier) block → 2x4 grid of
+// transport + invoice details → BILLED/SHIPPED TO → HSN → 9-col table →
+// right-side totals block → TDS row → Invoice Amount → words → signatory.
+function generatePurchaseInvoicePDF(invoiceData, cfg, invoiceNo, externalDoc) {
+  const isBatch = !!externalDoc;
+  let doc, buffers;
+  if (isBatch) {
+    doc = externalDoc;
+    if (doc._purchaseCount && doc._purchaseCount > 0) doc.addPage({ size: 'A4', margin: 20 });
+    doc._purchaseCount = (doc._purchaseCount || 0) + 1;
+  } else {
+    doc = new PDFDocument({ size: 'A4', margin: 20 });
+    buffers = [];
+    doc.on('data', b => buffers.push(b));
+  }
 
-  // Header
-  doc.fontSize(8).text('ORIGINAL/DUPLICATE/TRIPLICATE', x, y, { align: 'right', width: w });
+  const PAGE_W = doc.page.width;
+  const MX = 20;
+  const x0 = MX, x1 = PAGE_W - MX, W = x1 - x0;
+  let y = MX;
+
+  // Normalize stroke style globally so every line — whether drawn via
+  // explicit moveTo/lineTo/stroke OR via rect.fill().stroke() — renders
+  // with the same width and color. Prevents the "some lines look darker
+  // than others" inconsistency caused by pdfkit defaulting to thicker
+  // strokes after a fill operation.
+  doc.lineWidth(0.5).strokeColor('#000');
+
+  const fmtQty = (n) => Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+  const fmtRup = (n) => Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const sumKey = (rows, primary, fallback) => rows.reduce((s, r) => s + Number(r[primary] || (fallback ? r[fallback] : 0) || 0), 0);
+
+  // Extract data
+  const seller = invoiceData.seller || {};
+  const lineItems = invoiceData.lineItems || [];
+  const s = invoiceData.summary || {};
+
+  // ── ORIGINAL/DUPLICATE/TRIPLICATE + TAX INVOICE title above outer border ──
+  doc.fontSize(7.5).font('Helvetica').fillColor('#000');
+  doc.text('ORIGINAL/DUPLICATE/TRIPLICATE', x0, y, { width: W, align: 'right' });
+  y += 9;
+  doc.font('Helvetica-Bold').fontSize(10);
+  doc.text('TAX INVOICE', x0, y, { width: W, align: 'center' });
+  y += 12;
+
+  const boxTopY = y;
+
+  // ── Seller's company header block (top, centered) ──
+  // On a Purchase Invoice, the TOP block is the SELLER (supplier) — the
+  // company we're buying from. Their full address, state, GSTIN printed.
+  y += 4;
+  doc.font('Helvetica-Bold').fontSize(11);
+  doc.text((seller.name || '').toUpperCase(), x0, y, { width: W, align: 'center' });
+  y += 13;
+  doc.font('Helvetica').fontSize(8);
+  const sellerAddrBits = [seller.address, seller.place, seller.pin].filter(Boolean).join(', ');
+  if (sellerAddrBits) { doc.text(sellerAddrBits, x0, y, { width: W, align: 'center' }); y += 10; }
+  if (seller.gstin || seller.cr) { doc.text('GSTIN:' + (seller.gstin || seller.cr || ''), x0, y, { width: W, align: 'center' }); y += 10; }
+  y += 2;
+
+  // Divider between seller block and details grid
+  doc.moveTo(x0, y).lineTo(x1, y).stroke();
+
+  // ── 4-field grid: 2 columns × 4 rows for supplier details + invoice details ──
+  //  Left column:  TRANSPORT / VEHICLE NO / STATION / e-TRADE No
+  //  Right column: INVOICE NO / DATE / PLACE OF SUPPLY / REVERSE CHARGE
+  const gridLeftW = Math.floor(W / 2);
+  const gridRightW = W - gridLeftW;
+  const gridSplitX = x0 + gridLeftW;
+  const gridRowH = 13;
+  const gridRows = 4;
+  const gridH = gridRowH * gridRows;
+  doc.moveTo(gridSplitX, y).lineTo(gridSplitX, y + gridH).stroke();
+  doc.moveTo(x0, y + gridH).lineTo(x1, y + gridH).stroke();
+  doc.font('Helvetica').fontSize(8);
+  const leftPairs = [
+    ['TRANSPORT', invoiceData.transport || 'BY ROAD'],
+    ['VEHICLE NO', invoiceData.vehicleNo || ''],
+    ['STATION', invoiceData.station || (seller.place || '').toUpperCase()],
+    ['e-TRADE No', invoiceData.eTradeNo || ''],
+  ];
+  const rightPairs = [
+    ['INVOICE NO', ''], // value blank per reference
+    ['DATE', invoiceData.invoiceDate || new Date().toLocaleDateString('en-GB')],
+    ['PLACE OF SUPPLY', (cfg.s_place || '').toUpperCase() + (cfg.s_state ? '  [' + (cfg.s_state || '').toUpperCase() + ']' : '')],
+    ['REVERSE CHARGE', ''],
+  ];
+  for (let i = 0; i < gridRows; i++) {
+    const rowY = y + i * gridRowH + 2;
+    const [lL, lV] = leftPairs[i];
+    const [rL, rV] = rightPairs[i];
+    // Left: label left, value after colon
+    doc.text(`${lL} : ${lV || ''}`, x0 + 6, rowY, { width: gridLeftW - 12 });
+    doc.text(`${rL} : ${rV || ''}`, gridSplitX + 6, rowY, { width: gridRightW - 12 });
+  }
+  y += gridH;
+
+  // ── BILLED TO / SHIPPED TO row ──
+  // On a purchase invoice from seller's perspective, BILLED TO is US (the
+  // purchaser — typically ASP when buying). Both columns show the same
+  // ASP block unless shipping to a different address.
+  const headH = 14;
+  // Explicit horizontal divider ABOVE the header band
+  doc.moveTo(x0, y).lineTo(x1, y).stroke();
+  doc.rect(x0, y, gridLeftW, headH).fill('#e8e8e8').stroke();
+  doc.rect(gridSplitX, y, gridRightW, headH).fill('#e8e8e8').stroke();
+  doc.fillColor('#000').font('Helvetica-Bold').fontSize(9);
+  doc.text('BILLED TO', x0, y + 3, { width: gridLeftW, align: 'center' });
+  doc.text('SHIPPED TO', gridSplitX, y + 3, { width: gridRightW, align: 'center' });
+  // Explicit vertical divider between BILLED TO and SHIPPED TO header
+  // (drawn AFTER fill so it's not overwritten by the grey)
+  doc.moveTo(gridSplitX, y).lineTo(gridSplitX, y + headH).stroke();
+  // Explicit horizontal divider BELOW the header band
+  doc.moveTo(x0, y + headH).lineTo(x1, y + headH).stroke();
+  y += headH;
+
+  // Body
+  const buyerLines = [];
+  const buyer = invoiceData.buyer || {
+    name: cfg.s_company || 'AMAZING SPICE PARK PRIVATE LIMITED',
+    address: cfg.s_address1 || '',
+    place: cfg.s_place || '',
+    pin: cfg.s_pin || '',
+    state: cfg.s_state || '',
+    st_code: cfg.s_st_code || '',
+    gstin: cfg.s_gstin || '',
+    pan: cfg.s_pan || cfg.pan || '',
+  };
+  buyerLines.push((buyer.name || '').toUpperCase());
+  const buyerAddr = [buyer.address, buyer.place ? 'DOOR No.650, ' + buyer.place : ''].filter(Boolean).join(', ').toUpperCase();
+  if (buyerAddr) buyerLines.push(buyerAddr);
+  if (buyer.gstin) buyerLines.push('GSTIN    : ' + buyer.gstin);
+  if (buyer.pan) buyerLines.push('PAN      : ' + buyer.pan);
+  if (buyer.state) buyerLines.push('STATE    : ' + (buyer.state || '').toUpperCase() + '     CODE:' + (buyer.st_code || ''));
+
+  const bodyLineH = 10;
+  const buyerBodyH = Math.max(6, buyerLines.length + 1) * bodyLineH;
+  doc.moveTo(x0, y).lineTo(x0, y + buyerBodyH).stroke();
+  doc.moveTo(gridSplitX, y).lineTo(gridSplitX, y + buyerBodyH).stroke();
+  doc.moveTo(x1, y).lineTo(x1, y + buyerBodyH).stroke();
+  doc.moveTo(x0, y + buyerBodyH).lineTo(x1, y + buyerBodyH).stroke();
+  doc.font('Helvetica').fontSize(8);
+  let ly = y + 3;
+  for (const line of buyerLines) {
+    doc.text(line, x0 + 6, ly, { width: gridLeftW - 12 });
+    doc.text(line, gridSplitX + 6, ly, { width: gridRightW - 12 });
+    ly += bodyLineH;
+  }
+  y += buyerBodyH;
+
+  // ── Description of Goods / HSN CODE row ──
+  // Honor flag_hsn — when OFF, hide HSN reference and span description
+  // across full row width.
+  const showHsn = readFlag(cfg.flag_hsn, true);
+  const descH = 14;
+  if (showHsn) {
+    doc.rect(x0, y, gridLeftW, descH).fill('#e8e8e8').stroke();
+    doc.rect(gridSplitX, y, gridRightW, descH).fill('#e8e8e8').stroke();
+    doc.fillColor('#000').font('Helvetica-Bold').fontSize(9);
+    doc.text('Description of Goods:' + (cfg.desc_goods || 'CARDAMOM'), x0, y + 3, { width: gridLeftW, align: 'center' });
+    doc.text('HSN CODE:' + (cfg.hsn_cardamom || '09083120'), gridSplitX, y + 3, { width: gridRightW, align: 'center' });
+  } else {
+    doc.rect(x0, y, W, descH).fill('#e8e8e8').stroke();
+    doc.fillColor('#000').font('Helvetica-Bold').fontSize(9);
+    doc.text('Description of Goods:' + (cfg.desc_goods || 'CARDAMOM'), x0, y + 3, { width: W, align: 'center' });
+  }
+  // Horizontal dividers ABOVE and BELOW the description row — drawn
+  // AFTER the grey fill so they stay visible (otherwise the fill paints
+  // right over them).
+  doc.moveTo(x0, y).lineTo(x1, y).stroke();
+  doc.moveTo(x0, y + descH).lineTo(x1, y + descH).stroke();
+  y += descH;
+
+  // ── Line-item table (same 9-column layout as bill of supply) ──
+  const colSpec = [
+    { key: 'lot',   label: 'LOT\nNO',                    w: 34 },
+    { key: 'qty',   label: 'QUANTITY\nKGS',              w: 66 },
+    { key: 'gap1',  label: '',                           w: 6 },
+    { key: 'tqty',  label: 'TOTAL\nQTY/KGS',             w: 64 },
+    { key: 'price', label: 'PRICE\nRs.  P.',             w: 52 },
+    { key: 'value', label: 'VALUE\nRs.     P.',          w: 72 },
+    { key: 'gap2',  label: '',                           w: 6 },
+    { key: 'tax',   label: 'TAXABLE VALUE\n( Rs.    P.)', w: 80 },
+    { key: 'cgst',  label: 'C G S T\n( 2.5%)',           w: 56 },
+    { key: 'sgst',  label: 'S G S T\n( 2.5%)',           w: 56 },
+    { key: 'igst',  label: 'I G S T\n( 5.0%)',           w: 64 },
+  ];
+  const totCol = colSpec.reduce((s, c) => s + c.w, 0);
+  const scale = W / totCol;
+  for (const c of colSpec) c.w = c.w * scale;
+  let cx = x0;
+  for (const c of colSpec) { c.x = cx; cx += c.w; }
+
+  const hdrH = 22;
+  doc.rect(x0, y, W, hdrH).fill('#e8e8e8').stroke();
+  doc.fillColor('#000').font('Helvetica-Bold').fontSize(7.5);
+  for (const c of colSpec) {
+    if (!c.label) continue;
+    doc.text(c.label, c.x + 1, y + 2, { width: c.w - 2, align: 'center' });
+  }
+  // Explicit horizontal divider beneath the LOT NO column header
+  doc.moveTo(x0, y + hdrH).lineTo(x1, y + hdrH).stroke();
+  y += hdrH;
+
+  // Body rows with alternate-row stripes (matches sales invoice format).
+  // flag_invoice_stripe defaults ON; toggle in Settings → Flags.
+  const STRIPE_ON = (() => {
+    const v = cfg.flag_invoice_stripe;
+    if (v === undefined || v === null || v === '') return true;
+    if (typeof v === 'boolean') return v;
+    return String(v).toLowerCase() === 'true';
+  })();
+  const STRIPE_COLOR = '#ECECEC';
+  function stripeRow(ry, rh, rowIndex) {
+    if (!STRIPE_ON) return;
+    if (rowIndex % 2 !== 1) return;
+    doc.save();
+    doc.rect(x0, ry, W, rh).fillColor(STRIPE_COLOR).fill();
+    doc.restore();
+    doc.fillColor('#000');
+  }
+
+  const lineH = 12;
+  let bodyStartY = y;
+  doc.font('Helvetica').fontSize(9).fillColor('#000');
+  // Adaptive row count + multi-page support — same approach as agri bill.
+  const PAGE_H = doc.page.height;
+  const PAGE_BOTTOM_MARGIN = 20;
+  const BOTTOM_RESERVE = 230;
+  const targetTableBottom = PAGE_H - PAGE_BOTTOM_MARGIN - BOTTOM_RESERVE;
+  let maxRowsThisPage = Math.max(1, Math.floor((targetTableBottom - bodyStartY) / lineH) - 1);
+  const MIN_ROWS = 10;
+
+  const tableHeaderTop = bodyStartY - hdrH;
+  function paintHeaderAt(y0) {
+    doc.rect(x0, y0, W, hdrH).fill('#e8e8e8').stroke();
+    doc.fillColor('#000').font('Helvetica-Bold').fontSize(7.5);
+    for (const c of colSpec) {
+      if (!c.label) continue;
+      doc.text(c.label, c.x + 1, y0 + 2, { width: c.w - 2, align: 'center' });
+    }
+  }
+  const pageSegments = [{ start: tableHeaderTop, end: 0 }];
+  let drawnRows = 0;
+
+  for (let i = 0; i < lineItems.length; i++) {
+    if (drawnRows >= maxRowsThisPage) {
+      const segEnd = y;
+      pageSegments[pageSegments.length - 1].end = segEnd;
+      doc.moveTo(x0, segEnd).lineTo(x1, segEnd).stroke();
+      for (const c of colSpec) {
+        if (c.key.startsWith('gap')) continue;
+        doc.moveTo(c.x, pageSegments[pageSegments.length - 1].start).lineTo(c.x, segEnd).stroke();
+      }
+      doc.moveTo(x1, pageSegments[pageSegments.length - 1].start).lineTo(x1, segEnd).stroke();
+      doc.font('Helvetica-Oblique').fontSize(8).fillColor('#666');
+      doc.text('— Continued on next page —', x0, segEnd + 4, { width: W, align: 'center' });
+      doc.fillColor('#000');
+
+      doc.addPage({ size: 'A4', margin: 20 });
+      y = 20;
+      paintHeaderAt(y);
+      y += hdrH;
+      bodyStartY = y;
+      pageSegments.push({ start: y - hdrH, end: 0 });
+      maxRowsThisPage = Math.max(1, Math.floor((targetTableBottom - bodyStartY) / lineH) - 1);
+      drawnRows = 0;
+      doc.font('Helvetica').fontSize(9).fillColor('#000');
+    }
+
+    const li = lineItems[i];
+    stripeRow(y, lineH, i);
+    doc.text(String(li.lot || '').padStart(3, '0'), colSpec[0].x, y + 2, { width: colSpec[0].w, align: 'center' });
+    doc.text(fmtQty(li.qty), colSpec[1].x, y + 2, { width: colSpec[1].w - 3, align: 'right' });
+    doc.text(fmtQty(li.pqty || li.qty), colSpec[3].x, y + 2, { width: colSpec[3].w - 3, align: 'right' });
+    doc.text(fmtRup(li.prate || li.price), colSpec[4].x, y + 2, { width: colSpec[4].w - 3, align: 'right' });
+    const value = (li.prate || li.price) * (li.pqty || li.qty);
+    doc.text(fmtRup(value), colSpec[5].x, y + 2, { width: colSpec[5].w - 3, align: 'right' });
+    doc.text(fmtRup(li.puramt || li.amount), colSpec[7].x, y + 2, { width: colSpec[7].w - 3, align: 'right' });
+    if (li.cgst) doc.text(fmtRup(li.cgst), colSpec[8].x, y + 2, { width: colSpec[8].w - 3, align: 'right' });
+    if (li.sgst) doc.text(fmtRup(li.sgst), colSpec[9].x, y + 2, { width: colSpec[9].w - 3, align: 'right' });
+    if (li.igst) doc.text(fmtRup(li.igst), colSpec[10].x, y + 2, { width: colSpec[10].w - 3, align: 'right' });
+    y += lineH;
+    drawnRows++;
+  }
+
+  // Pad empty rows on the LAST page so totals land at bottom
+  const remainingHeight = targetTableBottom - y;
+  const minRowsTarget = Math.max(MIN_ROWS - lineItems.length - 1, 0);
+  const padRows = Math.max(minRowsTarget, Math.floor(remainingHeight / lineH) - 1);
+  for (let i = 0; i < padRows; i++) {
+    stripeRow(y, lineH, lineItems.length + i);
+    y += lineH;
+  }
+
+  // TOTAL row
+  const totalRowY = y;
+  doc.font('Helvetica-Bold').fontSize(9);
+  doc.text('TOTAL', colSpec[0].x, totalRowY + 2, { width: colSpec[0].w, align: 'center' });
+  doc.text(fmtQty(sumKey(lineItems, 'qty')), colSpec[1].x, totalRowY + 2, { width: colSpec[1].w - 3, align: 'right' });
+  doc.text(fmtQty(sumKey(lineItems, 'pqty', 'qty')), colSpec[3].x, totalRowY + 2, { width: colSpec[3].w - 3, align: 'right' });
+  const valueSum = lineItems.reduce((s, li) => s + (li.prate || li.price) * (li.pqty || li.qty), 0);
+  doc.text(fmtRup(valueSum), colSpec[5].x, totalRowY + 2, { width: colSpec[5].w - 3, align: 'right' });
+  const taxableSum = sumKey(lineItems, 'puramt', 'amount');
+  doc.text(fmtRup(taxableSum), colSpec[7].x, totalRowY + 2, { width: colSpec[7].w - 3, align: 'right' });
+  const totalCgst = sumKey(lineItems, 'cgst') || s.cgst || 0;
+  const totalSgst = sumKey(lineItems, 'sgst') || s.sgst || 0;
+  const totalIgst = sumKey(lineItems, 'igst') || s.igst || 0;
+  if (totalCgst) doc.text(fmtRup(totalCgst), colSpec[8].x, totalRowY + 2, { width: colSpec[8].w - 3, align: 'right' });
+  if (totalSgst) doc.text(fmtRup(totalSgst), colSpec[9].x, totalRowY + 2, { width: colSpec[9].w - 3, align: 'right' });
+  if (totalIgst) doc.text(fmtRup(totalIgst), colSpec[10].x, totalRowY + 2, { width: colSpec[10].w - 3, align: 'right' });
+  y += lineH;
+
+  // Table borders. For multi-page tables, draw verticals per page segment.
+  const tableEndY = y;
+  pageSegments[pageSegments.length - 1].end = tableEndY;
+  doc.moveTo(x0, tableEndY).lineTo(x1, tableEndY).stroke();
+  doc.moveTo(x0, totalRowY).lineTo(x1, totalRowY).stroke();
+  for (const seg of pageSegments) {
+    for (const c of colSpec) {
+      if (c.key.startsWith('gap')) continue;
+      doc.moveTo(c.x, seg.start).lineTo(c.x, seg.end).stroke();
+    }
+    doc.moveTo(x1, seg.start).lineTo(x1, seg.end).stroke();
+  }
+
+  // ── Right-side totals block ──
+  const sumX = x0 + W * 0.48;
+  const sumBlockW = W - (sumX - x0);
+  const sumLabelW = sumBlockW * 0.58;
+  const sumValW = sumBlockW - sumLabelW;
+  const sumRowsData = [
+    ['Total Taxable Value', taxableSum],
+    ['Total Integrated Tax', totalIgst],
+    ['Total Central Tax', totalCgst],
+    ['Total State Tax', totalSgst],
+    ['Round UP/DOWN', s.roundDiff || 0],
+  ];
+  // Capture the y-start so we can later draw a vertical separator
+  // between the label column and the value column (spans from the first
+  // row down through the Total Value row).
+  const sumStartY = y;
+  doc.font('Helvetica').fontSize(8.5);
+  for (const [lbl, v] of sumRowsData) {
+    doc.text(lbl, sumX + 4, y + 2, { width: sumLabelW });
+    doc.text(fmtRup(v), sumX + sumLabelW, y + 2, { width: sumValW - 4, align: 'right' });
+    y += 12;
+  }
+  doc.font('Helvetica-Bold').fontSize(9);
+  doc.text('Total Value', sumX + 4, y + 2, { width: sumLabelW });
+  const totalValue = s.grandTotal || (taxableSum + totalCgst + totalSgst + totalIgst + (s.roundDiff || 0));
+  doc.text(fmtRup(totalValue), sumX + sumLabelW, y + 2, { width: sumValW - 4, align: 'right' });
   y += 14;
-  doc.fontSize(14).font('Helvetica-Bold').text('TAX INVOICE', x, y, { align: 'center', width: w });
+  // Vertical separator between the label column and the value column,
+  // spanning the full totals block height.
+  doc.moveTo(sumX + sumLabelW, sumStartY).lineTo(sumX + sumLabelW, y).stroke();
+
+  // DC No. / Date: on the left, aligned with Total Value row
+  doc.font('Helvetica').fontSize(8);
+  doc.text('DC No.', x0 + 6, y - 14);
+  doc.text('Date:', x0 + W * 0.22, y - 14);
+
+  // Separator before TDS / invoice amount
+  doc.moveTo(x0, y).lineTo(x1, y).stroke(); y += 4;
+
+  // ── TDS + Invoice Amount rows ──
+  // Purchase invoices for sellers with GSTIN carry 0.1% TDS U/S 194Q
+  const tdsAmount = s.tdsAmount || 0;
+  const invoiceAmount = s.invoiceAmount || (totalValue - tdsAmount);
+  const tdsRowH = 14;
+  const amtX = x1 - 110;  // start of amount column (right-aligned inside 100pt)
+  const amtW = 104;
+  doc.font('Helvetica').fontSize(8.5);
+  doc.text('TDS on Purchase of Goods [ U/S 194Q ]', x0 + 6, y + 2, { width: amtX - x0 - 12 });
+  doc.text('-' + fmtRup(Math.abs(tdsAmount)), amtX, y + 2, { width: amtW, align: 'right' });
+  y += tdsRowH;
+  doc.font('Helvetica-Bold').fontSize(9);
+  doc.text('Invoice Amount', x0 + 6, y + 2, { width: amtX - x0 - 12 });
+  doc.text(fmtRup(invoiceAmount), amtX, y + 2, { width: amtW, align: 'right' });
+  y += tdsRowH;
+
+  // Separator before amount in words
+  doc.moveTo(x0, y).lineTo(x1, y).stroke(); y += 6;
+
+  // ── Amount in words ──
+  doc.fontSize(9).font('Helvetica');
+  const forWords = Math.round(invoiceAmount);
+  doc.text(amountToWords(forWords) + ' Only', x0 + 6, y, { width: W - 12 });
   y += 20;
-  doc.fontSize(11).text(seller.name, x, y, { align: 'center', width: w });
-  y += 14;
-  if (seller.address) { doc.fontSize(8).font('Helvetica').text(`${seller.address} ${seller.place || ''}`, x, y, { align: 'center', width: w }); y += 12; }
-  if (seller.cr) { doc.fontSize(8).text(`GSTIN: ${seller.cr.substring(6)}`, x, y, { align: 'center', width: w }); y += 12; }
-  
-  y += 4;
-  doc.moveTo(x, y).lineTo(x + w, y).stroke(); y += 6;
 
-  // Invoice details row
-  doc.fontSize(8).font('Helvetica');
-  doc.text(`TRANSPORT: BY ROAD`, x, y);
-  doc.text(`INVOICE NO: ${formatInvoiceNo(cfg, '', invoiceNo)}`, x + w/2, y);
-  y += 12;
-  doc.text(`VEHICLE NO:`, x, y);
-  doc.text(`DATE: ${new Date().toLocaleDateString('en-GB')}`, x + w/2, y);
-  y += 12;
-  doc.text(`STATION: ${seller.place || ''}`, x, y);
-  doc.text(`PLACE OF SUPPLY: ${seller.state || ''}`, x + w/2, y);
-  y += 14;
-  doc.moveTo(x, y).lineTo(x + w, y).stroke(); y += 6;
+  // ── For {SELLER} at right ──
+  doc.fontSize(9).font('Helvetica-Bold');
+  doc.text('For ' + (seller.name || '').toUpperCase(), x0, y, { width: W - 6, align: 'right' });
+  y += 30;
 
-  // Billed To / Shipped To
-  const companyName = co.name || "COMPANY";
-  const companyAddr = co.address1;
-  const companyGstin = co.gstin;
-  
-  doc.font('Helvetica-Bold').text('BILLED TO', x, y, { width: w/2 });
-  doc.text('SHIPPED TO', x + w/2, y);
-  y += 12;
-  doc.font('Helvetica').fontSize(7);
-  doc.text(companyName, x, y, { width: w/2 - 10 });
-  doc.text(companyName, x + w/2, y);
-  y += 10;
-  doc.text(companyAddr, x, y, { width: w/2 - 10 });
-  doc.text(companyAddr, x + w/2, y);
-  y += 10;
-  doc.text(`GSTIN: ${companyGstin}`, x, y, { width: w/2 - 10 });
-  doc.text(`GSTIN: ${companyGstin}`, x + w/2, y);
-  y += 14;
-
-  doc.moveTo(x, y).lineTo(x + w, y).stroke(); y += 4;
-
-  // Description
-  doc.fontSize(8).font('Helvetica-Bold').text(`Description of Goods: CARDAMOM`, x, y, { width: w/2 });
-  doc.text(`HSN CODE: ${cfg.hsn_cardamom || '09083120'}`, x + w/2, y);
-  y += 14;
-  doc.moveTo(x, y).lineTo(x + w, y).stroke(); y += 4;
-
-  // Table header — LOT, BAGS, GR, QTY, PRICE, VALUE, TAXABLE, CGST, SGST, IGST
-  const cols = [
-    { label: 'LOT',     x: x,        w: 30 },
-    { label: 'BAGS',    x: x+30,     w: 28 },
-    { label: 'GR',      x: x+58,     w: 20 },
-    { label: 'QTY',     x: x+78,     w: 48 },
-    { label: 'PRICE',   x: x+126,    w: 44 },
-    { label: 'VALUE',   x: x+170,    w: 58 },
-    { label: 'TAXABLE', x: x+228,    w: 62 },
-    { label: 'CGST',    x: x+290,    w: 50 },
-    { label: 'SGST',    x: x+340,    w: 50 },
-    { label: 'IGST',    x: x+390,    w: 50 },
-  ];
-
-  doc.font('Helvetica-Bold').fontSize(7);
-  cols.forEach(c => doc.text(c.label, c.x, y, { width: c.w, align: 'right' }));
-  y += 12;
-  doc.moveTo(x, y).lineTo(x + w, y).stroke(); y += 4;
-
-  // Line items
-  doc.font('Helvetica').fontSize(7);
-  for (const li of lineItems) {
-    if (y > 680) { doc.addPage(); y = 30; }
-    doc.text(li.lot, cols[0].x, y, { width: cols[0].w, align: 'right' });
-    doc.text(String(li.bags || 0), cols[1].x, y, { width: cols[1].w, align: 'right' });
-    doc.text(String(li.grade || ''), cols[2].x, y, { width: cols[2].w, align: 'right' });
-    doc.text((li.pqty || li.qty).toFixed(3), cols[3].x, y, { width: cols[3].w, align: 'right' });
-    doc.text((li.prate || li.price).toFixed(2), cols[4].x, y, { width: cols[4].w, align: 'right' });
-    doc.text(li.amount.toFixed(2), cols[5].x, y, { width: cols[5].w, align: 'right' });
-    doc.text(li.puramt.toFixed(2), cols[6].x, y, { width: cols[6].w, align: 'right' });
-    doc.text(li.cgst ? li.cgst.toFixed(2) : '-', cols[7].x, y, { width: cols[7].w, align: 'right' });
-    doc.text(li.sgst ? li.sgst.toFixed(2) : '-', cols[8].x, y, { width: cols[8].w, align: 'right' });
-    doc.text(li.igst ? li.igst.toFixed(2) : '-', cols[9].x, y, { width: cols[9].w, align: 'right' });
-    y += 11;
-  }
-
-  y += 4;
-  doc.moveTo(x, y).lineTo(x + w, y).stroke(); y += 4;
-
-  // Totals
-  doc.font('Helvetica-Bold').fontSize(7);
-  doc.text('TOTAL', cols[0].x, y, { width: cols[0].w, align: 'right' });
-  doc.text(String(summary.totalBags || 0), cols[1].x, y, { width: cols[1].w, align: 'right' });
-  doc.text(summary.totalQty.toFixed(3), cols[3].x, y, { width: cols[3].w, align: 'right' });
-  doc.text(summary.totalPuramt.toFixed(2), cols[6].x, y, { width: cols[6].w, align: 'right' });
-  doc.text(summary.totalCgst ? summary.totalCgst.toFixed(2) : '', cols[7].x, y, { width: cols[7].w, align: 'right' });
-  doc.text(summary.totalSgst ? summary.totalSgst.toFixed(2) : '', cols[8].x, y, { width: cols[8].w, align: 'right' });
-  doc.text(summary.totalIgst ? summary.totalIgst.toFixed(2) : '', cols[9].x, y, { width: cols[9].w, align: 'right' });
-  y += 14;
-  doc.moveTo(x, y).lineTo(x + w, y).stroke(); y += 6;
-
-  // Summary box
-  const sumX = x + w/2;
-  const sumW = w/2;
-  const summaryLines = [
-    ['Total Taxable Value', summary.totalPuramt],
-    ['Total Integrated Tax', summary.totalIgst],
-    ['Total Central Tax', summary.totalCgst],
-    ['Total State Tax', summary.totalSgst],
-    ['Round UP/DOWN', summary.roundDiff],
-    ['Total Value', summary.grandTotal],
-  ];
-  
+  // Authorized signatory
   doc.font('Helvetica').fontSize(8);
-  for (const [label, val] of summaryLines) {
-    const isBold = label === 'Total Value';
-    if (isBold) doc.font('Helvetica-Bold');
-    doc.text(label, sumX, y, { width: sumW/2 });
-    doc.text(val.toFixed(2), sumX + sumW/2, y, { width: sumW/2, align: 'right' });
-    if (isBold) doc.font('Helvetica');
-    y += 12;
+  doc.text('Authorised Signatory', x0, y, { width: W - 6, align: 'right' });
+  y += 14;
+
+  // Outer border. For single-page invoices, wrap from the title strip to
+  // bottom. For multi-page, only wrap the last page's bottom block.
+  const boxBottomY = y;
+  if (pageSegments.length === 1) {
+    doc.rect(x0, boxTopY, W, boxBottomY - boxTopY).lineWidth(1).stroke();
+  } else {
+    doc.rect(x0, pageSegments[pageSegments.length - 1].start, W, boxBottomY - pageSegments[pageSegments.length - 1].start).lineWidth(1).stroke();
   }
 
-  // TDS
-  if (summary.tdsAmount > 0) {
-    y += 2;
-    doc.text('TDS on Purchase of Goods [U/S 194Q]', sumX, y, { width: sumW/2 });
-    doc.text(`-${summary.tdsAmount.toFixed(2)}`, sumX + sumW/2, y, { width: sumW/2, align: 'right' });
-    y += 12;
-    doc.font('Helvetica-Bold');
-    doc.text('Invoice Amount', sumX, y, { width: sumW/2 });
-    doc.text(summary.invoiceAmount.toFixed(2), sumX + sumW/2, y, { width: sumW/2, align: 'right' });
-    doc.font('Helvetica');
-    y += 14;
-  }
-
-  // Amount in words
-  y += 4;
-  doc.moveTo(x, y).lineTo(x + w, y).stroke(); y += 6;
-  const amtForWords = summary.tdsAmount > 0 ? summary.invoiceAmount : summary.grandTotal;
-  doc.font('Helvetica-Bold').fontSize(8);
-  doc.text(amountToWords(Math.round(amtForWords)) + ' Only', x, y, { width: w });
-  y += 16;
-
-  // Signature
-  doc.moveTo(x, y).lineTo(x + w, y).stroke(); y += 6;
-  doc.font('Helvetica').fontSize(8);
-  doc.text(`For ${seller.name}`, x + w - 150, y, { width: 150, align: 'right' });
-  y += 40;
-  doc.text('Authorised Signatory', x + w - 150, y, { width: 150, align: 'right' });
-
+  if (isBatch) return Promise.resolve(null);
   return new Promise((resolve) => {
     doc.on('end', () => resolve(Buffer.concat(buffers)));
     doc.end();
   });
 }
+
 
 /**
  * Generate a crop receipt PDF (CROASP.PRG equivalent)
@@ -333,7 +587,7 @@ function generateCropReceiptPDF(lot, cfg) {
   });
 }
 
-module.exports = { generatePurchaseInvoicePDF, generateCropReceiptPDF, generateAgriBillPDF, generateSalesInvoicePDF, generateSalesInvoicesBatchPDF };
+module.exports = { generatePurchaseInvoicePDF, generateCropReceiptPDF, generateAgriBillPDF, generateSalesInvoicePDF, generateSalesInvoicesBatchPDF, generatePurchaseInvoicesBatchPDF, generateAgriBillsBatchPDF };
 
 /**
  * Sales Invoice PDF (Tax Invoice)
@@ -418,6 +672,10 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
   const x1 = pageW - margin;
   const W  = x1 - x0;
   let y = margin;
+
+  // Normalize stroke style — uniform 0.5pt black for all lines including
+  // grey-filled rect outlines.
+  doc.lineWidth(0.5).strokeColor('#000');
 
   // ── Cell drawing helpers ────────────────────────────────────
   // Draws a bordered box and optionally text inside. Does NOT advance y.
@@ -571,8 +829,14 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
 
   // Row 2 — ONLY for ISP invoices (ASP omits Reference No. / Other References)
   if (!isASP) {
+    // Other References shows the cross-referenced ASP invoice number when
+    // available. Format is fixed: ASP/I-{aspInvo}/{season} — the middle
+    // segment is hardcoded to 'I' per business convention (ASP→ISP transfer
+    // is always treated as inter-state for the cross-reference label,
+    // regardless of the actual ISP sale type to the external buyer).
+    const aspInvo = invoiceData && invoiceData.aspInvo;
     const otherRefCfg = { ...cfg, inv_prefix: otherPrefix };
-    const otherRefs = formatInvoiceNo(otherRefCfg, saleType, invoiceNo);
+    const otherRefs = formatInvoiceNo(otherRefCfg, 'I', aspInvo || invoiceNo);
     labeledCell(rightX,         ry, rCell, rRow, 'Reference No. & Date.', '');
     labeledCell(rightX + rCell, ry, rCell, rRow, 'Other References', otherRefs);
   }
@@ -699,10 +963,13 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
   const rSmall = 28;
   let ry2 = midY;
 
-  // Dispatched through: pick the ISP or ASP variant based on who's issuing.
-  const dispThrough = isASP
-    ? (cfg.dispatched_through_asp || cfg.dispatched_through || '')
-    : (cfg.dispatched_through_isp || cfg.dispatched_through || '');
+  // Dispatched through: prefer a per-call override (passed in invoiceData
+  // from the print modal) over the stored default. Falls back to ISP/ASP
+  // variants in cfg, then the global default.
+  const dispThrough = (invoiceData && invoiceData.dispatchedThrough)
+    || (isASP
+      ? (cfg.dispatched_through_asp || cfg.dispatched_through || '')
+      : (cfg.dispatched_through_isp || cfg.dispatched_through || ''));
   labeledCell(rightX,         ry2, rCell, rSmall, 'Dispatched through', dispThrough);
   labeledCell(rightX + rCell, ry2, rCell, rSmall, 'Destination', cfg.dispatch_destination || '');
   ry2 += rSmall;
@@ -738,6 +1005,10 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
 
   // ── LINE ITEMS TABLE ────────────────────────────────────────
   // Columns: Sl | Token | Bags | Description | HSN/SAC | Shipped | Billed | Rate | per | Amount
+  // Honor flag_hsn: when OFF, drop the HSN/SAC column entirely. The
+  // Description column fills the freed space (it's the remainder column).
+  const showHsn = readFlag(cfg.flag_hsn, true);
+
   // Amount is now fixed (~95pt) — enough for values up to "1,00,00,000.00" (1 crore).
   // Extra width goes to Description instead of Amount.
   const colW = {
@@ -745,7 +1016,7 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
     token: 40,
     bags:  34,
     desc:  0,    // fills remainder
-    hsn:   52,
+    hsn:   showHsn ? 52 : 0,
     shipped: 60,
     billed:  60,
     rate:  48,
@@ -755,7 +1026,9 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
   const fixedSum = Object.values(colW).reduce((a, b) => a + b, 0);
   colW.desc = W - fixedSum;
 
-  const cols = ['sl', 'token', 'bags', 'desc', 'hsn', 'shipped', 'billed', 'rate', 'per', 'amount'];
+  const cols = showHsn
+    ? ['sl', 'token', 'bags', 'desc', 'hsn', 'shipped', 'billed', 'rate', 'per', 'amount']
+    : ['sl', 'token', 'bags', 'desc',        'shipped', 'billed', 'rate', 'per', 'amount'];
   function colX(key) {
     let cx = x0;
     for (const k of cols) { if (k === key) return cx; cx += colW[k]; }
@@ -798,7 +1071,9 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
       per:   ['per', ''],
       amount: ['Amount', ''],
     };
-    for (const k of Object.keys(hdr)) {
+    // Only iterate columns that are actually rendered (skips hsn when off)
+    for (const k of cols) {
+      if (!hdr[k]) continue;  // skip shipped/billed (handled separately above)
       const [l1, l2] = hdr[k];
       const cx = colX(k);
       doc.text(l1, cx + 2, y + 3, { width: colW[k] - 4, align: 'center' });
@@ -848,7 +1123,7 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
     doc.text(String(li.bags || ''), colX('bags') + 2, y + 3, { width: colW.bags - 4, align: 'center' });
     doc.font('Helvetica-Bold').text('Cardamom', colX('desc') + 4, y + 3, { width: colW.desc - 8 });
     doc.font('Helvetica');
-    doc.text(hsnCardamom, colX('hsn') + 2, y + 3, { width: colW.hsn - 4, align: 'center' });
+    if (showHsn) doc.text(hsnCardamom, colX('hsn') + 2, y + 3, { width: colW.hsn - 4, align: 'center' });
     doc.text(`${li.qty.toFixed(3)} Kgs.`, colX('shipped') + 2, y + 3, { width: colW.shipped - 4, align: 'right' , lineBreak: false});
     doc.font('Helvetica-Bold').text(`${li.qty.toFixed(3)} Kgs.`, colX('billed') + 2, y + 3, { width: colW.billed - 4, align: 'right' , lineBreak: false});
     // ASP invoices: bill at P_Rate and show PurAmt (ASP→ISP internal transfer price)
@@ -861,6 +1136,38 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
     doc.font('Helvetica');
     y += rowH;
     sl++;
+  }
+
+  // ── Adaptive empty-row padding ──
+  // For small invoices, pad blank striped rows after the data so the
+  // summary/total/signature block lands near the bottom of A4. Only
+  // applied on a single-page invoice (won't pad if data already pushed
+  // us past where padding would help). The bottom reserve below covers
+  // every optional summary row + amount-words + HSN summary + signature.
+  const gunnyH_pre     = (summary.totalBags > 0 && summary.gunnyCost > 0) ? rowH : 0;
+  const transportH_pre = (summary.transportCost > 0) ? rowH : 0;
+  const insuranceH_pre = (summary.insuranceCost > 0) ? rowH : 0;
+  const gstRowCount_pre = summary.isInterState ? 1 : 2;
+  // Required height for the summary + bottom blocks (matches the existing
+  // ensureRoomFor estimate below)
+  const requiredBottomH =
+      gunnyH_pre + transportH_pre + insuranceH_pre
+    + rowH + (rowH * gstRowCount_pre) + rowH + (rowH + 2)
+    + 24 + 90 + 16 + 90 + 10;
+  // Only pad if we're still on the first page and have room for it.
+  // pageBottom is the y at which content should stop on this page.
+  const targetSummaryStartY = pageBottom - requiredBottomH;
+  if (y < targetSummaryStartY) {
+    const fillH = targetSummaryStartY - y;
+    const fillRows = Math.floor(fillH / rowH);
+    for (let i = 0; i < fillRows; i++) {
+      stripeFill(y, rowH, sl - 1);
+      rowVerticals(y, rowH);
+      // Empty cells — vertical separators are drawn by rowVerticals above,
+      // and the stripeFill provides the visual band for alternating rows.
+      y += rowH;
+      sl++;
+    }
   }
 
   // Before drawing summary rows: estimate the total remaining height and
@@ -889,10 +1196,10 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
   if (summary.totalBags > 0 && summary.gunnyCost > 0) {
     stripeFill(y, rowH, sl - 1);
     rowVerticals(y, rowH);
-    doc.text(String(sl), colX('sl') + 2, y + 3, { width: colW.sl - 4, align: 'center' });
+    // sl.no shown only on lot rows (not on Gunny/Transport/Insurance footer rows)
     doc.font('Helvetica-Bold').text('Gunny', colX('desc') + 4, y + 3, { width: colW.desc - 8 });
     doc.font('Helvetica');
-    doc.text(hsnGunny, colX('hsn') + 2, y + 3, { width: colW.hsn - 4, align: 'center' });
+    if (showHsn) doc.text(hsnGunny, colX('hsn') + 2, y + 3, { width: colW.hsn - 4, align: 'center' });
     doc.text(`${summary.totalBags} Nos.`, colX('shipped') + 2, y + 3, { width: colW.shipped - 4, align: 'right' });
     const gunnyRate = (cfg.gunny_rate || 165).toFixed(2);
     doc.font('Helvetica-Bold').text(gunnyRate, colX('rate') + 2, y + 3, { width: colW.rate - 4, align: 'right' });
@@ -924,10 +1231,10 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
   if (summary.transportCost > 0 && !isASP) {
     stripeFill(y, rowH, sl - 1);
     rowVerticals(y, rowH);
-    doc.text(String(sl), colX('sl') + 2, y + 3, { width: colW.sl - 4, align: 'center' });
+    // sl.no shown only on lot rows (not on Gunny/Transport/Insurance footer rows)
     doc.font('Helvetica-Bold').text('Transport', colX('desc') + 4, y + 3, { width: colW.desc - 8 });
     doc.font('Helvetica');
-    doc.text(sacTransport, colX('hsn') + 2, y + 3, { width: colW.hsn - 4, align: 'center' });
+    if (showHsn) doc.text(sacTransport, colX('hsn') + 2, y + 3, { width: colW.hsn - 4, align: 'center' });
     doc.text(`${summary.totalQty.toFixed(3)} Kgs.`, colX('shipped') + 2, y + 3, { width: colW.shipped - 4, align: 'right' , lineBreak: false});
     doc.font('Helvetica-Bold').text(transportRate.toFixed(2), colX('rate') + 2, y + 3, { width: colW.rate - 4, align: 'right' });
     doc.font('Helvetica').text('Kgs.', colX('per') + 2, y + 3, { width: colW.per - 4, align: 'center' });
@@ -947,10 +1254,10 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
   if (summary.insuranceCost > 0 && !isASP) {
     stripeFill(y, rowH, sl - 1);
     rowVerticals(y, rowH);
-    doc.text(String(sl), colX('sl') + 2, y + 3, { width: colW.sl - 4, align: 'center' });
+    // sl.no shown only on lot rows (not on Gunny/Transport/Insurance footer rows)
     doc.font('Helvetica-Bold').text('Insurance', colX('desc') + 4, y + 3, { width: colW.desc - 8 });
     doc.font('Helvetica');
-    doc.text(sacInsurance, colX('hsn') + 2, y + 3, { width: colW.hsn - 4, align: 'center' });
+    if (showHsn) doc.text(sacInsurance, colX('hsn') + 2, y + 3, { width: colW.hsn - 4, align: 'center' });
     doc.font('Helvetica-Bold').text(insuranceRate.toFixed(2), colX('rate') + 2, y + 3, { width: colW.rate - 4, align: 'right' });
     doc.font('Helvetica-Bold').text(formatINR(summary.insuranceCost), colX('amount') + 2, y + 3, { width: colW.amount - 4, align: 'right' });
     doc.font('Helvetica');
@@ -1025,41 +1332,55 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
   y += amtWordsH;
 
   // ── HSN SUMMARY TABLE ───────────────────────────────────────
+  // When flag_hsn is OFF, the HSN/SAC column is hidden but the rest of
+  // the summary (Taxable Value + GST breakdown) stays — that's the only
+  // place where Taxable Value is totaled, so it must not vanish.
   // Columns: HSN/SAC | Taxable Value | IGST Rate | IGST Amount | Total Tax Amount
   //   OR: HSN/SAC | Taxable Value | CGST Rate | CGST Amt | SGST Rate | SGST Amt | Total Tax Amount
   const isInter = summary.isInterState;
   const hsnRows = [];
-  // Helper: build one HSN summary row for a taxable amount at gstGoods rate
-  function hsnRow(hsn, taxable) {
+  // Helper: build one HSN summary row for a taxable amount at gstGoods rate.
+  // `desc` is the human-readable label (Cardamom / Gunny / Transport /
+  // Insurance) — used as the row label when flag_hsn is OFF (since we
+  // don't show the HSN code, we want to know WHAT each row is).
+  function hsnRow(hsn, desc, taxable) {
     return {
-      hsn,
-      taxable,
+      hsn, desc, taxable,
       rate: gstGoods,
       cgst: isInter ? 0 : +(taxable * gstGoods / 2 / 100).toFixed(2),
       sgst: isInter ? 0 : +(taxable * gstGoods / 2 / 100).toFixed(2),
       igst: isInter ? +(taxable * gstGoods / 100).toFixed(2) : 0,
     };
   }
-  hsnRows.push(hsnRow(hsnCardamom, summary.totalAmount));
-  if (summary.gunnyCost > 0)     hsnRows.push(hsnRow(hsnGunny, summary.gunnyCost));
+  hsnRows.push(hsnRow(hsnCardamom, 'Cardamom', summary.totalAmount));
+  if (summary.gunnyCost > 0)     hsnRows.push(hsnRow(hsnGunny, 'Gunny', summary.gunnyCost));
   // ASP invoices: Transport/Insurance are not billed, so skip them from HSN summary too
-  if (summary.transportCost > 0 && !isASP) hsnRows.push(hsnRow(sacTransport, summary.transportCost));
-  if (summary.insuranceCost > 0 && !isASP) hsnRows.push(hsnRow(sacInsurance, summary.insuranceCost));
+  if (summary.transportCost > 0 && !isASP) hsnRows.push(hsnRow(sacTransport, 'Transport', summary.transportCost));
+  if (summary.insuranceCost > 0 && !isASP) hsnRows.push(hsnRow(sacInsurance, 'Insurance', summary.insuranceCost));
 
   const hsnHdrH = 20;
   const hsnRowH = 12;
+  // The first column shows EITHER HSN/SAC (when flag_hsn ON) or
+  // "Description of Goods" with the per-row description (when OFF).
+  // We keep the same column WIDTH either way so the rest of the layout
+  // is identical between flag states — only the label and cell content
+  // change.
+  const firstColW = isInter ? 160 : 130;
   const hsnCols = isInter
-    ? { hsn: 160, taxable: 90, rateLbl: 'IGST', rate: 60, amt: 90, total: 0 }
-    : { hsn: 130, taxable: 80, cgstRate: 40, cgstAmt: 60, sgstRate: 40, sgstAmt: 60, total: 0 };
+    ? { hsn: firstColW, taxable: 90, rateLbl: 'IGST', rate: 60, amt: 90, total: 0 }
+    : { hsn: firstColW, taxable: 80, cgstRate: 40, cgstAmt: 60, sgstRate: 40, sgstAmt: 60, total: 0 };
   const hsnFixed = Object.entries(hsnCols).filter(([k]) => typeof hsnCols[k] === 'number').reduce((a, [, v]) => a + v, 0);
   hsnCols.total = W - hsnFixed;
 
   // Header
   box(x0, y, W, hsnHdrH);
+  // First column label: HSN/SAC (default) or "Description of Goods" when
+  // flag_hsn is OFF — column width is identical either way.
+  const firstColLabel = showHsn ? 'HSN/SAC' : 'Description of Goods';
   if (isInter) {
     let cx = x0;
     doc.font('Helvetica').fontSize(7);
-    doc.text('HSN/SAC', cx + 2, y + 2, { width: hsnCols.hsn - 4, align: 'center' });
+    doc.text(firstColLabel, cx + 2, y + 6, { width: hsnCols.hsn - 4, align: 'center' });
     doc.moveTo(cx + hsnCols.hsn, y).lineTo(cx + hsnCols.hsn, y + hsnHdrH).stroke();
     cx += hsnCols.hsn;
     doc.text('Taxable', cx + 2, y + 2, { width: hsnCols.taxable - 4, align: 'center' });
@@ -1079,7 +1400,7 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
   } else {
     let cx = x0;
     doc.font('Helvetica').fontSize(7);
-    doc.text('HSN/SAC', cx + 2, y + 2, { width: hsnCols.hsn - 4, align: 'center' });
+    doc.text(firstColLabel, cx + 2, y + 6, { width: hsnCols.hsn - 4, align: 'center' });
     doc.moveTo(cx + hsnCols.hsn, y).lineTo(cx + hsnCols.hsn, y + hsnHdrH).stroke();
     cx += hsnCols.hsn;
     doc.text('Taxable Value', cx + 2, y + 6, { width: hsnCols.taxable - 4, align: 'center' });
@@ -1108,7 +1429,8 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
   // HSN rows — vertical-only dividers + alternate-row stripe
   // Builds column x-positions once per call to avoid repeating arithmetic.
   function hsnColBoundaries() {
-    // Returns [x0, afterHsn, afterTaxable, ..., x0+W]
+    // Returns [x0, afterFirstCol, afterTaxable, ..., x0+W]
+    // First col is HSN/SAC or Description of Goods — same width either way.
     const xs = [x0];
     let cx = x0 + hsnCols.hsn;  xs.push(cx);
     cx += hsnCols.taxable;      xs.push(cx);
@@ -1139,7 +1461,10 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
     hsnRowVerticals(y, hsnRowH);
     let cx = x0;
     doc.font(isTotal ? 'Helvetica-Bold' : 'Helvetica').fontSize(8);
-    doc.text(row.hsn, cx + 2, y + 2, { width: hsnCols.hsn - 4 });
+    // First column: HSN/SAC code when flag on, item description when off.
+    // For Total row both show "Total" (set in caller).
+    const firstColVal = showHsn ? row.hsn : (row.desc || row.hsn);
+    doc.text(firstColVal, cx + 2, y + 2, { width: hsnCols.hsn - 4 });
     cx += hsnCols.hsn;
     doc.text(formatINR(row.taxable), cx + 2, y + 2, { width: hsnCols.taxable - 4, align: 'right' });
     cx += hsnCols.taxable;
@@ -1164,9 +1489,10 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
   for (let i = 0; i < hsnRows.length; i++) drawHsnRow(hsnRows[i], false, i);
   // Horizontal line above Total row — visual separator between data rows and total
   doc.lineWidth(0.5).moveTo(x0, y).lineTo(x0 + W, y).stroke();
-  // Total row
+  // Total row — first column reads "Total" regardless of flag_hsn state
   const totRow = {
     hsn: 'Total',
+    desc: 'Total',
     taxable: hsnRows.reduce((a, r) => a + r.taxable, 0),
     rate: gstGoods,
     cgst: hsnRows.reduce((a, r) => a + r.cgst, 0),
@@ -1203,36 +1529,42 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
   let bky = y + 6;
   const bkX = rightX + 4;
   const bkInnerW = rightW - 8;
-  doc.font('Helvetica').fontSize(8).text("Company's Bank Details", bkX, bky); bky += 11;
-  // Bank picks:
-  //   Purchase view         → KL bank (ASP is still the selling company, so its bank receives payment)
-  //   ASP sales invoice     → KL bank
-  //   ISP invoices          → TN bank
-  const useKLBank = isASP; // same for both sales AND purchase view when isASP
-  const bankName = useKLBank ? (cfg.bank_kl_name || '') : (cfg.bank_tn_name || '');
-  const bankAcct = useKLBank ? (cfg.bank_kl_acct || '') : (cfg.bank_tn_acct || '');
-  const bankIfsc = useKLBank ? (cfg.bank_kl_ifsc || '') : (cfg.bank_tn_ifsc || '');
-  // Align values at a fixed x so all three rows start at the same column
-  const labelW = 90;
-  const valX = bkX + labelW;
-  const valW = bkInnerW - labelW;
-  doc.font('Helvetica').fontSize(8).text('Bank Name', bkX, bky, { width: labelW });
-  doc.font('Helvetica').text(':', bkX + labelW - 8, bky);
-  doc.font('Helvetica-Bold').text(bankName, valX, bky, { width: valW });
-  bky += 10;
-  doc.font('Helvetica').text('A/c No.', bkX, bky, { width: labelW });
-  doc.font('Helvetica').text(':', bkX + labelW - 8, bky);
-  doc.font('Helvetica-Bold').text(bankAcct, valX, bky, { width: valW });
-  bky += 10;
-  doc.font('Helvetica').text('Branch & IFS Code', bkX, bky, { width: labelW });
-  doc.font('Helvetica').text(':', bkX + labelW - 8, bky);
-  const branchLbl = (bankName.split('-')[1] || bankName).trim();
-  doc.font('Helvetica-Bold').text(`${branchLbl} & ${bankIfsc}`, valX, bky, { width: valW });
-  bky += 14;
-  // Horizontal line above "for COMPANY NAME" — separates bank details from signatory section.
-  // Drawn only in the right cell (bank details column), not across the Declaration block.
-  doc.lineWidth(0.5).moveTo(rightX, bky - 2).lineTo(x0 + W, bky - 2).stroke();
-  bky += 2;
+  // Honor flag_bank — when OFF, skip the bank details block entirely
+  // ("for COMPANY NAME" + Authorised Signatory remain since they're
+  // independent of bank info).
+  const showBank = readFlag(cfg.flag_bank, true);
+  if (showBank) {
+    doc.font('Helvetica').fontSize(8).text("Company's Bank Details", bkX, bky); bky += 11;
+    // Bank picks:
+    //   Purchase view         → KL bank (ASP is still the selling company, so its bank receives payment)
+    //   ASP sales invoice     → KL bank
+    //   ISP invoices          → TN bank
+    const useKLBank = isASP; // same for both sales AND purchase view when isASP
+    const bankName = useKLBank ? (cfg.bank_kl_name || '') : (cfg.bank_tn_name || '');
+    const bankAcct = useKLBank ? (cfg.bank_kl_acct || '') : (cfg.bank_tn_acct || '');
+    const bankIfsc = useKLBank ? (cfg.bank_kl_ifsc || '') : (cfg.bank_tn_ifsc || '');
+    // Align values at a fixed x so all three rows start at the same column
+    const labelW = 90;
+    const valX = bkX + labelW;
+    const valW = bkInnerW - labelW;
+    doc.font('Helvetica').fontSize(8).text('Bank Name', bkX, bky, { width: labelW });
+    doc.font('Helvetica').text(':', bkX + labelW - 8, bky);
+    doc.font('Helvetica-Bold').text(bankName, valX, bky, { width: valW });
+    bky += 10;
+    doc.font('Helvetica').text('A/c No.', bkX, bky, { width: labelW });
+    doc.font('Helvetica').text(':', bkX + labelW - 8, bky);
+    doc.font('Helvetica-Bold').text(bankAcct, valX, bky, { width: valW });
+    bky += 10;
+    doc.font('Helvetica').text('Branch & IFS Code', bkX, bky, { width: labelW });
+    doc.font('Helvetica').text(':', bkX + labelW - 8, bky);
+    const branchLbl = (bankName.split('-')[1] || bankName).trim();
+    doc.font('Helvetica-Bold').text(`${branchLbl} & ${bankIfsc}`, valX, bky, { width: valW });
+    bky += 14;
+    // Horizontal line above "for COMPANY NAME" — separates bank details from signatory section.
+    // Drawn only in the right cell (bank details column), not across the Declaration block.
+    doc.lineWidth(0.5).moveTo(rightX, bky - 2).lineTo(x0 + W, bky - 2).stroke();
+    bky += 2;
+  } // end if (showBank)
   // "for COMPANY NAME" right-aligned
   // In purchase view, the issuer header is ISPL but the signatory block
   // represents the SELLING company (ASP) — whose bank received the payment
@@ -1259,131 +1591,408 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
  * Agriculturist Bill of Supply PDF (GSTKBILP.PRG / GSTBILP.PRG equivalent)
  * For non-GSTIN sellers — no GST charged
  */
-function generateAgriBillPDF(billData, cfg, billNo) {
-  const co = effectiveCompany(cfg);
-  const doc = new PDFDocument({ size: 'A4', margin: 30 });
-  const buffers = [];
-  doc.on('data', b => buffers.push(b));
-  
-  const w = doc.page.width - 60;
-  const x = 30;
-  let y = 30;
-  const { seller, lineItems, summary } = billData;
+// Agri Bill (Bill of Supply for agriculturist sellers) — layout matches
+// PLANTER-TF-03-1-2.pdf reference. Key differences from a tax invoice:
+//   - Title: "Bill for Purchase from Agriculturist" with Section 2(7) subtitle
+//   - Issuer block = ASP (sister company) — agri purchases are made via ASP
+//   - Buyer/Consignee columns: seller is "DETAILS OF SELLER [BILLED FOR]"
+//     and the consignee column is typically empty for self-generated bills
+//   - GST columns are PRESENT but left BLANK (agriculturist is unregistered
+//     under GST Sec 2(7) — no tax liability on the purchase)
+//   - Bottom-right totals block: Taxable / Integrated / Central / State /
+//     Round / Total Value
+//   - DC No. / Date: line at bottom-left, matches reference positioning
+function generateAgriBillPDF(billData, cfg, billNo, externalDoc) {
+  const isBatch = !!externalDoc;
+  let doc, buffers;
+  if (isBatch) {
+    doc = externalDoc;
+    if (doc._billCount && doc._billCount > 0) doc.addPage({ size: 'A4', margin: 20 });
+    doc._billCount = (doc._billCount || 0) + 1;
+  } else {
+    doc = new PDFDocument({ size: 'A4', margin: 20 });
+    buffers = [];
+    doc.on('data', b => buffers.push(b));
+  }
 
-  // Header
-  doc.fontSize(8).text('ORIGINAL/DUPLICATE/TRIPLICATE', x, y, { align: 'right', width: w });
-  y += 14;
-  doc.fontSize(14).font('Helvetica-Bold').text('BILL OF SUPPLY', x, y, { align: 'center', width: w });
-  y += 5;
-  doc.fontSize(9).font('Helvetica').text(cfg.commission_bill || 'COMMISSION BILL', x, y, { align: 'center', width: w });
-  y += 18;
+  const PAGE_W = doc.page.width;
+  const MX = 20;
+  const x0 = MX;
+  const x1 = PAGE_W - MX;
+  const W = x1 - x0;
+  let y = MX;
 
-  const companyName = co.name || "COMPANY";
-  const companyAddr = co.address1;
-  const companyGstin = co.gstin;
-  doc.fontSize(11).font('Helvetica-Bold').text(companyName, x, y, { align: 'center', width: w });
-  y += 14;
-  doc.fontSize(8).font('Helvetica').text(companyAddr, x, y, { align: 'center', width: w });
-  y += 12;
-  doc.text(`GSTIN: ${companyGstin}`, x, y, { align: 'center', width: w });
-  y += 14;
-  doc.moveTo(x, y).lineTo(x + w, y).stroke(); y += 6;
+  // Normalize stroke style — same fix as purchase invoice. Ensures all
+  // strokes (including grey-fill rect outlines) render at uniform 0.5pt
+  // black lines.
+  doc.lineWidth(0.5).strokeColor('#000');
 
-  // Bill details
-  doc.fontSize(8).font('Helvetica');
-  doc.text(`BILL NO: ${billNo}`, x, y);
-  doc.text(`DATE: ${new Date().toLocaleDateString('en-GB')}`, x + w/2, y);
-  y += 14;
-  doc.moveTo(x, y).lineTo(x + w, y).stroke(); y += 6;
+  // Helper: Indian-style number formatter reused across the layout
+  const fmtQty = (n) => Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+  const fmtRup = (n) => Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const sumKey = (rows, primary, fallback) => rows.reduce((s, r) => s + Number(r[primary] || (fallback ? r[fallback] : 0) || 0), 0);
 
-  // Seller details
-  doc.font('Helvetica-Bold').text('SELLER (Agriculturist)', x, y);
-  y += 12;
-  doc.font('Helvetica').fontSize(8);
-  doc.text(seller.name, x, y); y += 10;
-  if (seller.address) { doc.text(seller.address, x, y); y += 10; }
-  if (seller.place) { doc.text(`${seller.place} ${seller.pin || ''}`, x, y); y += 10; }
-  if (seller.state) { doc.text(`State: ${seller.state} (Code: ${seller.st_code || ''})`, x, y); y += 10; }
-  if (seller.pan) { doc.text(`PAN: ${seller.pan}`, x, y); y += 10; }
-  if (seller.aadhar) { doc.text(`Aadhar: ${seller.aadhar}`, x, y); y += 10; }
-  if (seller.tel) { doc.text(`Tel: ${seller.tel}`, x, y); y += 10; }
-  
-  y += 6;
-  doc.moveTo(x, y).lineTo(x + w, y).stroke(); y += 6;
+  // ── ORIGINAL/DUPLICATE/TRIPLICATE above outer border ──
+  doc.fontSize(7.5).font('Helvetica').fillColor('#000');
+  doc.text('ORIGINAL/DUPLICATE/TRIPLICATE', x0, y, { width: W, align: 'right' });
+  y += 9;
 
-  // Description
-  doc.fontSize(8).font('Helvetica-Bold').text(`Description: CARDAMOM (Agricultural Produce — Exempt)`, x, y);
-  doc.text(`HSN: ${cfg.hsn_cardamom || '09083120'}`, x + w - 100, y, { width: 100 });
-  y += 14;
-  doc.moveTo(x, y).lineTo(x + w, y).stroke(); y += 4;
+  const boxTopY = y;
 
-  // Table
-  const cols = [
-    { label: 'LOT', x: x, w: 50 },
-    { label: 'QTY (KG)', x: x + 50, w: 90 },
-    { label: 'RATE (₹)', x: x + 140, w: 90 },
-    { label: 'AMOUNT (₹)', x: x + 230, w: 120 },
-  ];
-  doc.font('Helvetica-Bold').fontSize(8);
-  cols.forEach(c => doc.text(c.label, c.x, y, { width: c.w, align: 'right' }));
-  y += 12;
-  doc.moveTo(x, y).lineTo(x + w, y).stroke(); y += 4;
+  // ── ASP header block (company identity) ──
+  y += 4;
+  // Capture y BEFORE writing the company text, so we can position the logo
+  // alongside the text block (vertically centered against it).
+  const headerStartY = y;
+  // Logo: Bill of Supply is always issued by ASP, so always use the ASP
+  // logo. Optional — falls through silently if the file isn't present.
+  const _logoPath = require('path').join(__dirname, 'public', 'logo-asp.png');
+  const _fs = require('fs');
+  let logoOffsetX = 0;
+  if (_fs.existsSync(_logoPath)) {
+    try {
+      doc.image(_logoPath, x0 + 6, headerStartY, { fit: [60, 60] });
+      logoOffsetX = 0; // logo lives in left gutter — text still centered
+    } catch (_) { /* fall through silently */ }
+  }
+  doc.font('Helvetica-Bold').fontSize(11);
+  doc.text(cfg.s_company || 'AMAZING SPICE PARK PRIVATE LIMITED', x0, y, { width: W, align: 'center' });
+  y += 13;
 
   doc.font('Helvetica').fontSize(8);
-  for (const li of lineItems) {
-    if (y > 680) { doc.addPage(); y = 30; }
-    doc.text(li.lot, cols[0].x, y, { width: cols[0].w, align: 'right' });
-    doc.text((li.pqty || li.qty).toFixed(3), cols[1].x, y, { width: cols[1].w, align: 'right' });
-    doc.text((li.prate || li.price).toFixed(2), cols[2].x, y, { width: cols[2].w, align: 'right' });
-    doc.text((li.puramt || li.amount).toFixed(2), cols[3].x, y, { width: cols[3].w, align: 'right' });
-    y += 11;
+  const addr1 = (cfg.s_address1 || '').toUpperCase();
+  const addr2Bits = [
+    (cfg.s_place || '').toUpperCase(),
+    (cfg.s_pin ? '-' + cfg.s_pin : ''),
+    (cfg.s_state ? (cfg.s_state.toUpperCase() + ' CODE:' + (cfg.s_st_code || '')) : '')
+  ].filter(Boolean).join(' ').trim();
+  const mobile = cfg.s_mobile || cfg.mobile || '';
+  const addr2Full = addr2Bits + (mobile ? ' MOBILE:' + mobile : '');
+  doc.text(addr1, x0, y, { width: W, align: 'center' }); y += 10;
+  doc.text(addr2Full, x0, y, { width: W, align: 'center' }); y += 10;
+  doc.text(`CIN:${cfg.s_cin || ''}  PAN:${cfg.s_pan || cfg.pan || ''}`, x0, y, { width: W, align: 'center' }); y += 10;
+  doc.text(`GSTIN:${cfg.s_gstin || ''}  SBL:${cfg.s_sbl || cfg.sbl || ''}`, x0, y, { width: W, align: 'center' }); y += 10;
+  if (cfg.s_email || cfg.email) {
+    doc.text('e-Mail ID:' + (cfg.s_email || cfg.email), x0, y, { width: W, align: 'center' });
+    y += 10;
   }
   y += 4;
-  doc.moveTo(x, y).lineTo(x + w, y).stroke(); y += 4;
 
-  doc.font('Helvetica-Bold').fontSize(8);
-  doc.text('TOTAL', cols[0].x, y, { width: cols[0].w, align: 'right' });
-  doc.text(summary.totalQty.toFixed(3), cols[1].x, y, { width: cols[1].w, align: 'right' });
-  doc.text(summary.totalPuramt.toFixed(2), cols[3].x, y, { width: cols[3].w, align: 'right' });
-  y += 16;
+  // ── Title + subtitle ──
+  doc.font('Helvetica-Bold').fontSize(12);
+  doc.text('Bill for Purchase from Agriculturist', x0, y, { width: W, align: 'center' });
+  y += 14;
+  doc.font('Helvetica-Oblique').fontSize(8);
+  doc.text('[Self-Generated Bill for Unregistered Purchases from Agriculturist Sec 2(7) of the CGST Act,2017]', x0, y, { width: W, align: 'center' });
+  y += 14;
 
-  // Summary
-  doc.moveTo(x, y).lineTo(x + w, y).stroke(); y += 6;
-  const sumX = x + w/2;
-  const sumW = w/2;
+  // ── Invoice No / e-TRADE No / Date strip ──
+  const infoY = y;
+  const infoH = 16;
+  doc.moveTo(x0, infoY).lineTo(x1, infoY).stroke();
+  doc.moveTo(x0, infoY + infoH).lineTo(x1, infoY + infoH).stroke();
+  const invDate = (billData && billData.billDate) || new Date().toLocaleDateString('en-GB');
+  const eTradeNo = (billData && billData.eTradeNo) || cfg.e_trade_no || '';
+  doc.font('Helvetica').fontSize(8.5);
+  doc.text(`Invoice No: ${billNo || ''}`, x0 + 6, infoY + 4);
+  doc.text(`e-TRADE No: ${eTradeNo}`, x0, infoY + 4, { width: W, align: 'center' });
+  doc.text(`Date: ${invDate}`, x0, infoY + 4, { width: W - 6, align: 'right' });
+  y = infoY + infoH;
+
+  // ── Two-column seller / consignee header block ──
+  const sellerW = Math.floor(W / 2);
+  const conW = W - sellerW;
+  const splitX = x0 + sellerW;
+  const headH = 14;
+  // Horizontal divider ABOVE the header band
+  doc.moveTo(x0, y).lineTo(x1, y).stroke();
+  doc.rect(x0, y, sellerW, headH).fill('#e8e8e8').stroke();
+  doc.rect(splitX, y, conW, headH).fill('#e8e8e8').stroke();
+  doc.fillColor('#000').font('Helvetica-Bold').fontSize(9);
+  doc.text('DETAILS OF SELLER [BILLED FOR]', x0, y + 3, { width: sellerW, align: 'center' });
+  doc.text('DETAILS OF CONSIGNEE [SHIPPED TO]', splitX, y + 3, { width: conW, align: 'center' });
+  // Explicit vertical divider between SELLER and CONSIGNEE columns
+  doc.moveTo(splitX, y).lineTo(splitX, y + headH).stroke();
+  // Horizontal divider BELOW the header band
+  doc.moveTo(x0, y + headH).lineTo(x1, y + headH).stroke();
+  y += headH;
+
+  // Seller body (up to ~6 rows visible)
+  const bodyLineH = 10;
+  const sellerLines = [];
+  const seller = billData.seller || {};
+  if (seller.name) sellerLines.push('M/s.' + seller.name);
+  if (seller.address) sellerLines.push(seller.address);
+  if (seller.place) sellerLines.push((seller.place || '').toUpperCase() + (seller.pan ? '   PAN:' + seller.pan : ''));
+  if (seller.state) sellerLines.push('STATE:' + (seller.state || '').toUpperCase() + '   CODE:' + (seller.st_code || ''));
+  sellerLines.push('CR.' + (seller.crno || ''));
+
+  const bodyH = Math.max(6, sellerLines.length + 2) * bodyLineH;
+  doc.moveTo(x0, y).lineTo(x0, y + bodyH).stroke();
+  doc.moveTo(splitX, y).lineTo(splitX, y + bodyH).stroke();
+  doc.moveTo(x1, y).lineTo(x1, y + bodyH).stroke();
+  doc.moveTo(x0, y + bodyH).lineTo(x1, y + bodyH).stroke();
   doc.font('Helvetica').fontSize(8);
-  doc.text('Total Value', sumX, y, { width: sumW/2 });
-  doc.text(summary.totalPuramt.toFixed(2), sumX + sumW/2, y, { width: sumW/2, align: 'right' });
-  y += 12;
-  if (summary.roundDiff) {
-    doc.text('Round UP/DOWN', sumX, y, { width: sumW/2 });
-    doc.text(summary.roundDiff.toFixed(2), sumX + sumW/2, y, { width: sumW/2, align: 'right' });
+  let ly = y + 3;
+  for (const line of sellerLines) { doc.text(line, x0 + 6, ly, { width: sellerW - 12 }); ly += bodyLineH; }
+  y += bodyH;
+
+  // ── Description of Goods / HSN row ──
+  // When flag_hsn is OFF, hide the HSN CODE column and span Description
+  // across the full row width (matches user expectation that disabling the
+  // flag removes any reference to HSN from the PDF).
+  const showHsn = readFlag(cfg.flag_hsn, true);
+  const descH = 14;
+  if (showHsn) {
+    doc.rect(x0, y, sellerW, descH).fill('#e8e8e8').stroke();
+    doc.rect(splitX, y, conW, descH).fill('#e8e8e8').stroke();
+    doc.fillColor('#000').font('Helvetica-Bold').fontSize(9);
+    doc.text('Description of Goods:' + (cfg.desc_goods || 'CARDAMOM'), x0, y + 3, { width: sellerW, align: 'center' });
+    doc.text('HSN CODE:' + (cfg.hsn_cardamom || '09083120'), splitX, y + 3, { width: conW, align: 'center' });
+  } else {
+    doc.rect(x0, y, W, descH).fill('#e8e8e8').stroke();
+    doc.fillColor('#000').font('Helvetica-Bold').fontSize(9);
+    doc.text('Description of Goods:' + (cfg.desc_goods || 'CARDAMOM'), x0, y + 3, { width: W, align: 'center' });
+  }
+  // Horizontal dividers ABOVE and BELOW (drawn AFTER fill so they survive)
+  doc.moveTo(x0, y).lineTo(x1, y).stroke();
+  doc.moveTo(x0, y + descH).lineTo(x1, y + descH).stroke();
+  y += descH;
+
+  // ── Line-item table header ──
+  const colSpec = [
+    { key: 'lot',   label: 'LOT\nNO',                    w: 34 },
+    { key: 'qty',   label: 'QUANTITY\nKGS',              w: 66 },
+    { key: 'gap1',  label: '',                           w: 6 },
+    { key: 'tqty',  label: 'TOTAL\nQTY/KGS',             w: 64 },
+    { key: 'price', label: 'PRICE\nRs.  P.',             w: 52 },
+    { key: 'value', label: 'VALUE\nRs.     P.',          w: 72 },
+    { key: 'gap2',  label: '',                           w: 6 },
+    { key: 'tax',   label: 'TAXABLE VALUE\n( Rs.    P.)', w: 80 },
+    { key: 'cgst',  label: 'C G S T\n( 2.5%)',           w: 56 },
+    { key: 'sgst',  label: 'S G S T\n( 2.5%)',           w: 56 },
+    { key: 'igst',  label: 'I G S T\n( 5.0%)',           w: 64 },
+  ];
+  const totCol = colSpec.reduce((s, c) => s + c.w, 0);
+  const scale = W / totCol;
+  for (const c of colSpec) c.w = c.w * scale;
+  let cx = x0;
+  for (const c of colSpec) { c.x = cx; cx += c.w; }
+
+  const hdrH = 22;
+  doc.rect(x0, y, W, hdrH).fill('#e8e8e8').stroke();
+  doc.fillColor('#000').font('Helvetica-Bold').fontSize(7.5);
+  for (const c of colSpec) {
+    if (!c.label) continue;
+    doc.text(c.label, c.x + 1, y + 2, { width: c.w - 2, align: 'center' });
+  }
+  // Explicit horizontal divider beneath the LOT NO column header
+  doc.moveTo(x0, y + hdrH).lineTo(x1, y + hdrH).stroke();
+  y += hdrH;
+
+  // ── Body rows ──
+  // Alternate-row stripes (light grey on odd rows, like sales invoice).
+  // Controlled by flag_invoice_stripe (default ON). Fill is drawn BEFORE
+  // text so text sits on top of the colored row band.
+  const STRIPE_ON = (() => {
+    const v = cfg.flag_invoice_stripe;
+    if (v === undefined || v === null || v === '') return true;
+    if (typeof v === 'boolean') return v;
+    return String(v).toLowerCase() === 'true';
+  })();
+  const STRIPE_COLOR = '#ECECEC';
+  function stripeRow(ry, rh, rowIndex) {
+    if (!STRIPE_ON) return;
+    if (rowIndex % 2 !== 1) return;
+    doc.save();
+    doc.rect(x0, ry, W, rh).fillColor(STRIPE_COLOR).fill();
+    doc.restore();
+    doc.fillColor('#000');
+  }
+
+  const lineH = 12;
+  let bodyStartY = y;
+  doc.font('Helvetica').fontSize(9).fillColor('#000');
+  // Adaptive row count: fill the table down to a fixed Y position near the
+  // bottom of the A4 page, so the totals/signature block always lands at
+  // the page bottom regardless of how many line items there are.
+  //
+  // For invoices whose data exceeds what fits on one page, we paginate:
+  // draw rows up to the page's max, then addPage() and redraw the table
+  // header on the new page. The totals/signature block always lives at
+  // the bottom of the LAST page.
+  const PAGE_H = doc.page.height;          // A4 height = 842pt
+  const PAGE_BOTTOM_MARGIN = 20;
+  // Reserved bottom-block height (totals + amount-in-words + signatures)
+  const BOTTOM_RESERVE = 200;
+  const targetTableBottom = PAGE_H - PAGE_BOTTOM_MARGIN - BOTTOM_RESERVE;
+  // How many data rows fit on the FIRST page (header consumed bodyStartY)
+  let maxRowsThisPage = Math.max(1, Math.floor((targetTableBottom - bodyStartY) / lineH) - 1);
+  const MIN_ROWS = 10;
+  const rows = billData.lineItems || [];
+
+  // Helper to repaint the column header on a continuation page
+  const tableHeaderTop = bodyStartY - hdrH;
+  function paintHeaderAt(y0) {
+    doc.rect(x0, y0, W, hdrH).fill('#e8e8e8').stroke();
+    doc.fillColor('#000').font('Helvetica-Bold').fontSize(7.5);
+    for (const c of colSpec) {
+      if (!c.label) continue;
+      doc.text(c.label, c.x + 1, y0 + 2, { width: c.w - 2, align: 'center' });
+    }
+  }
+
+  // Track per-page state so we can draw vertical column dividers correctly
+  // for each page segment of the table.
+  const pageSegments = [{ start: tableHeaderTop, end: 0 }]; // end filled in below
+  let drawnRows = 0;
+
+  for (let i = 0; i < rows.length; i++) {
+    // If this row would push us past the target table bottom, start a new page
+    if (drawnRows >= maxRowsThisPage) {
+      // Close out the current page's table — vertical dividers + bottom border
+      const segEnd = y;
+      pageSegments[pageSegments.length - 1].end = segEnd;
+      doc.moveTo(x0, segEnd).lineTo(x1, segEnd).stroke();
+      for (const c of colSpec) {
+        if (c.key.startsWith('gap')) continue;
+        doc.moveTo(c.x, pageSegments[pageSegments.length - 1].start).lineTo(c.x, segEnd).stroke();
+      }
+      doc.moveTo(x1, pageSegments[pageSegments.length - 1].start).lineTo(x1, segEnd).stroke();
+      // Optional "Continued..." footer note
+      doc.font('Helvetica-Oblique').fontSize(8).fillColor('#666');
+      doc.text('— Continued on next page —', x0, segEnd + 4, { width: W, align: 'center' });
+      doc.fillColor('#000');
+
+      // New page
+      doc.addPage({ size: 'A4', margin: 20 });
+      y = 20;
+      // Redraw column header at top of new page
+      paintHeaderAt(y);
+      y += hdrH;
+      bodyStartY = y;
+      pageSegments.push({ start: y - hdrH, end: 0 });
+      // Reset per-page counters; full page available now (no header block above)
+      maxRowsThisPage = Math.max(1, Math.floor((targetTableBottom - bodyStartY) / lineH) - 1);
+      drawnRows = 0;
+      doc.font('Helvetica').fontSize(9).fillColor('#000');
+    }
+
+    const li = rows[i];
+    stripeRow(y, lineH, i);
+    doc.text(String(li.lot || '').padStart(3, '0'), colSpec[0].x, y + 2, { width: colSpec[0].w, align: 'center' });
+    doc.text(fmtQty(li.qty), colSpec[1].x, y + 2, { width: colSpec[1].w - 3, align: 'right' });
+    doc.text(fmtQty(li.pqty || li.qty), colSpec[3].x, y + 2, { width: colSpec[3].w - 3, align: 'right' });
+    doc.text(fmtRup(li.prate || li.price), colSpec[4].x, y + 2, { width: colSpec[4].w - 3, align: 'right' });
+    doc.text(fmtRup((li.prate || li.price) * (li.pqty || li.qty)), colSpec[5].x, y + 2, { width: colSpec[5].w - 3, align: 'right' });
+    doc.text(fmtRup(li.puramt || li.amount), colSpec[7].x, y + 2, { width: colSpec[7].w - 3, align: 'right' });
+    y += lineH;
+    drawnRows++;
+  }
+
+  // After all data rows: pad empty rows on the LAST page so totals land
+  // at the bottom of the page (only when there's room — large invoices
+  // that already filled the page won't get extra padding).
+  const remainingHeight = targetTableBottom - y;
+  const minRowsTarget = Math.max(MIN_ROWS - rows.length - 1, 0);
+  const padRows = Math.max(minRowsTarget, Math.floor(remainingHeight / lineH) - 1);
+  for (let i = 0; i < padRows; i++) {
+    stripeRow(y, lineH, rows.length + i);
+    y += lineH;
+  }
+  pageSegments[pageSegments.length - 1].end = y; // updated again after TOTAL below
+
+  // ── TOTAL row ──
+  const totalRowY = y;
+  doc.font('Helvetica-Bold').fontSize(9);
+  doc.text('TOTAL', colSpec[0].x, totalRowY + 2, { width: colSpec[0].w, align: 'center' });
+  doc.text(fmtQty(sumKey(rows, 'qty')), colSpec[1].x, totalRowY + 2, { width: colSpec[1].w - 3, align: 'right' });
+  doc.text(fmtQty(sumKey(rows, 'pqty', 'qty')), colSpec[3].x, totalRowY + 2, { width: colSpec[3].w - 3, align: 'right' });
+  const valueSum = rows.reduce((s, li) => s + (li.prate || li.price) * (li.pqty || li.qty), 0);
+  doc.text(fmtRup(valueSum), colSpec[5].x, totalRowY + 2, { width: colSpec[5].w - 3, align: 'right' });
+  doc.text(fmtRup(sumKey(rows, 'puramt', 'amount')), colSpec[7].x, totalRowY + 2, { width: colSpec[7].w - 3, align: 'right' });
+  y += lineH;
+
+  // Table borders. For multi-page tables, draw verticals per page segment
+  // (each page has its own header→tableEnd top/bottom range). The current
+  // (last) page's segment ends at tableEndY below.
+  const tableEndY = y;
+  pageSegments[pageSegments.length - 1].end = tableEndY;
+  doc.moveTo(x0, tableEndY).lineTo(x1, tableEndY).stroke();
+  doc.moveTo(x0, totalRowY).lineTo(x1, totalRowY).stroke();
+  for (const seg of pageSegments) {
+    for (const c of colSpec) {
+      if (c.key.startsWith('gap')) continue;
+      doc.moveTo(c.x, seg.start).lineTo(c.x, seg.end).stroke();
+    }
+    doc.moveTo(x1, seg.start).lineTo(x1, seg.end).stroke();
+  }
+
+  // ── Totals summary bottom-right ──
+  const sumX = x0 + W * 0.48;
+  const sumBlockW = W - (sumX - x0);
+  const sumLabelW = sumBlockW * 0.58;
+  const sumValW = sumBlockW - sumLabelW;
+  const s = billData.summary || {};
+  const sumRows = [
+    ['Total Taxable Value', s.totalPuramt || valueSum],
+    ['Total Integrated Tax', s.igst || 0],
+    ['Total Central Tax', s.cgst || 0],
+    ['Total State Tax', s.sgst || 0],
+    ['Round UP/DOWN', s.roundDiff || 0],
+  ];
+  doc.font('Helvetica').fontSize(8.5);
+  const sumStartY = y;
+  for (const [lbl, v] of sumRows) {
+    doc.text(lbl, sumX + 4, y + 2, { width: sumLabelW });
+    doc.text(fmtRup(v), sumX + sumLabelW, y + 2, { width: sumValW - 4, align: 'right' });
     y += 12;
   }
-  doc.font('Helvetica-Bold');
-  doc.text('NET AMOUNT', sumX, y, { width: sumW/2 });
-  doc.text(summary.netAmount.toFixed(2), sumX + sumW/2, y, { width: sumW/2, align: 'right' });
+  doc.font('Helvetica-Bold').fontSize(9);
+  doc.text('Total Value', sumX + 4, y + 2, { width: sumLabelW });
+  doc.text(fmtRup(s.netAmount || s.totalPuramt || valueSum), sumX + sumLabelW, y + 2, { width: sumValW - 4, align: 'right' });
+  y += 14;
+  // Vertical separator between label column and value column
+  doc.moveTo(sumX + sumLabelW, sumStartY).lineTo(sumX + sumLabelW, y).stroke();
+
+  // DC No. / Date: aligned with "Total Value" row on the left
+  doc.font('Helvetica').fontSize(8);
+  doc.text('DC No.', x0 + 6, y - 14);
+  doc.text('Date:', x0 + W * 0.22, y - 14);
+
+  // Separator before amount-in-words
+  doc.moveTo(x0, y).lineTo(x1, y).stroke(); y += 6;
+
+  // ── Amount in words ──
+  const netForWords = Math.round(s.netAmount || s.totalPuramt || valueSum);
+  doc.fontSize(9).font('Helvetica');
+  doc.text(amountToWords(netForWords) + ' Only', x0 + 6, y, { width: W - 12 });
   y += 16;
 
-  // Amount in words
-  doc.moveTo(x, y).lineTo(x + w, y).stroke(); y += 6;
-  doc.fontSize(8).text(amountToWords(summary.netAmount) + ' Only', x, y, { width: w });
-  y += 20;
+  // ── "for COMPANY" right-aligned ──
+  doc.fontSize(9).font('Helvetica-Bold');
+  doc.text('for ' + (cfg.s_company || 'AMAZING SPICE PARK PVT LTD'), x0, y, { width: W - 6, align: 'right' });
+  y += 30;
 
-  // Certification statement
-  doc.fontSize(7).font('Helvetica-Oblique');
-  doc.text('Certified that the above agricultural produce is purchased from the agriculturist and no GST is applicable as per GST Act exemption.', x, y, { width: w });
-  y += 24;
-
-  // Signatures
-  doc.moveTo(x, y).lineTo(x + w, y).stroke(); y += 6;
+  // ── Signatures ──
   doc.font('Helvetica').fontSize(8);
-  doc.text(`Received by: ${seller.name}`, x, y);
-  doc.text(`For ${companyName}`, x + w - 150, y, { width: 150, align: 'right' });
-  y += 40;
-  doc.text('Signature of Seller', x, y);
-  doc.text('Authorised Signatory', x + w - 150, y, { width: 150, align: 'right' });
+  doc.text('Signature of Seller', x0 + 6, y);
+  doc.text('Authorized Signatory', x0, y, { width: W - 6, align: 'right' });
+  y += 14;
 
+  // Outer border. For single-page invoices, wrap from the title strip to
+  // bottom. For multi-page, the page-spanning rectangle would render
+  // incorrectly so skip it — table verticals + horizontal borders below
+  // each section already provide visual structure.
+  const boxBottomY = y;
+  if (pageSegments.length === 1) {
+    doc.rect(x0, boxTopY, W, boxBottomY - boxTopY).lineWidth(1).stroke();
+  } else {
+    // Last page only: simple bottom-portion outer rectangle
+    doc.rect(x0, pageSegments[pageSegments.length - 1].start, W, boxBottomY - pageSegments[pageSegments.length - 1].start).lineWidth(1).stroke();
+  }
+
+  if (isBatch) return Promise.resolve(null);
   return new Promise((resolve) => {
     doc.on('end', () => resolve(Buffer.concat(buffers)));
     doc.end();
@@ -1398,7 +2007,7 @@ function generateAgriBillPDF(billData, cfg, billNo) {
  * invoices: array of { invoiceData, saleType, invoiceNo, invoiceDate }
  * cfg: shared company-settings config (same for all)
  */
-function generateSalesInvoicesBatchPDF(invoices, cfg) {
+function generateSalesInvoicesBatchPDF(invoices, cfg, variant) {
   if (!Array.isArray(invoices) || invoices.length === 0) {
     return Promise.reject(new Error('No invoices to print'));
   }
@@ -1407,6 +2016,9 @@ function generateSalesInvoicesBatchPDF(invoices, cfg) {
   doc.on('data', b => buffers.push(b));
   doc._invoiceCount = 0; // tracked so subsequent invoices addPage before drawing
 
+  // `variant` (e.g. 'purchase') is a uniform display-flip applied to every
+  // invoice in the batch — used by the bulk purchase-view endpoint to
+  // render the ISPL-side mirror of every selected ASP sales invoice.
   for (const inv of invoices) {
     generateSalesInvoicePDF(
       inv.invoiceData,
@@ -1414,8 +2026,51 @@ function generateSalesInvoicesBatchPDF(invoices, cfg) {
       inv.saleType,
       inv.invoiceNo,
       inv.invoiceDate,
-      doc // externalDoc — triggers batch mode
+      doc, // externalDoc — triggers batch mode
+      variant
     );
+  }
+
+  return new Promise((resolve) => {
+    doc.on('end', () => resolve(Buffer.concat(buffers)));
+    doc.end();
+  });
+}
+
+// ── Batch: merge N purchase invoices into one PDF ──────────────────────
+// Same pattern as sales batch. Each item: { invoiceData, invoiceNo }.
+function generatePurchaseInvoicesBatchPDF(invoices, cfg) {
+  if (!Array.isArray(invoices) || invoices.length === 0) {
+    return Promise.reject(new Error('No purchase invoices to print'));
+  }
+  const doc = new PDFDocument({ size: 'A4', margin: 30 });
+  const buffers = [];
+  doc.on('data', b => buffers.push(b));
+  doc._purchaseCount = 0;
+
+  for (const inv of invoices) {
+    generatePurchaseInvoicePDF(inv.invoiceData, cfg, inv.invoiceNo, doc);
+  }
+
+  return new Promise((resolve) => {
+    doc.on('end', () => resolve(Buffer.concat(buffers)));
+    doc.end();
+  });
+}
+
+// ── Batch: merge N agri bills into one PDF ─────────────────────────────
+// Each item: { billData, billNo }.
+function generateAgriBillsBatchPDF(bills, cfg) {
+  if (!Array.isArray(bills) || bills.length === 0) {
+    return Promise.reject(new Error('No bills to print'));
+  }
+  const doc = new PDFDocument({ size: 'A4', margin: 30 });
+  const buffers = [];
+  doc.on('data', b => buffers.push(b));
+  doc._billCount = 0;
+
+  for (const bill of bills) {
+    generateAgriBillPDF(bill.billData, cfg, bill.billNo, doc);
   }
 
   return new Promise((resolve) => {

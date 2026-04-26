@@ -232,6 +232,102 @@ function initCompanySettings(db) {
 function getSetting(db, key) {
   const r = db.prepare('SELECT value FROM company_settings WHERE key = ?').get(key);
   return r ? r.value : null;
+  // ── Presets (ISP / ASP) for the "Company" category ───────────────────
+  // Two named snapshots of the 8 fields in category='company' (logo,
+  // trade_name, legal_name, short_name, pan, cin, fssai, sbl). The user
+  // flips between them via the Logo Code dropdown; the active preset's
+  // values overlay onto company_settings so invoice PDFs and exports
+  // continue reading from the familiar flat key-value store.
+  //
+  // Schema: composite PK of (preset_code, field_key). One row per
+  // (preset, field). active_preset_code is tracked in a meta row.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS company_presets (
+      preset_code TEXT NOT NULL,
+      field_key   TEXT NOT NULL,
+      field_value TEXT NOT NULL DEFAULT '',
+      PRIMARY KEY (preset_code, field_key)
+    );
+    CREATE TABLE IF NOT EXISTS company_preset_meta (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL DEFAULT ''
+    );
+  `);
+
+  // Fields that belong to a preset: all keys in the 'company' category.
+  // Derived dynamically so adding a new company-category field to DEFAULTS
+  // automatically becomes part of both presets.
+  const companyFieldRows = db.prepare(
+    "SELECT key, value FROM company_settings WHERE category = 'company'"
+  ).all();
+  const companyFieldKeys = companyFieldRows.map(r => r.key);
+
+  // Hardcoded ASP defaults — used when seeding the ASP preset for the
+  // first time. ISP preset is seeded from the CURRENT company_settings
+  // values (i.e., whatever's live = already dad's ISP data).
+  const ASP_DEFAULTS = {
+    logo:        'ASP',
+    trade_name:  'AMAZING SPICE PARK',
+    legal_name:  ' PRIVATE LIMITED',
+    short_name:  'AMAZING SPICE PARK PRIVATE LIMITED',
+    pan:         'ABDCA2636B',
+    cin:         'U46305KL2025PTC095544',
+    fssai:       '',
+    sbl:         '',
+  };
+
+  const insertPreset = db.prepare(
+    'INSERT OR IGNORE INTO company_presets (preset_code, field_key, field_value) VALUES (?, ?, ?)'
+  );
+  const seedPresets = db.transaction(() => {
+    // ISP preset: seeded from current live values so first-time upgrade
+    // preserves whatever the user had configured before presets existed.
+    for (const r of companyFieldRows) {
+      insertPreset.run('ISP', r.key, r.value);
+    }
+    // ASP preset: seeded from hardcoded defaults; user edits afterward.
+    for (const k of companyFieldKeys) {
+      const v = (ASP_DEFAULTS[k] !== undefined) ? ASP_DEFAULTS[k] : '';
+      insertPreset.run('ASP', k, v);
+    }
+  });
+  seedPresets();
+
+  // Meta: active_preset_code defaults to 'ISP' on first install so
+  // nothing visibly changes until the user flips it.
+  db.prepare(
+    "INSERT OR IGNORE INTO company_preset_meta (key, value) VALUES ('active_preset_code', 'ISP')"
+  ).run();
+
+  // Heal-step (one-off): if the active preset is currently ASP AND the
+  // previous preset-overlay architecture had mirrored ASP values into
+  // company_settings, those company_settings values are now incorrect
+  // (they hold ASP identity where PDFs expect ISP identity). Restore
+  // the stable ISP values from the ISP preset into company_settings so
+  // invoices/purchase PDFs produce correct output again.
+  //
+  // Safe to run every startup: it only rewrites company_settings rows
+  // that exist in the ISP preset (the 8 company-category fields), using
+  // the ISP preset's values. If you WANT company_settings to hold ASP
+  // (e.g. you deliberately renamed the primary company), re-save the
+  // ISP preset with your desired values afterward.
+  try {
+    const ispRows = db.prepare(
+      "SELECT field_key, field_value FROM company_presets WHERE preset_code = 'ISP'"
+    ).all();
+    // Detect corruption: if company_settings.short_name doesn't match
+    // ISP preset's short_name, we almost certainly have contamination
+    // from the old overlay path. Heal unconditionally for the 8 fields.
+    const cur = db.prepare("SELECT value FROM company_settings WHERE key = 'short_name'").get();
+    const ispShort = (ispRows.find(r => r.field_key === 'short_name') || {}).field_value;
+    if (cur && ispShort && cur.value !== ispShort) {
+      const upd = db.prepare('UPDATE company_settings SET value = ? WHERE key = ?');
+      for (const r of ispRows) upd.run(r.field_value, r.field_key);
+      console.log('[presets] Healed company_settings from ISP preset (previous ASP overlay cleaned up)');
+    }
+  } catch (e) {
+    console.warn('[presets] Heal step skipped:', e.message);
+  }
 }
 
 function getSettingBool(db, key) {
@@ -271,7 +367,135 @@ function getSettingsFlat(db) {
     else if (r.field_type === 'number') flat[r.key] = parseFloat(r.value) || 0;
     else flat[r.key] = r.value;
   }
+  // NOTE: preset values are NOT overlaid here any more. Previously we
+  // pushed the active preset's (ISP or ASP) company-category values into
+  // this flat object so downstream consumers (invoice PDFs, exports) would
+  // transparently see the "current identity". That broke ISP invoices
+  // when ASP preset was active — ISP invoices read cfg.short_name and got
+  // AMAZING SPICE PARK instead of IDEAL SPICES.
+  //
+  // Instead: company_settings holds the ISP identity (stable). s_* fields
+  // hold ASP identity (stable). effectiveCompany() picks between them
+  // based on business_state + business_mode. Presets are edit-time only
+  // and stored in company_presets; the UI shows the active preset.
   return flat;
+}
+
+// ── Preset helpers ─────────────────────────────────────────────────────
+// These are the authoritative accessors for preset data. The UI calls
+// these via new API endpoints.
+
+// Defensive: make sure the preset tables and seed rows exist before any
+// preset operation runs. Covers the case where the server was running
+// when new code was deployed and initCompanySettings() never executed
+// the new migration block. Cheap (CREATE TABLE IF NOT EXISTS + SELECT).
+function ensurePresetsInitialized(db) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS company_presets (
+      preset_code TEXT NOT NULL,
+      field_key   TEXT NOT NULL,
+      field_value TEXT NOT NULL DEFAULT '',
+      PRIMARY KEY (preset_code, field_key)
+    );
+    CREATE TABLE IF NOT EXISTS company_preset_meta (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL DEFAULT ''
+    );
+  `);
+  const meta = db.prepare("SELECT value FROM company_preset_meta WHERE key = 'active_preset_code'").get();
+  if (!meta) {
+    db.prepare("INSERT OR IGNORE INTO company_preset_meta (key, value) VALUES ('active_preset_code', 'ISP')").run();
+  }
+  // Seed presets if the table is empty (e.g., after this defensive
+  // create-table just created it for the first time).
+  const count = db.prepare('SELECT COUNT(*) as c FROM company_presets').get();
+  if (!count || count.c === 0) {
+    const companyFieldRows = db.prepare(
+      "SELECT key, value FROM company_settings WHERE category = 'company'"
+    ).all();
+    const ASP_DEFAULTS = {
+      logo:       'ASP',
+      trade_name: 'AMAZING SPICE PARK',
+      legal_name: ' PRIVATE LIMITED',
+      short_name: 'AMAZING SPICE PARK PRIVATE LIMITED',
+      pan:        'ABDCA2636B',
+      cin:        'U46305KL2025PTC095544',
+      fssai:      '',
+      sbl:        '',
+    };
+    const ins = db.prepare('INSERT OR IGNORE INTO company_presets (preset_code, field_key, field_value) VALUES (?, ?, ?)');
+    for (const r of companyFieldRows) ins.run('ISP', r.key, r.value);
+    for (const r of companyFieldRows) {
+      const v = (ASP_DEFAULTS[r.key] !== undefined) ? ASP_DEFAULTS[r.key] : '';
+      ins.run('ASP', r.key, v);
+    }
+  }
+}
+
+function getActivePresetCode(db) {
+  ensurePresetsInitialized(db);
+  const r = db.prepare(
+    "SELECT value FROM company_preset_meta WHERE key = 'active_preset_code'"
+  ).get();
+  return (r && r.value) || 'ISP';
+}
+
+function setActivePresetCode(db, code) {
+  ensurePresetsInitialized(db);
+  if (code !== 'ISP' && code !== 'ASP') throw new Error('Invalid preset code: ' + code);
+  // UPSERT the meta row in case the UPDATE affects 0 rows (meta row missing)
+  const existing = db.prepare("SELECT value FROM company_preset_meta WHERE key = 'active_preset_code'").get();
+  if (existing) {
+    db.prepare("UPDATE company_preset_meta SET value = ? WHERE key = 'active_preset_code'").run(code);
+  } else {
+    db.prepare("INSERT INTO company_preset_meta (key, value) VALUES ('active_preset_code', ?)").run(code);
+  }
+  // NOTE: Previously we ALSO mirrored the preset's values into
+  // company_settings here. Removed — that corrupted ISP invoice output
+  // when ASP preset was active (PDFs read short_name/pan/cin and got
+  // ASP values even for TN/ISP invoices). Identity fields are now stored
+  // stably: ISP in company_settings, ASP in s_* keys.
+}
+
+function getPreset(db, code) {
+  ensurePresetsInitialized(db);
+  const rows = db.prepare(
+    'SELECT field_key, field_value FROM company_presets WHERE preset_code = ?'
+  ).all(code);
+  const obj = {};
+  for (const r of rows) obj[r.field_key] = r.field_value;
+  return obj;
+}
+
+function getAllPresets(db) {
+  ensurePresetsInitialized(db);
+  return {
+    ISP:    getPreset(db, 'ISP'),
+    ASP:    getPreset(db, 'ASP'),
+    active: getActivePresetCode(db),
+  };
+}
+
+function savePreset(db, code, values) {
+  ensurePresetsInitialized(db);
+  if (code !== 'ISP' && code !== 'ASP') throw new Error('Invalid preset code: ' + code);
+  const ins = db.prepare(
+    'INSERT OR REPLACE INTO company_presets (preset_code, field_key, field_value) VALUES (?, ?, ?)'
+  );
+  for (const [k, v] of Object.entries(values || {})) {
+    ins.run(code, k, String(v ?? ''));
+  }
+  // If this is the ISP preset, also mirror into company_settings since
+  // that's where downstream code (effectiveCompany, invoice PDFs) reads
+  // ISP identity from. ASP preset edits never touch company_settings —
+  // ASP lives in the s_* keys, which are edited separately via the
+  // Sister Company tab.
+  if (code === 'ISP') {
+    const syncUpd = db.prepare('UPDATE company_settings SET value = ? WHERE key = ?');
+    for (const [k, v] of Object.entries(values || {})) {
+      syncUpd.run(String(v ?? ''), k);
+    }
+  }
 }
 
 function getGSTRates(db) {
@@ -279,4 +503,4 @@ function getGSTRates(db) {
   return { cgst: g / 2, sgst: g / 2, igst: g, service: getSettingNum(db, 'gst_service'), tcs: getSettingNum(db, 'tcs_tds') };
 }
 
-module.exports = { DEFAULTS, CATEGORIES, initCompanySettings, getSetting, getSettingBool, getSettingNum, getAllSettings, updateSettings, getSettingsFlat, getGSTRates };
+module.exports = { DEFAULTS, CATEGORIES, initCompanySettings, getSetting, getSettingBool, getSettingNum, getAllSettings, updateSettings, getSettingsFlat, getGSTRates, getActivePresetCode, setActivePresetCode, getPreset, getAllPresets, savePreset };

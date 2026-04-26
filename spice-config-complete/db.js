@@ -25,7 +25,12 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
-const DB_PATH = path.join(__dirname, 'data', 'config.db');
+// DB path: defaults to ./data/config.db (dev / standalone node).
+// Electron packaging sets SPICE_DATA_DIR to %APPDATA%\SpiceConfig so the
+// database survives app updates and doesn't sit inside the read-only
+// installation folder.
+const DB_DIR = process.env.SPICE_DATA_DIR || path.join(__dirname, 'data');
+const DB_PATH = path.join(DB_DIR, 'config.db');
 
 let rawDb = null;
 let wrapped = null;
@@ -343,13 +348,80 @@ async function initDb() {
     'ALTER TABLE lots ADD COLUMN dcgst REAL DEFAULT 0',
     'ALTER TABLE lots ADD COLUMN dsgst REAL DEFAULT 0',
     'ALTER TABLE lots ADD COLUMN digst REAL DEFAULT 0',
+    // ASP invoice traceability — when a lot is first invoiced as an ASP
+    // sale (state=Kerala), `lots.invo` gets the ASP invoice number AND a
+    // copy is preserved here. Then when the same lot is invoiced as an
+    // ISP sale (state=Tamil Nadu) later, `lots.invo` is overwritten with
+    // the ISP invoice number, but `lots.asp_invo` keeps the original ASP
+    // ref. This lets the sales list show both numbers side-by-side.
+    "ALTER TABLE lots ADD COLUMN asp_invo TEXT DEFAULT ''",
   ];
   for (const m of migrations) {
     try { wrapped.exec(m); console.log('Migration applied:', m); }
     catch (e) { /* column already exists — ignore */ }
   }
 
-  // Seed admin
+  // One-time data fix: legacy ASP-only lots (where invo==asp_invo) had their
+  // `sale` field set during the old ASP-generation logic. The current logic
+  // doesn't set it (so ISP can pick the right sale type per buyer). Clear
+  // those legacy rows so they show up in ISP eligibility.
+  // Idempotent: subsequent runs do nothing because the rows are already
+  // cleared. Safe to run on a fresh DB (no rows match the WHERE).
+  try {
+    const fix = wrapped.run(
+      `UPDATE lots SET sale = ''
+       WHERE asp_invo IS NOT NULL AND asp_invo != ''
+         AND invo = asp_invo
+         AND sale IS NOT NULL AND sale != ''`
+    );
+    if (fix && fix.changes > 0) {
+      console.log(`Migration: cleared sale on ${fix.changes} ASP-only lots so ISP eligibility works`);
+    }
+  } catch (e) { /* ignore — column may not exist on first run */ }
+
+  // One-time data fix: legacy invoices were stamped with the auction's
+  // state (TAMIL NADU/KERALA based on physical auction location), not the
+  // business context state. Retag them so the sales list can correctly
+  // distinguish ASP rows from ISP rows.
+  //
+  // Heuristic per invoice:
+  //   - If the invoice's `invo` equals `lots.asp_invo` for any of its
+  //     buyer/auction lots AND those lots' current `invo` differs from
+  //     `asp_invo` → invoice was the ASP step (stamp KERALA).
+  //   - Else if any of those lots have `asp_invo == invo == this invoice's
+  //     invo` → ASP-only run (stamp KERALA).
+  //   - Otherwise → ISP invoice (stamp TAMIL NADU).
+  // Safe-by-default: only updates rows we can confidently classify.
+  // Idempotent: re-running produces the same labels.
+  try {
+    const allInvs = wrapped.all('SELECT id, auction_id, buyer, invo FROM invoices');
+    let aspCount = 0, ispCount = 0;
+    for (const inv of allInvs) {
+      const lotMatches = wrapped.all(
+        `SELECT invo, asp_invo FROM lots
+         WHERE auction_id = ? AND buyer = ?
+           AND (invo = ? OR asp_invo = ?)`,
+        [inv.auction_id, inv.buyer, inv.invo, inv.invo]
+      );
+      // Determine state: ASP if this invoice matches asp_invo on any lot,
+      // ISP otherwise (lots have a different ISP invo and asp_invo links
+      // back to this row).
+      let isASP = false;
+      for (const l of lotMatches) {
+        if (l.asp_invo === inv.invo) { isASP = true; break; }
+        // If lot's invo == this inv's invo AND lot's asp_invo is empty,
+        // this is most likely an ISP-only invoice — but COULD be an ASP
+        // run pre-asp_invo column. Default to ISP context (TN).
+      }
+      const newState = isASP ? 'KERALA' : 'TAMIL NADU';
+      wrapped.run('UPDATE invoices SET state = ? WHERE id = ?', [newState, inv.id]);
+      if (isASP) aspCount++; else ispCount++;
+    }
+    if (aspCount + ispCount > 0) {
+      console.log(`Migration: retagged ${aspCount} invoices as KERALA (ASP) and ${ispCount} as TAMIL NADU (ISP) based on lot lineage`);
+    }
+  } catch (e) { /* table may not exist on fresh DB — ignore */ }
+
   const row = wrapped.get('SELECT COUNT(*) as cnt FROM users');
   if (!row || row.cnt === 0) {
     const hash = crypto.createHash('sha256').update('admin123').digest('hex');

@@ -321,10 +321,86 @@ async function exportPurchaseJournal(db, fromDate, toDate, type) {
   return createExcelBuffer(name, cols, rows);
 }
 
+// ── Export: Praman CSV (Lot Slip in Praman auction platform format) ──
+// Produces a CSV (NOT xlsx) matching the column layout required by Praman's
+// lot-upload interface. Returns a Buffer of CSV text.
+//
+// Special rule (item #9): Grade 1 lots → Lot Company = 'ASP' on the CSV
+// output only (doesn't change stored data). All other grades → 'ISPL'.
+// Rationale: Grade 1 (pooler) lots are routed to ASP for tax/accounting
+// reasons, but they still appear as ISPL lots in the local DB.
+async function exportPramanCSV(db, auctionId, state) {
+  const rows = db.all(
+    `SELECT lot_no, branch, grade, name, cr, qty, litre, bags, tel
+     FROM lots WHERE auction_id = ? ${state ? 'AND state = ?' : ''}
+     ORDER BY CAST(lot_no AS INTEGER), lot_no`,
+    state ? [auctionId, state] : [auctionId]
+  );
+
+  const header = [
+    'Lot Number', 'Lot Company', 'Collection Centre', 'Planter/Dealer',
+    'Planter Name', 'CRNO/SBL No', 'Quantity(Kg)', 'Litre Weight(Gms)',
+    'Bags', 'Grade Type', 'Grade', 'Reserved Price', 'Auction Start Price(Rs)',
+    'Immature Seeds(%)', 'Moisture Content(%)', 'Planter Mobile Number',
+    'Youtube Video Link'
+  ];
+
+  // Escape a CSV field: wrap in quotes if it contains comma/quote/newline,
+  // and double-up any embedded quotes. Undefined/null → empty.
+  const csvEscape = (v) => {
+    if (v === null || v === undefined) return '';
+    const s = String(v);
+    if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+    return s;
+  };
+
+  const lines = [header.join(',')];
+  for (const r of rows) {
+    // Grade 1 → ASP (intra-company transfer rule); else → ISPL
+    const gradeStr = String(r.grade || '').trim();
+    const lotCompany = (gradeStr === '1') ? 'ASP' : 'ISPL';
+
+    // Planter/Dealer: 1 = Planter, 2 = Dealer — inferred from CR field.
+    // CR starting with a state code (numeric 2-digit prefix) → GSTIN holder
+    // → Dealer (2). Otherwise "CR." prefix or empty → Planter (1).
+    const crStr = String(r.cr || '').trim();
+    const isDealer = /^\d{2}/.test(crStr);
+    const planterDealer = isDealer ? 2 : 1;
+
+    // CRNO/SBL: Planter = "CR.", Dealer = the GSTIN itself
+    const crnoSbl = isDealer ? crStr : 'CR.';
+
+    lines.push([
+      r.lot_no || '',
+      lotCompany,
+      r.branch || '',
+      planterDealer,
+      r.name || '',
+      crnoSbl,
+      r.qty || '',
+      r.litre || '',
+      r.bags || '',
+      '', // Grade Type (not captured — blank as per sample)
+      '', // Grade (Praman's own grade codes, not ours — blank)
+      '', // Reserved Price (blank)
+      '', // Auction Start Price (blank)
+      '', // Immature Seeds (blank)
+      '', // Moisture Content (blank)
+      r.tel || '',
+      '', // Youtube link (blank)
+    ].map(csvEscape).join(','));
+  }
+
+  // CSV text → Buffer. Prefix with BOM so Excel on Windows opens with
+  // UTF-8 correctly (otherwise accented characters break).
+  return Buffer.from('\uFEFF' + lines.join('\r\n'), 'utf8');
+}
+
 // ── Export router ────────────────────────────────────────────
 const EXPORT_TYPES = {
   lot_slip:       { fn: exportLotSlip,       name: 'LotSlip' },
   lot_slip_after: { fn: exportLotSlipAfter,  name: 'LotSlipAfter' },
+  praman_csv:     { fn: exportPramanCSV,     name: 'PramanLotSlip', ext: 'csv', mime: 'text/csv' },
   price_list:     { fn: exportPriceList,     name: 'PriceList' },
   bank_payment:   { fn: exportBankPayment,   name: 'BankPayment', needsCfg: true },
   pooler_register:{ fn: exportPoolerRegister,name: 'PoolerRegister' },
@@ -338,7 +414,7 @@ const EXPORT_TYPES = {
 
 module.exports = {
   EXPORT_TYPES,
-  exportLotSlip, exportLotSlipAfter, exportPriceList, exportBankPayment,
+  exportLotSlip, exportLotSlipAfter, exportPramanCSV, exportPriceList, exportBankPayment,
   exportPoolerRegister, exportFullFile, exportCollection, exportDealerList,
   exportSalesTaxes, exportPaymentSummary, exportTDSReturn, exportTallyPurchase,
   exportSalesJournal, exportPurchaseJournal,

@@ -1159,7 +1159,7 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
         <h2>Lot Data <span style="font-weight:400;font-size:12px;color:var(--text3)">Select an auction from Auctions tab first</span></h2>
         <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
           <select id="lot-auction" onchange="loadLots()" style="padding:6px;border:1px solid var(--border);border-radius:6px"></select>
-          <button class="btn btn-o" onclick="loadLots()" title="Reload the lots table from the server">🔄 Refresh</button>
+          <button class="btn btn-o" onclick="refreshLots(this)" title="Reload the lots table from the server">🔄 Refresh</button>
           <button class="btn btn-a" id="btn-calculate-all" onclick="calculateAll()">Calculate All</button>
           <button class="btn btn-o" onclick="validateLots()">Validate</button>
           <button class="btn btn-g" style="margin-left:auto" onclick="showModal('price-import-modal')">📥 Price Import</button>
@@ -1180,11 +1180,16 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
           <!-- Selection + print group — visually separated by a divider -->
           <span style="width:1px;height:24px;background:var(--border);margin:0 2px"></span>
           <button class="btn" style="height:36px;padding:0 14px;background:var(--spice-saffron);color:#fff" onclick="printSelectedInvoices()" title="Print all ticked invoices">🖨 Print Selected</button>
+          <!-- ASP-only: Print Selected Purchase (mirror PDFs of ticked rows
+               from the ISPL/buyer perspective). Hidden entirely outside ASP
+               context to avoid confusion in TN mode. Visibility is toggled
+               by applyAspContextVisibility() at load time + on state switch. -->
+          <button id="btn-print-asp-purchase" class="btn" style="display:none;height:36px;padding:0 14px;background:var(--spice-cardamom);color:#fff" onclick="printSelectedPurchaseFromInvoices()" title="Print purchase-side mirror PDF for all ticked invoices (ASP context only)">🖨 Print Selected Purchase</button>
           <!-- Destructive actions — pushed to the right -->
           <button class="btn" style="height:36px;padding:0 12px;background:var(--spice-turmeric);color:#fff;margin-left:auto" onclick="revertAllInvoices()" title="Revert all invoices — deletes them and re-enables lots for re-invoicing">⟲ Revert All</button>
           <button class="btn" style="height:36px;padding:0 12px;background:#c0392b;color:#fff" onclick="deleteAll('invoices','Invoices')" title="Permanently delete all invoices">🗑 Delete All</button>
         </div>
-        <div style="overflow-x:auto"><table><thead><tr><th style="width:32px"></th><th>Sale</th><th>Inv#</th><th>Buyer</th><th>Qty</th><th>Amount</th><th>CGST</th><th>SGST</th><th>IGST</th><th>Total</th><th>Actions</th></tr></thead><tbody id="invoices-list"></tbody></table></div>
+        <div style="overflow-x:auto"><table><thead><tr><th style="width:32px"></th><th>Sale</th><th>Inv#</th><th>ASP Inv#</th><th>Buyer</th><th>Qty</th><th>Amount</th><th>CGST</th><th>SGST</th><th>IGST</th><th>Total</th><th>Actions</th></tr></thead><tbody id="invoices-list"></tbody></table></div>
       </div>
     </div>
 
@@ -1192,13 +1197,15 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
     <div class="tc" id="tc-purchases">
       <div class="card">
         <h2>Purchase Invoices</h2>
-        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
           <select id="pur-auction" onchange="loadPurchases();loadPurEligibleSellers()" style="padding:6px;border:1px solid var(--border);border-radius:6px"></select>
           <button class="btn btn-g" onclick="openGenPurModal()">+ Generate Purchase Invoice</button>
           <button class="btn btn-a" onclick="openGenAllModal('purchases')">⚡ Generate for All Dealers</button>
+          <div style="width:1px;height:24px;background:var(--border)"></div>
+          <button class="btn" style="height:36px;padding:0 14px;background:var(--spice-saffron);color:#fff" onclick="printSelectedPurchases()" title="Print all ticked purchase invoices">🖨 Print Selected</button>
           <button class="btn" style="background:#c0392b;color:#fff;margin-left:auto" onclick="deleteAll('purchases','Purchase Invoices')">Delete All</button>
         </div>
-        <div style="overflow-x:auto"><table><thead><tr><th>Inv#</th><th>Name</th><th>Qty</th><th>Amount</th><th>CGST</th><th>SGST</th><th>IGST</th><th>TDS</th><th>Total</th><th>Actions</th></tr></thead><tbody id="purchases-list"></tbody></table></div>
+        <div style="overflow-x:auto"><table><thead><tr><th style="width:32px"></th><th>Inv#</th><th>Name</th><th>Qty</th><th>Amount</th><th>CGST</th><th>SGST</th><th>IGST</th><th>TDS</th><th>Total</th><th>Actions</th></tr></thead><tbody id="purchases-list"></tbody></table></div>
       </div>
     </div>
 
@@ -1273,13 +1280,15 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
     <div class="tc" id="tc-bills">
       <div class="card">
         <h2>Bills of Supply <span style="font-weight:400;font-size:12px;color:var(--text3)">For agriculturist sellers without GSTIN</span></h2>
-        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
           <select id="bill-auction" onchange="loadBills();loadEligibleSellers()" style="padding:6px;border:1px solid var(--border);border-radius:6px"></select>
           <button class="btn btn-g" onclick="showModal('gen-bill-modal')">+ Generate Bill</button>
           <button class="btn btn-a" onclick="openGenAllModal('bills')">⚡ Generate for All Agri Sellers</button>
+          <div style="width:1px;height:24px;background:var(--border)"></div>
+          <button class="btn" style="height:36px;padding:0 14px;background:var(--spice-saffron);color:#fff" onclick="printSelectedBills()" title="Print all ticked bills">🖨 Print Selected</button>
           <button class="btn" style="background:#c0392b;color:#fff;margin-left:auto" onclick="deleteAll('bills','Bills of Supply')">Delete All</button>
         </div>
-        <div style="overflow-x:auto"><table><thead><tr><th>Bill#</th><th>Date</th><th>Name</th><th>Place</th><th>Qty</th><th>Cost</th><th>Net</th><th>Actions</th></tr></thead><tbody id="bills-list"></tbody></table></div>
+        <div style="overflow-x:auto"><table><thead><tr><th style="width:32px"></th><th>Bill#</th><th>Date</th><th>Name</th><th>Place</th><th>Qty</th><th>Cost</th><th>Net</th><th>Actions</th></tr></thead><tbody id="bills-list"></tbody></table></div>
       </div>
     </div>
 
@@ -1346,8 +1355,14 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
     <div class="fg"><label>State</label><input id="t-pstate"></div>
     <div class="fg"><label>State Code</label><input id="t-pstcode"></div>
     <div class="fg"><label>PIN</label><input id="t-pin"></div>
-    <div class="fg"><label>Account No</label><input id="t-acctnum"></div>
-    <div class="fg"><label>IFSC</label><input id="t-ifsc"></div>
+  </div>
+  <div style="margin-top:14px;border:1px solid var(--spice-line);border-radius:8px;padding:10px 14px;background:var(--spice-cream)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div style="font-weight:600;font-size:13px;color:var(--spice-text-main)">🏦 Bank Accounts</div>
+      <button type="button" class="btn btn-a" onclick="addBankRow()" style="padding:4px 10px;font-size:12px">+ Add Bank</button>
+    </div>
+    <div id="t-banks-container" style="display:flex;flex-direction:column;gap:8px"></div>
+    <div style="font-size:11px;color:var(--text3);margin-top:6px">Add one or more bank accounts. The first bank is used as the default on purchase invoices.</div>
   </div>
   <div class="actions"><button class="btn btn-o" onclick="hideModal('trader-modal')">Cancel</button><button class="btn btn-g" id="trader-save-btn" onclick="saveTrader()">Save</button></div>
 </div></div>
@@ -1846,15 +1861,28 @@ async function withBusy(btn, fn){
   }
 }
 // Full-screen overlay for heavy ops. Returns a close function.
+// Overlay state — only ONE overlay can exist at a time. New overlays
+// always replace any stale prior overlay, and we keep a global hide
+// reference so the previous overlay's owner can no longer affect us.
+let _busyHide = null;
 function showBusy(message){
-  const existing = document.getElementById('busy-overlay');
-  if (existing) existing.remove();
+  // Aggressively clear any prior overlay — both via the saved hide ref
+  // AND by removing stray DOM nodes (defensive against double-creation).
+  if (_busyHide) { try { _busyHide(); } catch(_) {} _busyHide = null; }
+  document.querySelectorAll('#busy-overlay, .busy-overlay').forEach(n => n.remove());
   const el = document.createElement('div');
   el.id = 'busy-overlay';
   el.className = 'busy-overlay';
   el.innerHTML = `<div class="busy-card"><div class="spinner"></div><div class="msg">${esc(message||'Working…')}</div></div>`;
   document.body.appendChild(el);
-  return () => { el.remove(); };
+  const hide = () => {
+    // Remove THIS overlay (by reference) AND any stragglers (defensive)
+    if (el.parentNode) el.remove();
+    document.querySelectorAll('#busy-overlay, .busy-overlay').forEach(n => n.remove());
+    if (_busyHide === hide) _busyHide = null;
+  };
+  _busyHide = hide;
+  return hide;
 }
 // Wrap any async op in an overlay. Usage: await withOverlay('Generating PDF…', () => ...)
 async function withOverlay(message, fn){
@@ -2754,6 +2782,10 @@ function applyLogoBadge(){
   if(el && el.getAttribute('src') !== src){
     el.src = src;
   }
+  // Cascade: anything keyed off ASP context (e.g. the "Print Selected
+  // Purchase" button on the Sales tab) gets a visibility refresh here so
+  // there's a single place that needs to fire on logo/state changes.
+  applyAspContextVisibility();
 }
 async function loadSettings(){
   const root=document.getElementById('settings-root');
@@ -2761,6 +2793,10 @@ async function loadSettings(){
   try{
     const d=await j('/api/company-settings');
     _cats=d.categories||{};_sdata=d.settings||{};
+    // Load presets (ISP/ASP snapshots of company-category fields). Best-effort
+    // — if the endpoint is unavailable (old server), _presets stays empty
+    // and the Company tab falls back to plain editing.
+    await loadPresets();
     // Company and Sister Company fields are edited INDEPENDENTLY in Settings.
     // No mutation on load — at read time (invoices, exports, PDFs),
     // effectiveCompany() picks the right set based on state + mode.
@@ -2837,6 +2873,19 @@ function isCategoryHiddenByMode(catKey){
   return (_MODE_HIDE_CATS[m] || []).includes(catKey);
 }
 
+// Show/hide the "Print Selected Purchase" button in the Sales tab toolbar
+// based on whether we're in ASP context (Kerala + e-Trade). The button
+// produces purchase-side mirror PDFs which only make sense when the
+// active selling company is ASP.
+function applyAspContextVisibility(){
+  const btn = document.getElementById('btn-print-asp-purchase');
+  if (!btn) return;
+  const mode  = getCurrentBusinessMode();
+  const state = String(getCurrentBusinessState() || '').toUpperCase();
+  const isASP = (mode === 'e-Trade' && state === 'KERALA');
+  btn.style.display = isASP ? '' : 'none';
+}
+
 function isFieldHiddenByMode(fieldKey){
   const m = getCurrentBusinessMode();
   return (_MODE_HIDE_KEYS[m] || []).includes(fieldKey);
@@ -2866,8 +2915,51 @@ async function applyStateToCompanyProfile(state){
   } catch (e) {
     console.error('Failed to persist state change:', e);
   }
-  // No mutation — Company and Sister fields are edited independently.
-  // PDFs and exports pick the right set at read time via effectiveCompany().
+
+  // 2. Auto-flip the active Company preset to match the state:
+  //    TAMIL NADU → ISP preset, KERALA → ASP preset.
+  const targetPreset = String(state || '').toUpperCase() === 'KERALA' ? 'ASP' : 'ISP';
+  if (_presets && _presets.active && _presets.active !== targetPreset) {
+    try {
+      await j('/api/company-presets/active', {
+        method: 'PUT',
+        body: JSON.stringify({ code: targetPreset })
+      });
+      await loadPresets();
+      const freshValues = _presets[targetPreset] || {};
+      for (const [k, v] of Object.entries(freshValues)) {
+        updateSdataField(k, v);
+      }
+    } catch (e) {
+      console.error('Failed to auto-switch preset on state change:', e);
+    }
+  }
+
+  // 3. Auto-toggle "Show Dispatch Address" + "Show Ship To Address" flags.
+  // Rationale: in TN/ISP context, invoices typically need both blocks
+  // (external customer billing). In KL/ASP context, internal transfer
+  // invoices don't need them — keeps the PDF cleaner.
+  // The user can still manually re-enable from Settings → Flags after
+  // state switch if a specific invoice needs them.
+  const isKerala = String(state || '').toUpperCase() === 'KERALA';
+  const desiredFlagValue = isKerala ? 'false' : 'true';
+  const flagsToToggle = ['flag_dispatch', 'flag_ship'];
+  try {
+    const flagSettings = {};
+    for (const k of flagsToToggle) flagSettings[k] = desiredFlagValue;
+    await j('/api/company-settings', {
+      method: 'PUT',
+      body: JSON.stringify({ settings: flagSettings })
+    });
+    // Reflect in client-side _sdata so the Flags panel shows the new
+    // state immediately if the user navigates there
+    for (const k of flagsToToggle) updateSdataField(k, desiredFlagValue);
+    toast(isKerala
+      ? 'Switched to Kerala — Dispatch/Ship-to addresses hidden in PDFs'
+      : 'Switched to Tamil Nadu — Dispatch/Ship-to addresses shown in PDFs');
+  } catch (e) {
+    console.error('Failed to auto-toggle dispatch/ship flags:', e);
+  }
 }
 
 function renderSettingsNav(){
@@ -2956,7 +3048,27 @@ function renderSettingsPanel(){
   }else{
     // Company and Sister Company categories get a logo upload widget on top
     if (ck === 'company') {
-      html += logoUploadWidget('ispl', 'Company Logo (ISPL)');
+      // Logo widget shows the ACTIVE preset's logo (ispl for ISP, asp for ASP).
+      // Upload/remove actions operate on whichever logo matches the active
+      // preset — so uploading while on ASP replaces logo-asp.png, not ISPL.
+      const active = (_presets && _presets.active) || 'ISP';
+      const logoKey = active === 'ASP' ? 'asp' : 'ispl';
+      const logoLabel = active === 'ASP' ? 'Company Logo (ASP)' : 'Company Logo (ISPL)';
+      html += logoUploadWidget(logoKey, logoLabel);
+      // Preset banner: shows which identity (ISP or ASP) is currently
+      // being edited, plus a Save Preset button. The Logo Code dropdown
+      // inside the fields grid below flips between presets.
+      const pillColor = active === 'ASP' ? 'var(--spice-saffron)' : 'var(--green)';
+      const pillBg    = active === 'ASP' ? 'var(--spice-saffron-lt)' : 'var(--green-bg)';
+      html += `
+        <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;margin-bottom:12px;background:${pillBg};border:1px solid ${pillColor};border-radius:8px">
+          <div style="flex:1">
+            <div style="font-size:12px;color:var(--text2)">Editing preset</div>
+            <div style="font-size:16px;font-weight:700;color:${pillColor}">${active}</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:2px">Change the <strong>Logo Code</strong> dropdown below to switch between ISP and ASP identities. Each preset stores its own values.</div>
+          </div>
+          <button class="btn btn-g" onclick="saveActivePreset()" title="Save the current form values as the ${active} preset">💾 Save ${active} Preset</button>
+        </div>`;
     } else if (ck === 'sister') {
       html += logoUploadWidget('asp', 'Sister Company Logo (ASP)');
     }
@@ -2965,8 +3077,29 @@ function renderSettingsPanel(){
     html+='</div>';
   }
   document.getElementById('settings-root').innerHTML=html;
-  // After DOM paint, fetch existing logo status for preview
-  if (ck === 'company') refreshLogoPreview('ispl');
+  // Reset dirty flag on panel render so stale dirty state doesn't trigger
+  // a false "unsaved changes" warning when switching presets.
+  if (ck === 'company') {
+    _companyDirty = false;
+    // Wire input-change → dirty tracking on every field in the Company panel
+    const root = document.getElementById('settings-root');
+    if (root) {
+      root.querySelectorAll('[data-key]').forEach(el => {
+        // Only attach once; guard against double-binding
+        if (!el.dataset._dirtyBound) {
+          el.addEventListener('input', markCompanyDirty);
+          el.addEventListener('change', markCompanyDirty);
+          el.dataset._dirtyBound = '1';
+        }
+      });
+    }
+  }
+  // After DOM paint, fetch existing logo status for preview.
+  // Company tab shows the ACTIVE preset's logo (matches widget above).
+  if (ck === 'company') {
+    const active = (_presets && _presets.active) || 'ISP';
+    refreshLogoPreview(active === 'ASP' ? 'asp' : 'ispl');
+  }
   else if (ck === 'sister') refreshLogoPreview('asp');
 }
 
@@ -3102,10 +3235,39 @@ async function onBusinessStateChanged(newState){
     }
   }
 
+  // Auto-recalculate lots after the state flip. Calculations depend on
+  // the active business state — CGST/SGST/IGST split changes between
+  // intra and inter-state, and prate/puramt depend on company-level
+  // settings that may be picked up from a different preset. Without a
+  // recalc, stale puramt values from the previous state would persist
+  // into invoice PDFs.
+  // Done as a fire-and-forget call; failures are logged but don't
+  // block the rest of the state-change flow.
+  try {
+    const r = await j('/api/lots/calculate-all', { method: 'POST' });
+    if (r && r.calculated > 0) {
+      toast(`Recalculated ${r.calculated} lots for ${newState}`);
+      // If the user is viewing the Lots tab, refresh it so the new
+      // values appear immediately
+      if (typeof loadLots === 'function' && document.getElementById('lot-auction')?.value) {
+        loadLots();
+      }
+    }
+  } catch (e) {
+    console.error('Auto-recalc on state change failed:', e);
+    // Non-fatal — user can still hit Calculate All manually
+  }
+
   // If the user is currently viewing the Company tab, re-render so they see the new values
   if (_activeCat === 'company' || _activeCat === 'mode') renderSettingsPanel();
   // Logo code may have flipped (ASP ↔ ISP)
   applyLogoBadge();
+  // Refresh invoice list — the listing now filters by business state, so
+  // the visible rows change when state flips. Only refreshes if the user
+  // is currently looking at Sales Invoices tab (avoids unnecessary calls).
+  if (typeof loadInvoices === 'function' && document.getElementById('inv-auction')) {
+    try { await loadInvoices(); } catch (_) {}
+  }
   toast(`State: ${newState} · Logo: ${newState==='TAMIL NADU'?'ISP':'ASP'}`);
 }
 function renderSettings(){renderSettingsNav();renderSettingsPanel()}
@@ -3132,9 +3294,157 @@ const FIELD_HELP = {
   tcs_tds:         'TDS / TCS percentage applied on eligible invoices for tax compliance.',
 };
 function fld(f){
+  // Logo Code: special-case as a dropdown (ISP/ASP) with auto-fill behavior.
+  //   'logo'   → Company category (primary)  → ISPL defaults
+  //   's_logo' → Sister Company category    → ASP  defaults
+  // On change, overwrites company fields with hardcoded ISPL/ASP defaults so
+  // dad can switch identity without typing everything again.
+  if (f.key === 'logo' || f.key === 's_logo') {
+    const tip = FIELD_HELP[f.key] ? helpTip(FIELD_HELP[f.key]) : '';
+    const v = f.value || (f.key === 's_logo' ? 'ASP' : 'ISP');
+    // onchange fires the preset-switch handler; stop-propagation prevents
+    // the dirty-tracking listener from interpreting the switch itself as
+    // an edit (the switch is its own flow with its own save-or-discard).
+    return `<div class="fg"><label>${esc(f.label)}${tip}</label>
+      <select data-key="${f.key}" onchange="event.stopPropagation();onLogoCodeChanged('${f.key}', this.value)">
+        <option value="ISP"${v==='ISP'?' selected':''}>ISP (Ideal Spices Private Limited)</option>
+        <option value="ASP"${v==='ASP'?' selected':''}>ASP (Amazing Spice Park Private Limited)</option>
+      </select></div>`;
+  }
   const t = f.field_type === 'number' ? 'number' : f.field_type === 'date' ? 'date' : 'text';
   const tip = FIELD_HELP[f.key] ? helpTip(FIELD_HELP[f.key]) : '';
   return `<div class="fg"><label>${esc(f.label)}${tip}</label><input type="${t}" data-key="${f.key}" value="${esc(f.value)}"${t==='number'?' step="any"':''}></div>`;
+}
+
+// ── Company identity presets (ISP / ASP) ────────────────────────────
+// The server stores two named snapshots of the company-category fields
+// (logo, trade_name, short_name, pan, cin, fssai, sbl, legal_name).
+// Dad edits each one independently and flips between them via the Logo
+// Code dropdown. The active preset's values overlay onto the flat
+// settings object so invoice generators keep reading cfg.logo etc.
+//
+// Client state:
+//   _presets.ISP, _presets.ASP = { field_key: value, ... } for each
+//   _presets.active             = 'ISP' or 'ASP' (whichever is currently in use)
+//   _companyDirty               = tracks unsaved edits on the Company tab
+let _presets = { ISP: {}, ASP: {}, active: 'ISP' };
+let _companyDirty = false;
+
+// Fetch presets from the server on settings load; called from loadSettings().
+async function loadPresets(){
+  try { _presets = await j('/api/company-presets'); }
+  catch(e) { console.warn('Presets API unavailable:', e.message); _presets = { ISP:{}, ASP:{}, active:'ISP' }; }
+}
+
+// Mark the Company tab as having unsaved edits. Attached to `input` events
+// on the Company panel after render (see renderSettingsPanel hook below).
+function markCompanyDirty(){ _companyDirty = true; }
+
+// Triggered when the user changes the Logo Code dropdown. Implements the
+// flow we designed together: warn on unsaved edits, save or discard per
+// user choice, flip active preset on the server, then re-render with
+// the other preset's values.
+//
+// Diagnostic console.log at each step so "not working" reports can be
+// traced by viewing DevTools console.
+async function onLogoCodeChanged(fieldKey, newCode){
+  console.log('[preset] onLogoCodeChanged', { fieldKey, newCode, currentActive: _presets.active, dirty: _companyDirty });
+
+  // s_logo dropdown = Sister tab (handled separately — preset system
+  // only covers the primary Company tab for now). Just save it inline.
+  if (fieldKey === 's_logo') {
+    updateSdataField(fieldKey, newCode);
+    return;
+  }
+
+  // Intentionally NOT early-returning on newCode === currentActive. State
+  // can drift (e.g. server/client out of sync); always attempt the flip
+  // and let the server respond.
+
+  // If there are unsaved edits, ask what to do with them
+  const currentCode = _presets.active;
+  if (_companyDirty && currentCode) {
+    const choice = confirm(
+      `You have unsaved changes to the ${currentCode} preset.\n\n` +
+      `Click OK to SAVE changes to ${currentCode}, then switch to ${newCode}.\n` +
+      `Click Cancel to DISCARD your ${currentCode} edits and switch to ${newCode}.`
+    );
+    if (choice) {
+      try {
+        // Before saving, temporarily set the dropdown back to the OLD code
+        // so captureCurrentPanel doesn't write the new code into the old preset.
+        const sel = document.querySelector('select[data-key="logo"]');
+        if (sel) sel.value = currentCode;
+        await saveActivePreset(/*silent=*/true);
+        // Restore dropdown to new code before proceeding
+        if (sel) sel.value = newCode;
+      } catch (e) {
+        console.error('[preset] pre-switch save failed', e);
+        showError(e);
+        return;
+      }
+    }
+    _companyDirty = false;
+  }
+
+  // Switch active preset on the server
+  console.log('[preset] PUT /api/company-presets/active', { code: newCode });
+  try {
+    const r = await j('/api/company-presets/active', {
+      method: 'PUT',
+      body: JSON.stringify({ code: newCode })
+    });
+    console.log('[preset] server responded', r);
+  } catch (e) {
+    console.error('[preset] server switch failed', e);
+    const sel = document.querySelector('select[data-key="logo"]');
+    if (sel) sel.value = currentCode || 'ISP';
+    const serverMsg = (e && e.body && e.body.error) ? e.body.error : (e.message || String(e));
+    showError(`Preset switch failed: ${serverMsg}`);
+    return;
+  }
+
+  // Reload presets and push values into _sdata
+  await loadPresets();
+  console.log('[preset] after reload', { active: _presets.active, ispKeys: Object.keys(_presets.ISP||{}), aspKeys: Object.keys(_presets.ASP||{}) });
+
+  const freshValues = _presets[newCode] || {};
+  for (const [k, v] of Object.entries(freshValues)) {
+    updateSdataField(k, v);
+  }
+
+  // Re-render the Company panel if it's currently active
+  if (_activeCat === 'company') renderSettingsPanel();
+  applyLogoBadge();
+  toast(`Switched to ${newCode} preset`);
+}
+
+// Save the currently-visible Company tab values into the ACTIVE preset.
+// Called from the new "Save {ACTIVE} Preset" button in the Company panel.
+async function saveActivePreset(silent){
+  // Capture current panel inputs → _sdata
+  captureCurrentPanel();
+  // Extract only the company-category fields for this preset
+  const companyFields = (_sdata.company || []);
+  const values = {};
+  for (const f of companyFields) values[f.key] = f.value;
+  const code = _presets.active;
+  await j(`/api/company-presets/${code}`, {
+    method: 'PUT',
+    body: JSON.stringify({ values })
+  });
+  _presets[code] = values;
+  _companyDirty = false;
+  if (!silent) toast(`${code} preset saved`);
+}
+
+// Helper: update a value in _sdata across all categories so saveSettings
+// picks up the change even if the field isn't currently on-screen.
+function updateSdataField(key, value) {
+  for (const cat of Object.keys(_sdata)) {
+    const f = (_sdata[cat] || []).find(x => x.key === key);
+    if (f) { f.value = value; return; }
+  }
 }
 async function saveSettings(){
   // Capture what's currently on-screen, then flatten ALL categories
@@ -3151,10 +3461,12 @@ async function exportSettings(){const d=await j('/api/company-settings/export');
 async function importSettings(e){const f=e.target.files[0];if(!f)return;const t=await f.text();const s=JSON.parse(t);
   await j('/api/company-settings/import',{method:'POST',body:JSON.stringify({settings:s})});toast('Imported');loadSettings();e.target.value=''}
 
-// ── Traders ───────────────────────────────────────────────
-const T_FIELDS=['name','cr','pan','tel','aadhar','padd','ppla','pstate','pst_code','pin','acctnum','ifsc','holder_name'];
+// Traders now support MULTIPLE bank accounts via a repeating section in the
+// modal. The flat trader fields here cover everything EXCEPT banking — that's
+// collected separately from the #t-banks-container rows at save time.
+const T_FIELDS=['name','cr','pan','tel','aadhar','padd','ppla','pstate','pst_code','pin'];
 const T_IDS={name:'t-name',cr:'t-cr',pan:'t-pan',tel:'t-tel',aadhar:'t-aadhar',padd:'t-padd',ppla:'t-ppla',
-  pstate:'t-pstate',pst_code:'t-pstcode',pin:'t-pin',acctnum:'t-acctnum',ifsc:'t-ifsc',holder_name:'t-holder'};
+  pstate:'t-pstate',pst_code:'t-pstcode',pin:'t-pin'};
 
 async function searchTraders(q){const d=await j(`/api/traders?search=${encodeURIComponent(q)}&limit=100`);
   DataTable.mount('traders-list', d, {
@@ -3170,9 +3482,25 @@ async function searchTraders(q){const d=await j(`/api/traders?search=${encodeURI
           const ps = [t.ppla,t.pstate].filter(Boolean).join(' · ');
           return ps ? esc(ps) : '<span style="color:var(--text3)">—</span>';
         } },
-      { key:'_bank', label:'Bank', sort:'text',
-        value:(t)=>t.ifsc||'',
-        render:(t)=>t.ifsc?`${esc(t.ifsc)}${t.acctnum?' ·· '+String(t.acctnum).slice(-4):''}`:'<span style="color:var(--text3)">—</span>' },
+      { key:'_bank', label:'Bank(s)', sort:'text',
+        // Show ALL bank accounts for the trader (from trader_banks table).
+        // Fall back to the legacy trader.ifsc/acctnum if the banks array is
+        // empty (older records before the trader_banks split).
+        value:(t)=>{
+          const banks = (t.banks && t.banks.length) ? t.banks : (t.ifsc ? [{ifsc:t.ifsc, acctnum:t.acctnum}] : []);
+          return banks.map(b => b.ifsc || '').join(' ');
+        },
+        render:(t)=>{
+          const banks = (t.banks && t.banks.length) ? t.banks : (t.ifsc ? [{ifsc:t.ifsc, acctnum:t.acctnum, bank_name:''}] : []);
+          if (!banks.length) return '<span style="color:var(--text3)">—</span>';
+          // One pill per bank with IFSC + last-4 of account number
+          return banks.map(b => {
+            const last4 = b.acctnum ? String(b.acctnum).slice(-4) : '';
+            const display = `${esc(b.ifsc||'')}${last4?' ··'+last4:''}`;
+            const tooltip = [b.bank_name, b.ifsc, b.acctnum, b.holder_name].filter(Boolean).join(' · ');
+            return `<span title="${esc(tooltip)}" style="display:inline-block;padding:2px 8px;margin:1px 2px 1px 0;background:var(--green-bg);color:var(--green);border-radius:8px;font-size:11px;font-weight:600">${display}</span>`;
+          }).join('');
+        } },
       { key:'_actions', label:'Actions', sortable:false, searchable:false, render:(t)=>
           iconBtn('view','View details',`viewTraderDetails(${JSON.stringify(t).replace(/"/g,'&quot;')})`)
           + iconBtn('edit','Edit seller',`openTraderEdit(${JSON.stringify(t).replace(/"/g,'&quot;')})`)
@@ -3189,7 +3517,19 @@ function viewTraderDetails(t){
   html+=section('Registration',[kv('CR / GSTIN',t.cr)]);
   html+=section('Contact',[kv('Phone',t.tel)]);
   html+=section('Address',[kv('Address',t.padd),kv('Place',t.ppla),kv('PIN',t.pin),kv('State',t.pstate),kv('State Code',t.pst_code)]);
-  html+=section('Banking',[kv('Holder Name',t.holder_name),kv('IFSC',t.ifsc),kv('Account No',t.acctnum)]);
+  // Banking: show ALL bank accounts from trader_banks (or fall back to the
+  // legacy trader.ifsc/acctnum for older records).
+  const banks = (t.banks && t.banks.length)
+    ? t.banks
+    : (t.ifsc ? [{ifsc:t.ifsc, acctnum:t.acctnum, holder_name:t.holder_name, bank_name:''}] : []);
+  if (banks.length) {
+    const bankRows = banks.map((b, i) => {
+      const label = banks.length > 1 ? `Bank ${i+1}` : 'Bank';
+      const parts = [b.bank_name, b.ifsc, b.acctnum, b.holder_name].filter(Boolean).join(' · ');
+      return `<tr><td style="padding:6px 10px;color:var(--text2);font-size:12px;width:40%">${label}</td><td style="padding:6px 10px;font-size:13px">${esc(parts)||'<span style="color:var(--text3)">—</span>'}</td></tr>`;
+    }).join('');
+    html+=`<div style="margin-bottom:16px"><h3 style="font-size:13px;color:var(--green);margin:0 0 6px 0;padding-bottom:4px;border-bottom:1.5px solid var(--green-border)">Banking (${banks.length} account${banks.length>1?'s':''})</h3><table style="width:100%">${bankRows}</table></div>`;
+  }
   document.getElementById('trader-view-body').innerHTML=html||'<p style="color:var(--text3);text-align:center;padding:20px">No details available</p>';
   document.getElementById('trader-view-title').textContent=t.name||'Seller';
   document.getElementById('trader-view-edit-btn').onclick=()=>{hideModal('trader-view-modal');openTraderEdit(t)};
@@ -3200,18 +3540,105 @@ function openTraderAdd(){
   document.getElementById('trader-modal-title').textContent='Add Seller';
   document.getElementById('t-id').value='';
   T_FIELDS.forEach(f=>{const el=document.getElementById(T_IDS[f]);if(el)el.value=''});
+  // Start with a single blank bank row so the user sees the shape of the
+  // input without having to click "+ Add Bank" first. If they leave it
+  // empty, saveTrader() just drops it.
+  renderBankRows([]);
+  addBankRow();
   showModal('trader-modal');
 }
-function openTraderEdit(t){
+// Fetch the CURRENT trader + banks from the server, then render the
+// modal. We used to pass the trader object inline from the list row, but
+// that object could be stale (e.g. after adding a bank elsewhere) or
+// missing the banks array entirely (serialization edge cases with nested
+// arrays in HTML attributes). A fresh GET is the reliable source.
+async function openTraderEdit(tOrId){
+  // Accept either a trader object (legacy callers) or just an id
+  const id = (tOrId && typeof tOrId === 'object') ? tOrId.id : tOrId;
+  if (!id) { showError('No seller id'); return; }
+  let t;
+  try {
+    t = await j(`/api/traders/${id}`);
+  } catch (e) {
+    showError(e); return;
+  }
   document.getElementById('trader-modal-title').textContent='Edit Seller';
   document.getElementById('t-id').value=t.id;
   T_FIELDS.forEach(f=>{const el=document.getElementById(T_IDS[f]);if(el)el.value=t[f]||''});
+  // Prefer `banks` from the hydrated trader row; fall back to the legacy
+  // flat ifsc/acctnum (older records predate trader_banks).
+  const banks = (t.banks && t.banks.length)
+    ? t.banks
+    : (t.ifsc || t.acctnum ? [{bank_name:'', ifsc:t.ifsc||'', acctnum:t.acctnum||'', holder_name:t.holder_name||''}] : []);
+  renderBankRows(banks);
+  if (!banks.length) addBankRow(); // always show at least one blank row
   showModal('trader-modal');
 }
+
+// ── Multi-bank section ─────────────────────────────────────
+// Renders one row per bank. Each row has: Bank Name, Account No, IFSC,
+// Holder Name, Remove button. Reads/writes are done via the container's
+// .bank-row children (no per-row IDs because rows are dynamic).
+function renderBankRows(banks){
+  const c = document.getElementById('t-banks-container');
+  if (!c) return;
+  c.innerHTML = '';
+  for (const b of banks) appendBankRow(b);
+}
+function addBankRow(){ appendBankRow({}); }
+function appendBankRow(b){
+  const c = document.getElementById('t-banks-container');
+  if (!c) return;
+  const row = document.createElement('div');
+  row.className = 'bank-row';
+  row.style.cssText = 'display:grid;grid-template-columns:1.2fr 1.4fr 1fr 1.2fr auto;gap:8px;align-items:end;padding:8px;background:#fff;border:1px solid var(--border);border-radius:6px';
+  // Use fieldsets so the inputs are clearly grouped, with mini-labels.
+  row.innerHTML = `
+    <div class="fg" style="margin:0"><label style="font-size:11px">Bank Name</label><input class="bank-name" value="${esc(b.bank_name||'')}" placeholder="e.g. HDFC"></div>
+    <div class="fg" style="margin:0"><label style="font-size:11px">Account No</label><input class="bank-acctnum" value="${esc(b.acctnum||'')}"></div>
+    <div class="fg" style="margin:0"><label style="font-size:11px">IFSC</label><input class="bank-ifsc" value="${esc(b.ifsc||'')}" style="text-transform:uppercase"></div>
+    <div class="fg" style="margin:0"><label style="font-size:11px">Holder Name</label><input class="bank-holder" value="${esc(b.holder_name||'')}"></div>
+    <button type="button" class="btn btn-o" onclick="this.closest('.bank-row').remove()" title="Remove this bank" style="padding:6px 10px;font-size:12px">✕</button>
+  `;
+  c.appendChild(row);
+}
+// Collect the current bank rows into an array of {bank_name, acctnum,
+// ifsc, holder_name}. Skips rows where both acctnum and ifsc are blank
+// (treated as "never filled in").
+function collectBankRows(){
+  const c = document.getElementById('t-banks-container');
+  if (!c) return [];
+  const rows = Array.from(c.querySelectorAll('.bank-row'));
+  const banks = [];
+  for (const r of rows) {
+    const bank_name   = r.querySelector('.bank-name').value.trim();
+    const acctnum     = r.querySelector('.bank-acctnum').value.trim();
+    const ifsc        = r.querySelector('.bank-ifsc').value.trim().toUpperCase();
+    const holder_name = r.querySelector('.bank-holder').value.trim();
+    if (!acctnum && !ifsc) continue; // blank row — skip
+    banks.push({ bank_name, acctnum, ifsc, holder_name });
+  }
+  return banks;
+}
+
 async function saveTrader(){
   const id=document.getElementById('t-id').value;
-  const body={};T_FIELDS.forEach(f=>{const el=document.getElementById(T_IDS[f]);body[f]=el?el.value:''});
+  const body={};
+  T_FIELDS.forEach(f=>{const el=document.getElementById(T_IDS[f]);body[f]=el?el.value:''});
   if(!body.name){alert('Name is required');return}
+  // Banks: collect from the repeating section. The server persists these
+  // into trader_banks AND mirrors the FIRST bank back into the legacy
+  // traders.acctnum/ifsc/holder_name columns so older code paths still
+  // find a valid account (invoice gen, exports that haven't been
+  // multi-bank-aware yet).
+  body.banks = collectBankRows();
+  // Simple per-bank validation: if a bank has acctnum or ifsc, require both
+  for (const b of body.banks) {
+    if (!b.acctnum || !b.ifsc) {
+      alert('Every bank needs BOTH an Account No and an IFSC code. Leave the whole row blank to skip.');
+      return;
+    }
+  }
   try{
     const r=await fetch(B+(id?`/api/traders/${id}`:'/api/traders'),{method:id?'PUT':'POST',
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+T},body:JSON.stringify(body)});
@@ -3361,8 +3788,31 @@ async function searchBuyers(q){const d=await j(`/api/buyers?search=${encodeURICo
       { key:'ti', label:'TI', sort:'text' },
       { key:'_place', label:'Place · State', sort:'text',
         value:(b)=>[b.pla,b.state].filter(Boolean).join(' · ') },
-      { key:'sale', label:'Sale', sort:'text', render:(b)=>
-          b.sale?`<span style="display:inline-block;padding:2px 8px;background:var(--green-bg);color:var(--green);border-radius:10px;font-size:11px;font-weight:700">${saleMap[b.sale]||b.sale}</span>`:'<span style="color:var(--text3)">—</span>' },
+      { key:'sale', label:'Sale', sort:'text',
+        // Derive sale type dynamically from buyer's GSTIN state code vs the
+        // business state: same state → Local, otherwise → Inter-state.
+        //   TN (business) + GSTIN starting 33 → L
+        //   KL (business) + GSTIN starting 32 → L
+        //   anything else                     → I
+        // Stored default_sale (b.sale) is ignored in favor of live derivation.
+        value:(b)=>{
+          const gstState = String(b.gstin || '').slice(0, 2);
+          if (!gstState) return '';
+          const bizState = String(getCurrentBusinessState() || '').toUpperCase();
+          const bizCode = (bizState === 'KERALA') ? '32' : '33';
+          return (gstState === bizCode) ? 'L' : 'I';
+        },
+        render:(b)=>{
+          const gstState = String(b.gstin || '').slice(0, 2);
+          if (!gstState) return '<span style="color:var(--text3)">—</span>';
+          const bizState = String(getCurrentBusinessState() || '').toUpperCase();
+          const bizCode = (bizState === 'KERALA') ? '32' : '33';
+          const isLocal = (gstState === bizCode);
+          const label = isLocal ? 'Local' : 'Inter-state';
+          const color = isLocal ? 'var(--green)' : 'var(--spice-saffron)';
+          const bg    = isLocal ? 'var(--green-bg)' : 'var(--spice-saffron-lt)';
+          return `<span style="display:inline-block;padding:2px 8px;background:${bg};color:${color};border-radius:10px;font-size:11px;font-weight:700">${label}</span>`;
+        } },
       { key:'_actions', label:'Actions', sortable:false, searchable:false, render:(b)=>
           iconBtn('view','View details',`viewBuyerDetails(${JSON.stringify(b).replace(/"/g,'&quot;')})`)
           + iconBtn('edit','Edit buyer',`openBuyerEdit(${JSON.stringify(b).replace(/"/g,'&quot;')})`)
@@ -3858,6 +4308,45 @@ const L_IDS={lot_no:'l-lotno',name:'l-name',cr:'l-cr',branch:'l-branch',grade:'l
   litre:'l-litre',qty:'l-qty',price:'l-price',amount:'l-amount',buyer:'l-buyer',buyer1:'l-buyer1',
   code:'l-code',sale:'l-sale'};
 
+// Refresh wrapper: surfaces feedback so the user knows the click registered.
+// Root cause the button "did nothing" was: loadLots() silently bailed when
+// no auction was selected AND the visual state looked identical so users
+// couldn't tell if anything happened. Fix: visible button feedback +
+// explicit table clear before reload + clearer toast.
+async function refreshLots(btn){
+  const sel = document.getElementById('lot-auction');
+  const aid = sel && sel.value;
+  if (!aid) {
+    toast('Select an auction first');
+    return;
+  }
+  // Direct-click feedback: briefly animate the button so the user knows
+  // their click was registered, even if the resulting data looks the same.
+  const button = (btn && btn.tagName === 'BUTTON')
+    ? btn
+    : document.querySelector('button[onclick*="refreshLots"]');
+  if (button) {
+    const origText = button.textContent;
+    button.disabled = true;
+    button.textContent = '⟳ Refreshing…';
+    try {
+      // Clear the tbody so the user SEES a blank state momentarily — this
+      // makes it obvious the table is being rebuilt from scratch.
+      const tbody = document.getElementById('lots-list');
+      if (tbody) tbody.innerHTML = '<tr><td colspan="99" style="text-align:center;padding:24px;color:var(--text3)">Loading…</td></tr>';
+      await loadLots();
+      toast('Lots refreshed');
+    } catch (e) {
+      showError(e);
+    } finally {
+      button.disabled = false;
+      button.textContent = origText;
+    }
+  } else {
+    try { await loadLots(); toast('Lots refreshed'); } catch (e) { showError(e); }
+  }
+}
+
 async function loadLots(){const aid=document.getElementById('lot-auction').value;if(!aid)return;
   // Cache-buster ensures the browser actually hits the server (otherwise Refresh
   // may return stale cached JSON and nothing visibly changes)
@@ -3921,10 +4410,22 @@ async function loadLots(){const aid=document.getElementById('lot-auction').value
         iconBtn('edit','Edit lot',`openLotEdit(${JSON.stringify(l).replace(/"/g,'&quot;')})`)
         + iconBtn('del','Delete lot',`delLot(${l.id})`) }
   ];
+  // P_Qty is shown ONLY when the active Company preset is ISP. When ASP
+  // is active (Kerala / intra-company transfer), the Purchase Amount is
+  // computed directly as Qty × P_Rate — there's no sample refund — so
+  // P_Qty and Qty are always equal and the column is redundant.
+  //
+  // Tax columns (CGST/SGST/IGST) are hidden when "Discount includes GST"
+  // is OFF — in that mode they're always zero and just add noise.
+  const activePreset = (_presets && _presets.active) || 'ISP';
+  const discGst = (_sdata.flags || []).find(f => f.key === 'flag_disc_gst');
+  const discGstOn = discGst ? String(discGst.value).toLowerCase() === 'true' : false;
+  const filteredTradeCols = activePreset === 'ISP' ? tradeCols : tradeCols.filter(c => c.key !== 'pqty');
+  const filteredTaxCols   = discGstOn ? taxCols : taxCols.filter(c => !['cgst','sgst','igst'].includes(c.key));
   const columns = [
     ...baseCols,
-    ...(isAuction ? auctionCols : tradeCols),
-    ...taxCols,
+    ...(isAuction ? auctionCols : filteredTradeCols),
+    ...filteredTaxCols,
   ];
   DataTable.mount('lots-list', d, {
     emptyState: { icon: 'lots', title: "No lots in this auction yet", body: "Add your first lot using the form on the left — enter Lot #, Name, Qty, and Price to get started." },  columns });
@@ -4070,6 +4571,13 @@ async function loadInvoices(){
       { key:'sale', label:'Sale', sort:'text', totalKind:'count',
         totalLabel: (n)=> String(n) },
       { key:'invo', label:'Inv#', sort:'text' },
+      { key:'asp_invo', label:'ASP Inv#', sort:'text',
+        // Empty string for ASP rows (state=Kerala) so the column shows
+        // only on ISP rows where the ASP→ISP cross-reference is meaningful.
+        // Saffron text + small font visually distinguishes from primary Inv#.
+        render:(i)=> i.asp_invo
+          ? `<span style="color:var(--spice-saffron);font-weight:600">${esc(i.asp_invo)}</span>`
+          : '<span style="color:var(--text3)">—</span>' },
       { key:'_buyer', label:'Buyer', sort:'text',
         value:(i)=>i.buyer1||i.buyer,
         render:(i)=>esc(i.buyer1||i.buyer) },
@@ -4133,31 +4641,198 @@ async function revertAllInvoices(){
   }catch(e){showError(e)}
 }
 
+// Open a PDF blob and trigger the browser's native print dialog.
+// Flow:
+//   1. Create a hidden iframe, point src at the blob URL.
+//   2. Wait for the PDF to load inside the iframe.
+//   3. Call iframe.contentWindow.print() — this opens the OS-native print
+//      dialog where the user picks any connected printer OR "Save as PDF".
+// If the iframe approach fails (some browsers block print on cross-origin
+// or PDF-type frames), fall back to opening the PDF in a new tab and ask
+// the user to press Ctrl+P.
+async function triggerBrowserPrint(blob, fallbackName) {
+  // ── DIAGNOSTIC MODE ────────────────────────────────────────────────
+  let diagPanel = document.getElementById('print-diag-panel');
+  if (!diagPanel) {
+    diagPanel = document.createElement('div');
+    diagPanel.id = 'print-diag-panel';
+    diagPanel.style.cssText = 'position:fixed;top:80px;right:20px;width:320px;max-height:60vh;overflow-y:auto;background:#1a1a1a;color:#0f0;font-family:monospace;font-size:11px;padding:12px;border-radius:6px;z-index:10000;box-shadow:0 4px 16px rgba(0,0,0,0.4)';
+    diagPanel.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #444;padding-bottom:6px;margin-bottom:6px">
+        <strong style="color:#fff">Print Diagnostics</strong>
+        <span onclick="document.getElementById('print-diag-panel').remove()" style="cursor:pointer;color:#888;font-weight:bold">×</span>
+      </div>
+      <button onclick="document.querySelectorAll('#busy-overlay, .busy-overlay').forEach(n=>n.remove())" style="margin-bottom:8px;padding:4px 8px;background:#cc4444;color:#fff;border:0;border-radius:3px;cursor:pointer;font-size:11px;width:100%">Force-clear stuck overlay</button>
+      <div id="print-diag-log"></div>`;
+    document.body.appendChild(diagPanel);
+    setTimeout(() => { if (diagPanel.parentNode) diagPanel.remove(); }, 60000);
+  }
+  const diagLog = diagPanel.querySelector('#print-diag-log');
+  const diag = (msg, level = 'info') => {
+    const ts = new Date().toLocaleTimeString('en-GB');
+    const color = level === 'err' ? '#f66' : level === 'warn' ? '#ffaa00' : '#0f0';
+    const line = document.createElement('div');
+    line.style.cssText = `color:${color};margin:2px 0`;
+    line.textContent = `[${ts}] ${msg}`;
+    diagLog.appendChild(line);
+    diagLog.scrollTop = diagLog.scrollHeight;
+    console.log('[print-diag]', msg);
+  };
+
+  diag(`Step 1: blob received (${Math.round(blob.size / 1024)} KB)`);
+
+  // Strategy: open the PDF blob URL DIRECTLY in a new tab.
+  // Chrome/Edge load it in their built-in PDF viewer which has a Print
+  // button in the toolbar (top-right corner). User clicks it OR Ctrl+P.
+  //
+  // We previously tried (a) hidden iframe + parent window.print() —
+  // blocked by cross-origin policy through ngrok HTTPS proxy, and
+  // (b) wrapper HTML page with embedded PDF — Chrome refused to render
+  // a blob PDF inside a blob HTML page. Direct blob navigation is the
+  // only approach that works reliably across ngrok tunnels.
+  const url = URL.createObjectURL(blob);
+  diag('Step 2: blob URL created');
+
+  const w = window.open(url, '_blank');
+  if (!w || w.closed) {
+    diag('Popup blocked — falling back to download', 'err');
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fallbackName || 'document.pdf';
+    a.click();
+    diag('PDF downloaded — open from Downloads, press Ctrl+P', 'warn');
+  } else {
+    diag('Step 3: PDF opened in new tab', 'info');
+    diag('Click Print icon in PDF viewer toolbar OR press Ctrl+P', 'warn');
+  }
+
+  // Defensive: ensure no stuck overlay survives this print step. If an
+  // upstream caller forgot to hide its overlay (or hit a race condition),
+  // we guarantee a clean state here so dad never sees "Building merged
+  // PDF…" frozen on screen after the PDF has already opened.
+  document.querySelectorAll('#busy-overlay, .busy-overlay').forEach(n => n.remove());
+
+  // Cleanup blob URL after a delay long enough for printing to finish
+  setTimeout(() => {
+    URL.revokeObjectURL(url);
+  }, 120000);
+}
+
+// Shared: fetch a PDF from an endpoint and hand off to triggerBrowserPrint.
+// All the single-invoice viewers below use this. Accepts an optional
+// postBody (object) — if set, sends a POST with JSON body instead of GET.
+// Fetch a PDF blob inside a busy overlay, then trigger the print dialog
+// AFTER the overlay is gone. This avoids the "stuck overlay" symptom that
+// happens when the print/new-tab open path takes time or hangs — we never
+// want the user to be staring at "Building merged PDF…" while the PDF
+// has already arrived and is being printed.
+async function fetchPdfWithOverlay(overlayMsg, endpoint, fallbackName, postBody) {
+  let blob;
+  try {
+    await withOverlay(overlayMsg, async () => {
+      const opts = { headers: { 'Authorization': 'Bearer ' + T } };
+      if (postBody) {
+        opts.method = 'POST';
+        opts.headers['Content-Type'] = 'application/json';
+        opts.body = JSON.stringify(postBody);
+      }
+      const r = await fetch(B + endpoint, opts);
+      if (!r.ok) {
+        let m = 'PDF failed';
+        try { const e = await r.json(); if (e.error) m = e.error; } catch (_) {}
+        throw new Error(m);
+      }
+      blob = await r.blob();
+    });
+  } catch (e) {
+    showError(e);
+    return;
+  }
+  if (blob) await triggerBrowserPrint(blob, fallbackName);
+}
+
+async function fetchAndPrint(endpoint, fallbackName, postBody) {
+  try {
+    const opts = { headers: { 'Authorization': 'Bearer ' + T } };
+    if (postBody) {
+      opts.method = 'POST';
+      opts.headers['Content-Type'] = 'application/json';
+      opts.body = JSON.stringify(postBody);
+    }
+    const r = await fetch(B + endpoint, opts);
+    if (!r.ok) {
+      let m = 'PDF failed';
+      try { const e = await r.json(); if (e.error) m = e.error; } catch (_) {}
+      throw new Error(m);
+    }
+    const blob = await r.blob();
+    await triggerBrowserPrint(blob, fallbackName);
+  } catch (e) {
+    showError(e);
+  }
+}
+
+// Prompt for "Dispatched through" before printing a sales invoice.
+// Returns a Promise that resolves to:
+//   - the entered string when user clicks Print
+//   - null when user clicks Cancel (caller should abort)
+// Pre-populates the input with the stored cfg default so dad can just
+// press Enter to use the default value without typing.
+function promptDispatchedThrough(defaultValue) {
+  return new Promise((resolve) => {
+    // Strip any prior modal first
+    const prior = document.getElementById('dispatch-modal');
+    if (prior) prior.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'dispatch-modal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center';
+    modal.innerHTML = `
+      <div style="background:#fff;border-radius:8px;padding:24px;min-width:360px;max-width:500px;box-shadow:0 8px 32px rgba(0,0,0,0.2)">
+        <h3 style="margin:0 0 12px 0;font-size:16px">Dispatched through</h3>
+        <p style="margin:0 0 12px 0;font-size:13px;color:var(--text2)">Enter the transporter / vehicle / mode to print on the invoice. Leave blank to use the stored default.</p>
+        <input id="dispatch-input" type="text" placeholder="e.g. ABC Transports / TN-12-AB-3456" value="${(defaultValue||'').replace(/"/g,'&quot;')}" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:6px;font-size:14px;margin-bottom:16px;box-sizing:border-box">
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button id="dispatch-cancel" class="btn" style="height:36px;padding:0 16px;background:#eee;color:#333">Cancel</button>
+          <button id="dispatch-ok" class="btn" style="height:36px;padding:0 16px;background:var(--spice-cardamom);color:#fff">Print</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    const input = document.getElementById('dispatch-input');
+    input.focus();
+    input.select();
+
+    const cleanup = (val) => { modal.remove(); resolve(val); };
+    document.getElementById('dispatch-ok').onclick     = () => cleanup(input.value || '');
+    document.getElementById('dispatch-cancel').onclick = () => cleanup(null);
+    // Enter to confirm, Esc to cancel — matches user's keyboard expectations
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); cleanup(input.value || ''); }
+      else if (e.key === 'Escape') { e.preventDefault(); cleanup(null); }
+    });
+    // Click outside the dialog cancels
+    modal.addEventListener('click', (e) => { if (e.target === modal) cleanup(null); });
+  });
+}
+
 async function viewInvoicePDF(id){
-  try{
-    const r=await fetch(B+`/api/invoices/pdf/${id}`,{headers:{'Authorization':'Bearer '+T}});
-    if(!r.ok){let m='PDF failed';try{const e=await r.json();if(e.error)m=e.error}catch(x){}throw new Error(m)}
-    const blob=await r.blob();
-    const url=URL.createObjectURL(blob);
-    const w=window.open(url,'_blank');
-    if(!w||w.closed){const a=document.createElement('a');a.href=url;a.download=`Invoice_${id}.pdf`;a.click()}
-    setTimeout(()=>URL.revokeObjectURL(url),30000);
-  }catch(e){showError(e)}
+  // Prompt for Dispatched-through before printing — pre-fills with the
+  // stored default from settings (cfg.dispatched_through). User can keep
+  // it, override it for this print, or cancel.
+  const def = (window._sdata && (_sdata.dispatched_through || _sdata.dispatched_through_isp || _sdata.dispatched_through_asp)) || '';
+  const dispatchedThrough = await promptDispatchedThrough(def);
+  if (dispatchedThrough === null) return; // user cancelled
+  const qs = dispatchedThrough ? `?dispatchedThrough=${encodeURIComponent(dispatchedThrough)}` : '';
+  return fetchAndPrint(`/api/invoices/pdf/${id}${qs}`, `Invoice_${id}.pdf`);
 }
 
 // Opens the ASP purchase-view PDF: mirror of the ASP sales invoice with
 // ISPL at the top, ASP as Seller (Bill from), TN bank details.
 // Only works when current business state = KERALA + e-Trade (server enforces).
 async function viewPurchaseViewPDF(id){
-  try{
-    const r=await fetch(B+`/api/invoices/purchase-pdf/${id}`,{headers:{'Authorization':'Bearer '+T}});
-    if(!r.ok){let m='Purchase view PDF failed';try{const e=await r.json();if(e.error)m=e.error}catch(x){}throw new Error(m)}
-    const blob=await r.blob();
-    const url=URL.createObjectURL(blob);
-    const w=window.open(url,'_blank');
-    if(!w||w.closed){const a=document.createElement('a');a.href=url;a.download=`PurchaseView_${id}.pdf`;a.click()}
-    setTimeout(()=>URL.revokeObjectURL(url),30000);
-  }catch(e){showError(e)}
+  return fetchAndPrint(`/api/invoices/purchase-pdf/${id}`, `PurchaseView_${id}.pdf`);
 }
 
 // Master "select all visible" checkbox sits in the table header (added via
@@ -4204,35 +4879,125 @@ async function printSelectedInvoices(){
   if(!checked.length){alert('Tick one or more invoices first (use the checkbox column)');return}
   const ids=checked.map(cb=>Number(cb.value)).filter(Boolean);
 
-  // Single: reuse the single-invoice endpoint for fewest moving parts
+  // Single: reuse the single-invoice viewer (handles its own prompt)
   if(ids.length===1){return viewInvoicePDF(ids[0])}
 
-  try{
-    await withOverlay(`Building merged PDF for ${ids.length} invoices…`, async () => {
-      const r=await fetch(B+`/api/invoices/pdf-bulk`,{
-        method:'POST',
-        headers:{'Content-Type':'application/json','Authorization':'Bearer '+T},
-        body:JSON.stringify({ids})
-      });
-      if(!r.ok){
-        let m='Merge failed';
-        try{const e=await r.json();if(e.error)m=e.error}catch(_){}
-        throw new Error(m);
-      }
-      const blob=await r.blob();
-      const url=URL.createObjectURL(blob);
-      const w=window.open(url,'_blank');
-      if(!w||w.closed){
-        // Popup blocked: force download
-        const a=document.createElement('a');a.href=url;a.download=`Invoices_Batch_${ids.length}.pdf`;a.click();
-        toast(`Popup blocked — downloaded instead (${ids.length} invoices merged)`);
-      }else{
-        toast(`Merged PDF opened — ${ids.length} invoices`);
-      }
-      setTimeout(()=>URL.revokeObjectURL(url),60000);
-    });
-  }catch(e){showError(e)}
+  // Bulk: prompt once, applied to every invoice in the batch
+  const def = (window._sdata && (_sdata.dispatched_through || _sdata.dispatched_through_isp || _sdata.dispatched_through_asp)) || '';
+  const dispatchedThrough = await promptDispatchedThrough(def);
+  if (dispatchedThrough === null) return;
+
+  await fetchPdfWithOverlay(
+    `Building merged PDF for ${ids.length} invoices…`,
+    '/api/invoices/pdf-bulk',
+    `Invoices_Batch_${ids.length}.pdf`,
+    { ids, dispatchedThrough }
+  );
 }
+
+// ASP-only: Print purchase-view (ISPL-side mirror) PDFs for ticked sales
+// invoices. Endpoint enforces ASP context server-side too — button is
+// already hidden outside Kerala+e-Trade by applyAspContextVisibility().
+async function printSelectedPurchaseFromInvoices(){
+  const body=document.getElementById('invoices-list');
+  if(!body){alert('No invoice list found');return}
+  const checked=Array.from(body.querySelectorAll('.inv-select-cb:checked'));
+  if(!checked.length){alert('Tick one or more invoices first (use the checkbox column)');return}
+  const ids=checked.map(cb=>Number(cb.value)).filter(Boolean);
+
+  // Single ID: reuse the per-row purchase-view viewer for the same flow
+  if(ids.length===1){return viewPurchaseViewPDF(ids[0])}
+
+  await fetchPdfWithOverlay(
+    `Building merged purchase-view PDF for ${ids.length} invoices…`,
+    '/api/invoices/purchase-pdf-bulk',
+    `PurchaseView_Batch_${ids.length}.pdf`,
+    { ids }
+  );
+}
+
+// ── Master-checkbox + Print-Selected helpers for Purchases ──────────────
+// Mirror of the sales-invoice pattern above. Kept as separate functions
+// rather than a generic helper because the selectors and endpoints differ
+// enough that shared code would be more confusing than duplication.
+function toggleAllPurchases(state){
+  const body=document.getElementById('purchases-list');
+  if(!body)return;
+  body.querySelectorAll('.pur-select-cb').forEach(cb=>{
+    const row=cb.closest('tr');
+    if(row && row.style.display !== 'none') cb.checked=state;
+  });
+  syncPurchaseMaster();
+}
+function syncPurchaseMaster(){
+  const master=document.getElementById('pur-select-all');
+  if(!master)return;
+  const body=document.getElementById('purchases-list');
+  if(!body){master.checked=false;master.indeterminate=false;return}
+  const visible=Array.from(body.querySelectorAll('.pur-select-cb')).filter(cb=>{
+    const row=cb.closest('tr');return row && row.style.display !== 'none';
+  });
+  const ticked=visible.filter(cb=>cb.checked).length;
+  master.indeterminate = ticked>0 && ticked<visible.length;
+  master.checked       = visible.length>0 && ticked===visible.length;
+}
+async function printSelectedPurchases(){
+  const body=document.getElementById('purchases-list');
+  if(!body){alert('No purchases list found');return}
+  const checked=Array.from(body.querySelectorAll('.pur-select-cb:checked'));
+  if(!checked.length){alert('Tick one or more purchase invoices first');return}
+  const ids=checked.map(cb=>Number(cb.value)).filter(Boolean);
+  await fetchPdfWithOverlay(
+    `Building merged PDF for ${ids.length} purchase invoices…`,
+    '/api/purchases/pdf-bulk',
+    `Purchases_Batch_${ids.length}.pdf`,
+    { ids }
+  );
+}
+
+// ── Master-checkbox + Print-Selected helpers for Bills of Supply ────────
+function toggleAllBills(state){
+  const body=document.getElementById('bills-list');
+  if(!body)return;
+  body.querySelectorAll('.bill-select-cb').forEach(cb=>{
+    const row=cb.closest('tr');
+    if(row && row.style.display !== 'none') cb.checked=state;
+  });
+  syncBillMaster();
+}
+function syncBillMaster(){
+  const master=document.getElementById('bill-select-all');
+  if(!master)return;
+  const body=document.getElementById('bills-list');
+  if(!body){master.checked=false;master.indeterminate=false;return}
+  const visible=Array.from(body.querySelectorAll('.bill-select-cb')).filter(cb=>{
+    const row=cb.closest('tr');return row && row.style.display !== 'none';
+  });
+  const ticked=visible.filter(cb=>cb.checked).length;
+  master.indeterminate = ticked>0 && ticked<visible.length;
+  master.checked       = visible.length>0 && ticked===visible.length;
+}
+async function printSelectedBills(){
+  const body=document.getElementById('bills-list');
+  if(!body){alert('No bills list found');return}
+  const checked=Array.from(body.querySelectorAll('.bill-select-cb:checked'));
+  if(!checked.length){alert('Tick one or more bills first');return}
+  const ids=checked.map(cb=>Number(cb.value)).filter(Boolean);
+  await fetchPdfWithOverlay(
+    `Building merged PDF for ${ids.length} bills…`,
+    '/api/bills/pdf-bulk',
+    `Bills_Batch_${ids.length}.pdf`,
+    { ids }
+  );
+}
+
+// Wire row-level checkbox changes into master-checkbox sync for both tables
+document.addEventListener('change', (e)=>{
+  if(e.target && e.target.classList){
+    if(e.target.classList.contains('pur-select-cb'))  syncPurchaseMaster();
+    if(e.target.classList.contains('bill-select-cb')) syncBillMaster();
+  }
+});
 
 function openInvoiceEdit(i){
   document.getElementById('inv-edit-id').value=i.id;
@@ -4285,6 +5050,10 @@ async function loadPurchases(){
   const d=await j(url);
   DataTable.mount('purchases-list', d, {
     columns: [
+      { key:'_select', label:'',
+        labelHTML:'<input type="checkbox" id="pur-select-all" onclick="event.stopPropagation();toggleAllPurchases(this.checked)" title="Select / clear all visible" style="cursor:pointer;width:16px;height:16px;vertical-align:middle;accent-color:var(--green)">',
+        sortable:false, searchable:false,
+        render:(p)=>`<input type="checkbox" class="pur-select-cb" value="${p.id}" onclick="event.stopPropagation()" style="cursor:pointer">` },
       { key:'invo', label:'Inv#', sort:'text' },
       { key:'name', label:'Name', sort:'text' },
       { key:'qty', label:'Qty', sort:'number', numeric:true, fmt:(n)=>fmtI(n,3) },
@@ -4330,35 +5099,11 @@ async function delPurchase(id){if(!confirm('Delete this purchase invoice?'))retu
   catch(e){showError(e)}}
 
 async function viewPurchasePDF(auctionId,sellerName,invNo){
-  try{
-    const r=await fetch(B+`/api/purchases/pdf/${auctionId}/${sellerName}?invoiceNo=${invNo}`,{headers:{'Authorization':'Bearer '+T}});
-    if(!r.ok){
-      // Try to surface server error message
-      let msg='PDF generation failed (status '+r.status+')';
-      try{const err=await r.json();if(err.error)msg=err.error}catch(e){}
-      throw new Error(msg);
-    }
-    const blob=await r.blob();
-    if(blob.size<100){throw new Error('PDF returned empty')}
-    
-    // Download via anchor tag (avoids popup blocker)
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement('a');
-    a.href=url;
-    a.target='_blank';
-    a.rel='noopener';
-    // Try opening in new tab; if blocked, trigger download
-    const w=window.open(url,'_blank');
-    if(!w||w.closed||typeof w.closed==='undefined'){
-      // Popup blocked — download instead
-      a.download=`PurchaseInvoice_${decodeURIComponent(sellerName)}_${invNo}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      toast('Popup blocked — downloading PDF instead');
-    }
-    setTimeout(()=>URL.revokeObjectURL(url),30000);
-  }catch(e){showError(e)}}
+  return fetchAndPrint(
+    `/api/purchases/pdf/${auctionId}/${sellerName}?invoiceNo=${invNo}`,
+    `PurchaseInvoice_${decodeURIComponent(sellerName)}_${invNo}.pdf`
+  );
+}
 
 // ── Payments ──────────────────────────────────────────────
 async function loadPayments(){
@@ -4386,22 +5131,36 @@ async function loadPayments(){
 }
 
 // ── Exports ───────────────────────────────────────────────
-const EXP_LABELS={lot_slip:'Lot Slip',lot_slip_after:'Lot Slip (After)',price_list:'Price List',bank_payment:'Bank Payment (RTGS/NEFT)',
+const EXP_LABELS={lot_slip:'Lot Slip',lot_slip_after:'Lot Slip (After)',praman_csv:'Praman Lot Slip (CSV)',price_list:'Price List',bank_payment:'Bank Payment (RTGS/NEFT)',
   pooler_register:'Pooler Register',full_file:'Full File',collection:'Collection/Lorry',dealer_list:'Dealer List',
   sales_taxes:'Sales & Taxes',payment:'Payment Summary',tally_purchase:'Tally Purchase'};
-function renderExportBtns(){document.getElementById('export-btns').innerHTML=Object.entries(EXP_LABELS).map(([k,v])=>
-  `<div style="display:flex;flex-direction:column;gap:4px;padding:8px;border:1px solid var(--border);border-radius:6px;background:#fff">
+// Export types that only support a specific format (no XLSX/PDF choice).
+// e.g., Praman is a CSV-only upload format for the Praman auction platform.
+const EXP_CSV_ONLY = new Set(['praman_csv']);
+function renderExportBtns(){document.getElementById('export-btns').innerHTML=Object.entries(EXP_LABELS).map(([k,v])=>{
+  if (EXP_CSV_ONLY.has(k)) {
+    return `<div style="display:flex;flex-direction:column;gap:4px;padding:8px;border:1px solid var(--border);border-radius:6px;background:#fff">
+      <div style="font-weight:600;font-size:13px;color:var(--text)">${v}</div>
+      <div style="display:flex;gap:4px">
+        <button class="btn btn-a" onclick="exportType('${k}','csv')" style="flex:1;padding:6px 8px;font-size:12px">CSV</button>
+      </div>
+    </div>`;
+  }
+  return `<div style="display:flex;flex-direction:column;gap:4px;padding:8px;border:1px solid var(--border);border-radius:6px;background:#fff">
     <div style="font-weight:600;font-size:13px;color:var(--text)">${v}</div>
     <div style="display:flex;gap:4px">
       <button class="btn btn-a" onclick="exportType('${k}','xlsx')" style="flex:1;padding:6px 8px;font-size:12px">XLSX</button>
       <button class="btn btn-orange" onclick="exportType('${k}','pdf')" style="flex:1;padding:6px 8px;font-size:12px">PDF</button>
     </div>
-  </div>`).join('')}
+  </div>`;
+}).join('')}
 async function exportType(type,format){format=format||'xlsx';
   const aid=document.getElementById('exp-auction')?.value||document.getElementById('pay-auction')?.value;
   if(!aid){alert('Select an auction first');return}
   const label = (EXP_LABELS[type]||type);
   await withOverlay(`Exporting ${label} (${format.toUpperCase()})…`, async () => {
+    // CSV exports ignore format query param — server picks ext from EXPORT_TYPES.
+    // Keep format in URL for consistency but download filename uses actual ext.
     const r=await fetch(B+`/api/exports/${type}/${aid}?format=${format}`,{headers:{'Authorization':'Bearer '+T}});
     if(!r.ok){alert('Export failed');return}
     const blob=await r.blob();
@@ -4457,6 +5216,10 @@ async function loadBills(){
   DataTable.mount('bills-list', d, {
     emptyState: { icon: 'invoices', title: "No agri bills yet", body: "Generate agriculturist purchase bills for eligible sellers using the form above." }, 
     columns: [
+      { key:'_select', label:'',
+        labelHTML:'<input type="checkbox" id="bill-select-all" onclick="event.stopPropagation();toggleAllBills(this.checked)" title="Select / clear all visible" style="cursor:pointer;width:16px;height:16px;vertical-align:middle;accent-color:var(--green)">',
+        sortable:false, searchable:false,
+        render:(b)=>`<input type="checkbox" class="bill-select-cb" value="${b.id}" onclick="event.stopPropagation()" style="cursor:pointer">` },
       { key:'bil', label:'Bill#', sort:'text' },
       { key:'date', label:'Date', sort:'date', render:(b)=>fmtD(b.date) },
       { key:'name', label:'Name', sort:'text' },
@@ -4511,15 +5274,11 @@ async function generateBill(){
     loadBills();
   }catch(e){showError(e)}}
 async function viewBillPDF(auctionId,sellerName,billNo){
-  try{
-    const r=await fetch(B+`/api/bills/pdf/${auctionId}/${sellerName}?billNo=${billNo}`,{headers:{'Authorization':'Bearer '+T}});
-    if(!r.ok){let m='PDF failed';try{const e=await r.json();if(e.error)m=e.error}catch(x){}throw new Error(m)}
-    const blob=await r.blob();
-    const url=URL.createObjectURL(blob);
-    const w=window.open(url,'_blank');
-    if(!w||w.closed){const a=document.createElement('a');a.href=url;a.download=`BillOfSupply_${decodeURIComponent(sellerName)}_${billNo}.pdf`;a.click()}
-    setTimeout(()=>URL.revokeObjectURL(url),30000);
-  }catch(e){showError(e)}}
+  return fetchAndPrint(
+    `/api/bills/pdf/${auctionId}/${sellerName}?billNo=${billNo}`,
+    `BillOfSupply_${decodeURIComponent(sellerName)}_${billNo}.pdf`
+  );
+}
 async function delBill(id){if(!confirm('Delete bill?'))return;await j(`/api/bills/${id}`,{method:'DELETE'});loadBills()}
 
 // ── Debit Notes ────────────────────────────────────────────

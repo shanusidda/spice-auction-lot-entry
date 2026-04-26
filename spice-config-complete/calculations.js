@@ -377,20 +377,27 @@ function buildPurchaseInvoice(db, auctionId, sellerName, cfg) {
 /**
  * Generate payment summary for sellers (PAYCHECK.PRG equivalent)
  */
-function getPaymentSummary(db, auctionId, state) {
+function getPaymentSummary(db, auctionId, state, cfg) {
+  // Mode-aware "discount" column. In e-Trade mode, the discount amount
+  // is stored in `lots.refund` (with `lots.advance` holding GST on the
+  // discount). In auction mode, `lots.advance` holds the commission +
+  // handling + GST aggregate which acts as the trader-side deduction.
+  // Default to e-Trade since that's what Ideal Spices uses today.
+  const mode = (cfg && cfg.business_mode || 'e-Trade').toLowerCase();
+  const discountCol = (mode === 'auction') ? 'advance' : 'refund';
   let query = `SELECT name, cr, 
     SUM(qty) as total_qty, SUM(amount) as total_amount,
     SUM(pqty) as total_pqty, SUM(prate) as avg_prate,
     SUM(puramt) as total_puramt,
-    SUM(advance) as total_discount,
+    SUM(${discountCol}) as total_discount,
     SUM(balance) as total_payable,
     COUNT(*) as lot_count
     FROM lots WHERE auction_id = ? AND amount > 0`;
   const params = [auctionId];
-  
+
   if (state) { query += ' AND state = ?'; params.push(state); }
   query += ' GROUP BY name, cr ORDER BY state, name';
-  
+
   return db.all(query, params);
 }
 
@@ -398,9 +405,12 @@ function getPaymentSummary(db, auctionId, state) {
  * Generate bank payment data (BANKPAY.PRG — RTGS/NEFT format)
  */
 function getBankPaymentData(db, auctionId, cfg) {
+  // Mode-aware: see getPaymentSummary above for column rationale.
+  const mode = (cfg && cfg.business_mode || 'e-Trade').toLowerCase();
+  const discountCol = (mode === 'auction') ? 'advance' : 'refund';
   const payments = db.all(
     `SELECT l.state, l.name, l.cr, 
-      SUM(l.puramt) as puramt, SUM(l.advance) as advance, SUM(l.balance) as payable,
+      SUM(l.puramt) as puramt, SUM(l.${discountCol}) as advance, SUM(l.balance) as payable,
       t.ifsc, t.acctnum, t.padd, t.ppla, t.pin, t.holder_name
     FROM lots l
     LEFT JOIN traders t ON t.name = l.name AND t.cr = l.cr
