@@ -1,9 +1,10 @@
 # Spice Config — Railway Dockerfile
-# Uses node:20-bookworm-slim (Linux x64 / glibc) to match Railway's runtime.
-# Forces better-sqlite3 to compile from source so we can't get an
-# arch-mismatched prebuilt binary smuggled in.
+# Force linux/amd64 platform for both build AND runtime stages so
+# better-sqlite3's compiled .node binary matches the runtime arch.
+# (Without --platform, Railway may build on ARM but run on x64 → ELF mismatch.)
 
-FROM node:20-bookworm-slim AS builder
+# syntax=docker/dockerfile:1
+FROM --platform=linux/amd64 node:20-bookworm-slim AS builder
 
 # Native build deps for better-sqlite3 (and any other gyp-based modules)
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -14,41 +15,60 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Copy ONLY package.json so npm install sees a clean dep tree
-# (deliberately not copying package-lock.json — avoids any cached
-# arch-specific entries that may have been committed accidentally)
+# Print arch info for diagnostic — visible in Railway build logs
+RUN echo "═══ BUILD STAGE ═══" \
+    && echo "uname: $(uname -m)" \
+    && echo "node arch: $(node -p 'process.arch')" \
+    && echo "node platform: $(node -p 'process.platform')" \
+    && echo "node version: $(node -v)"
+
+# Copy ONLY package.json — avoids any cached arch-specific
+# entries from a committed package-lock.json
 COPY package.json ./
 
-# Install with build-from-source so the .node binary targets THIS image's
-# arch + libc, not whatever shipped as a prebuild.
+# CRITICAL: force native build, skip prebuild downloads.
+# Multiple flags layered for safety:
+#   - npm_config_build_from_source=true    npm-level
+#   - --build-from-source                  CLI override
+#   - --foreground-scripts                 don't suppress build output
 ENV npm_config_build_from_source=true
-RUN npm install --omit=dev --build-from-source
+ENV npm_config_loglevel=info
+RUN npm install --omit=dev --build-from-source --foreground-scripts
 
-# Verify the native module loads inside the build container
-RUN node -e "require('better-sqlite3')(':memory:').exec('SELECT 1'); console.log('✓ better-sqlite3 loads OK')"
+# Print info about the compiled binary so we can verify in build logs
+RUN echo "═══ COMPILED BINARY INFO ═══" \
+    && ls -la node_modules/better-sqlite3/build/Release/ \
+    && file node_modules/better-sqlite3/build/Release/better_sqlite3.node
 
-# Copy app source AFTER deps so Docker caches deps separately
+# Verify it loads in the build container
+RUN node -e "require('better-sqlite3')(':memory:').exec('SELECT 1'); console.log('✓ build stage: better-sqlite3 OK')"
+
+# Copy app source
 COPY . .
 
-# Strip dev/test/build artifacts that might have been included
+# Strip stuff that shouldn't be in the runtime image
 RUN rm -rf data/ electron/ *.zip BUILD.md RELEASE.md MIGRATION.md \
     && rm -f recover-isp.js
 
 # ────────────────────────────────────────────
-# Runtime stage — slim image, no build tools
+# Runtime stage — same platform, fresh slim image
 # ────────────────────────────────────────────
-FROM node:20-bookworm-slim
+FROM --platform=linux/amd64 node:20-bookworm-slim
 
 WORKDIR /app
 
-# Copy the built app + node_modules from the builder stage.
-# IMPORTANT: this preserves the freshly-compiled .node binary.
+# Copy the built app
 COPY --from=builder /app /app
 
-# Railway sets PORT automatically; expose for documentation
+# Diagnostic: confirm runtime is the same arch as build
+RUN echo "═══ RUNTIME STAGE ═══" \
+    && echo "uname: $(uname -m)" \
+    && echo "node arch: $(node -p 'process.arch')" \
+    && file node_modules/better-sqlite3/build/Release/better_sqlite3.node
+
 EXPOSE 3001
 
-# Final sanity check: native module still loads at runtime
+# Sanity check at runtime — fails the build if the binary doesn't load
 RUN node -e "require('better-sqlite3')(':memory:').exec('SELECT 1'); console.log('✓ runtime check passed')"
 
 CMD ["node", "server.js"]
