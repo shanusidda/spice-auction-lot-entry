@@ -502,7 +502,7 @@
       <select id="auction-select"><option value="">Select auction...</option></select>
       <select id="filter-branch"><option value="">All branches</option></select>
       <select id="filter-user"><option value="">All users</option></select>
-      <input type="text" id="filter-seller" placeholder="Search seller..." style="height:34px;border-radius:7px;border:1px solid #ccc;padding:0 12px;font-size:13px;font-family:inherit;width:160px" oninput="filterBySeller()">
+      <div style="position:relative;display:inline-block"><input type="text" id="filter-seller" placeholder="Search seller..." style="height:34px;border-radius:7px;border:1px solid #ccc;padding:0 30px 0 12px;font-size:13px;font-family:inherit;width:160px" oninput="filterBySeller();document.getElementById('filter-seller-clear').style.display=this.value?'flex':'none'"><span id="filter-seller-clear" onclick="document.getElementById('filter-seller').value='';filterBySeller();this.style.display='none'" style="display:none;position:absolute;right:6px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--text3);font-size:12px;font-weight:700;width:18px;height:18px;align-items:center;justify-content:center;border-radius:50%;background:var(--border)">✕</span></div>
       <button class="ico-act rf" onclick="refresh()" title="Refresh" style="margin-left:auto"><svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg></button>
     </div>
 
