@@ -1,14 +1,17 @@
 /**
- * db.js — Migrated from sql.js → better-sqlite3
+ * db.js — SQL.js variant for cloud deploy (Railway etc.)
  *
- * Why: sql.js holds the entire DB in memory and writes the whole file on every
- * operation. With multiple branches entering lots concurrently, this causes
- * race conditions and can lose writes. better-sqlite3 uses native SQLite with
- * WAL mode for safe concurrent access.
+ * Why: better-sqlite3 needs native compilation that's been failing on
+ * Railway's build infra. sql.js is pure JavaScript — no native bindings,
+ * no architecture issues, no compile step.
  *
- * Compatibility: This wrapper preserves the exact same API your existing
- * server.js, calculations.js, company-config.js, exports.js, etc. already use.
- * No changes needed in those files.
+ * Trade-off: sql.js holds the entire DB in memory and writes the whole
+ * file on every commit. For a single-server Railway deployment this is
+ * fine since concurrent writes within one Node process are sequential.
+ * For multi-machine deploys, switch back to better-sqlite3.
+ *
+ * Compatibility: This wrapper preserves the same API server.js,
+ * calculations.js, company-config.js, exports.js, etc. already use:
  *
  *   db.run(sql, params)           // INSERT/UPDATE/DELETE (params array or spread)
  *   db.get(sql, params)           // SELECT one row
@@ -20,7 +23,7 @@
  *   db.transaction(fn)            // returns a wrapped function
  */
 
-const Database = require('better-sqlite3');
+const initSqlJs = require('sql.js');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
@@ -32,13 +35,50 @@ const path = require('path');
 const DB_DIR = process.env.SPICE_DATA_DIR || path.join(__dirname, 'data');
 const DB_PATH = path.join(DB_DIR, 'config.db');
 
-let rawDb = null;
-let wrapped = null;
+let SQL = null;        // sql.js module instance (loaded once)
+let rawDb = null;       // sql.js Database instance
+let wrapped = null;     // our API wrapper
+let pendingSave = null; // debounced fs.writeFile timer
 
 /**
- * Initialize the database. Async signature preserved for backwards
- * compatibility (better-sqlite3 is synchronous, but existing code does
- * `await initDb()`).
+ * Persist the in-memory DB to disk. Debounced 200ms so a burst of writes
+ * (e.g. invoice generation) only triggers one write.
+ */
+function scheduleSave() {
+  if (pendingSave) clearTimeout(pendingSave);
+  pendingSave = setTimeout(() => {
+    pendingSave = null;
+    if (!rawDb) return;
+    try {
+      const buf = Buffer.from(rawDb.export());
+      const tmp = DB_PATH + '.tmp';
+      fs.writeFileSync(tmp, buf);
+      fs.renameSync(tmp, DB_PATH);
+    } catch (e) {
+      console.error('[db] save failed:', e.message);
+    }
+  }, 200);
+}
+
+/**
+ * Force-flush any pending save synchronously. Called on shutdown/close.
+ */
+function flushSave() {
+  if (pendingSave) { clearTimeout(pendingSave); pendingSave = null; }
+  if (!rawDb) return;
+  try {
+    const buf = Buffer.from(rawDb.export());
+    const tmp = DB_PATH + '.tmp';
+    fs.writeFileSync(tmp, buf);
+    fs.renameSync(tmp, DB_PATH);
+  } catch (e) {
+    console.error('[db] flush failed:', e.message);
+  }
+}
+
+/**
+ * Initialize the database. async/await is necessary because sql.js loads
+ * its WASM module asynchronously.
  */
 async function initDb() {
   if (wrapped) return wrapped;
@@ -46,18 +86,27 @@ async function initDb() {
   const dir = path.dirname(DB_PATH);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
-  rawDb = new Database(DB_PATH);
+  // Load sql.js wasm runtime once
+  if (!SQL) SQL = await initSqlJs();
 
-  // WAL mode: concurrent reads during writes. Main reason we migrated.
-  rawDb.pragma('journal_mode = WAL');
-  // Wait up to 5s if another connection holds a lock, instead of instant failure.
-  rawDb.pragma('busy_timeout = 5000');
-  // Synchronous = NORMAL is safe with WAL and ~2x faster than FULL.
-  rawDb.pragma('synchronous = NORMAL');
-  // Enforce foreign keys (off by default in SQLite).
-  rawDb.pragma('foreign_keys = ON');
+  // Open existing DB or create empty one
+  if (fs.existsSync(DB_PATH)) {
+    const buf = fs.readFileSync(DB_PATH);
+    rawDb = new SQL.Database(buf);
+  } else {
+    rawDb = new SQL.Database();
+  }
+
+  // Enable foreign keys
+  rawDb.run("PRAGMA foreign_keys = ON;");
 
   wrapped = makeWrapper();
+
+  // Save on process exit (best-effort)
+  const onExit = () => { flushSave(); };
+  process.on('SIGINT', onExit);
+  process.on('SIGTERM', onExit);
+  process.on('beforeExit', onExit);
 
   // ── SESSIONS ───────────────────────────────────────────────
   wrapped.exec(`CREATE TABLE IF NOT EXISTS sessions (
@@ -444,34 +493,70 @@ function normalizeParams(args) {
 }
 
 function makeWrapper() {
+  // sql.js note: prepared statements need .free() to release memory.
+  // We create-use-free per call to keep the API simple and match the
+  // existing usage patterns (no long-lived prepared statements).
+
+  /**
+   * Run a SQL with bound params and return rows as objects.
+   * Internal helper used by get/all.
+   */
+  function execStatement(sql, params) {
+    const stmt = rawDb.prepare(sql);
+    try {
+      stmt.bind(params);
+      const rows = [];
+      while (stmt.step()) rows.push(stmt.getAsObject());
+      return rows;
+    } finally {
+      stmt.free();
+    }
+  }
+
+  /**
+   * Run an INSERT/UPDATE/DELETE/etc with bound params (no result rows).
+   */
+  function runStatement(sql, params) {
+    const stmt = rawDb.prepare(sql);
+    try {
+      stmt.run(params);
+    } finally {
+      stmt.free();
+    }
+    // sql.js doesn't expose lastInsertRowid/changes per-statement easily.
+    // Use the connection-level helpers.
+    return {
+      lastInsertRowid: rawDb.exec("SELECT last_insert_rowid()")[0]?.values[0]?.[0] ?? 0,
+      changes: rawDb.getRowsModified(),
+    };
+  }
+
   return {
     /**
      * Execute multi-statement SQL (no params, no return).
      */
     exec(sql) {
       rawDb.exec(sql);
+      scheduleSave();
     },
 
     /**
      * Run an INSERT/UPDATE/DELETE. Accepts params as array or spread.
-     * Returns { lastInsertRowid, changes } for compatibility with
-     * better-sqlite3's native API, though existing code doesn't use them.
      */
     run(sql, ...rest) {
       const params = normalizeParams(rest);
-      const stmt = rawDb.prepare(sql);
-      const info = stmt.run(...params);
-      return { lastInsertRowid: info.lastInsertRowid, changes: info.changes };
+      const info = runStatement(sql, params);
+      scheduleSave();
+      return info;
     },
 
     /**
-     * SELECT one row. Returns row object or null (matching sql.js behavior).
+     * SELECT one row. Returns row object or null.
      */
     get(sql, ...rest) {
       const params = normalizeParams(rest);
-      const stmt = rawDb.prepare(sql);
-      const row = stmt.get(...params);
-      return row || null;
+      const rows = execStatement(sql, params);
+      return rows[0] || null;
     },
 
     /**
@@ -479,42 +564,51 @@ function makeWrapper() {
      */
     all(sql, ...rest) {
       const params = normalizeParams(rest);
-      const stmt = rawDb.prepare(sql);
-      return stmt.all(...params);
+      return execStatement(sql, params);
     },
 
     /**
-     * Prepare a statement. Returns an object with run/get/all that accept
-     * spread args — matches better-sqlite3 native API and existing code's
-     * usage pattern: `insert.run(a, b, c, d, e)`.
+     * Prepare a statement. sql.js doesn't naturally cache prepared
+     * statements across reuses (and freeing too early causes errors),
+     * so we re-prepare on each call. Slower than better-sqlite3 but
+     * functionally equivalent.
      */
     prepare(sql) {
-      const stmt = rawDb.prepare(sql);
       return {
         run(...args) {
-          const info = stmt.run(...args);
-          return { lastInsertRowid: info.lastInsertRowid, changes: info.changes };
+          const info = runStatement(sql, args);
+          scheduleSave();
+          return info;
         },
         get(...args) {
-          const row = stmt.get(...args);
-          return row || null;
+          const rows = execStatement(sql, args);
+          return rows[0] || null;
         },
         all(...args) {
-          return stmt.all(...args);
+          return execStatement(sql, args);
         }
       };
     },
 
     /**
-     * Wrap a function in a transaction. Returns a new function that runs
-     * the original inside BEGIN/COMMIT (or ROLLBACK on throw). Uses
-     * better-sqlite3's native transaction API for atomic correctness.
+     * Wrap a function in a transaction. Implements via BEGIN/COMMIT/ROLLBACK.
      */
     transaction(fn) {
-      return rawDb.transaction(fn);
+      return function (...args) {
+        rawDb.run("BEGIN");
+        try {
+          const result = fn(...args);
+          rawDb.run("COMMIT");
+          scheduleSave();
+          return result;
+        } catch (e) {
+          rawDb.run("ROLLBACK");
+          throw e;
+        }
+      };
     },
 
-    // Escape hatch to the raw better-sqlite3 Database instance.
+    // Escape hatch — only for code that needs the raw sql.js Database.
     get raw() { return rawDb; }
   };
 }
@@ -525,6 +619,7 @@ function getDb() {
 }
 
 function closeDb() {
+  flushSave();
   if (rawDb) {
     rawDb.close();
     rawDb = null;
