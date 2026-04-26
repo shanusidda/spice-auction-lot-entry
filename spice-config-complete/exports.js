@@ -198,10 +198,16 @@ async function exportSalesTaxes(db, auctionId) {
 }
 
 // ── Export: Payment Summary ──────────────────────────────────
-async function exportPaymentSummary(db, auctionId) {
+async function exportPaymentSummary(db, auctionId, cfg) {
+  // Mode-aware discount column. In e-Trade, the discount amount is in
+  // `lots.refund` (with `lots.advance` holding GST on the discount).
+  // In auction mode, `lots.advance` is the commission + handling + GST
+  // aggregate. See calculations.js getPaymentSummary for the same logic.
+  const mode = (cfg && cfg.business_mode || 'e-Trade').toLowerCase();
+  const discountCol = (mode === 'auction') ? 'advance' : 'refund';
   const rows = db.all(
     `SELECT name as poolername, lot_no as lot, bags as bag, qty, price, amount,
-      pqty, prate, puramt, advance as discount, balance as payable
+      pqty, prate, puramt, ${discountCol} as discount, balance as payable
      FROM lots WHERE auction_id = ? AND amount > 0
      ORDER BY state, name`, [auctionId]
   );
@@ -233,11 +239,13 @@ async function exportTDSReturn(db, fromDate, toDate) {
 }
 
 // ── Export: Tally format (TALY.PRG — purchase data for accounting)
-async function exportTallyPurchase(db, auctionId) {
+async function exportTallyPurchase(db, auctionId, cfg) {
+  const mode = (cfg && cfg.business_mode || 'e-Trade').toLowerCase();
+  const discountCol = (mode === 'auction') ? 'advance' : 'refund';
   const rows = db.all(
     `SELECT name, padd as add, ppla as place, cr as gstin, tel,
       lot_no as lot, bags as bag, pqty as qty, prate as price, puramt as amount,
-      cgst, sgst, igst, advance as discount, puramt as bilamt
+      cgst, sgst, igst, ${discountCol} as discount, puramt as bilamt
      FROM lots WHERE auction_id = ? AND amount > 0
       AND cr NOT LIKE 'GSTIN.%'
      ORDER BY name`, [auctionId]
@@ -329,7 +337,7 @@ async function exportPurchaseJournal(db, fromDate, toDate, type) {
 // output only (doesn't change stored data). All other grades → 'ISPL'.
 // Rationale: Grade 1 (pooler) lots are routed to ASP for tax/accounting
 // reasons, but they still appear as ISPL lots in the local DB.
-async function exportPramanCSV(db, auctionId, state) {
+async function exportPramanCSV(db, auctionId, cfg, state) {
   const rows = db.all(
     `SELECT lot_no, branch, grade, name, cr, qty, litre, bags, tel
      FROM lots WHERE auction_id = ? ${state ? 'AND state = ?' : ''}
@@ -354,29 +362,31 @@ async function exportPramanCSV(db, auctionId, state) {
     return s;
   };
 
+  // Per business rule: every Praman row reports ASP as the planter,
+  // regardless of which trader actually supplied the lot. This is for the
+  // Praman platform's expected upload format — internal records still keep
+  // the actual trader name on `lots.name`.
+  const aspName    = (cfg && cfg.s_company) || 'AMAZING SPICE PARK PRIVATE LIMITED';
+  const aspGstin   = (cfg && cfg.s_gstin)   || '';
+  // Planter Mobile is the Kerala address phone (kl_phone), since ASP
+  // is registered at the Kerala address. Falls back to s_mobile if
+  // kl_phone is blank.
+  const aspMobile  = (cfg && (cfg.kl_phone || cfg.s_mobile)) || '';
+  const planterDealer = 2; // 2 = Dealer (always, since ASP is the legal seller)
+
   const lines = [header.join(',')];
   for (const r of rows) {
     // Grade 1 → ASP (intra-company transfer rule); else → ISPL
     const gradeStr = String(r.grade || '').trim();
     const lotCompany = (gradeStr === '1') ? 'ASP' : 'ISPL';
 
-    // Planter/Dealer: 1 = Planter, 2 = Dealer — inferred from CR field.
-    // CR starting with a state code (numeric 2-digit prefix) → GSTIN holder
-    // → Dealer (2). Otherwise "CR." prefix or empty → Planter (1).
-    const crStr = String(r.cr || '').trim();
-    const isDealer = /^\d{2}/.test(crStr);
-    const planterDealer = isDealer ? 2 : 1;
-
-    // CRNO/SBL: Planter = "CR.", Dealer = the GSTIN itself
-    const crnoSbl = isDealer ? crStr : 'CR.';
-
     lines.push([
       r.lot_no || '',
       lotCompany,
       r.branch || '',
       planterDealer,
-      r.name || '',
-      crnoSbl,
+      aspName,
+      aspGstin,
       r.qty || '',
       r.litre || '',
       r.bags || '',
@@ -386,7 +396,7 @@ async function exportPramanCSV(db, auctionId, state) {
       '', // Auction Start Price (blank)
       '', // Immature Seeds (blank)
       '', // Moisture Content (blank)
-      r.tel || '',
+      aspMobile,
       '', // Youtube link (blank)
     ].map(csvEscape).join(','));
   }
@@ -400,7 +410,7 @@ async function exportPramanCSV(db, auctionId, state) {
 const EXPORT_TYPES = {
   lot_slip:       { fn: exportLotSlip,       name: 'LotSlip' },
   lot_slip_after: { fn: exportLotSlipAfter,  name: 'LotSlipAfter' },
-  praman_csv:     { fn: exportPramanCSV,     name: 'PramanLotSlip', ext: 'csv', mime: 'text/csv' },
+  praman_csv:     { fn: exportPramanCSV,     name: 'PramanLotSlip', ext: 'csv', mime: 'text/csv', needsCfg: true },
   price_list:     { fn: exportPriceList,     name: 'PriceList' },
   bank_payment:   { fn: exportBankPayment,   name: 'BankPayment', needsCfg: true },
   pooler_register:{ fn: exportPoolerRegister,name: 'PoolerRegister' },
@@ -408,8 +418,8 @@ const EXPORT_TYPES = {
   collection:     { fn: exportCollection,    name: 'Collection' },
   dealer_list:    { fn: exportDealerList,    name: 'DealerList' },
   sales_taxes:    { fn: exportSalesTaxes,    name: 'SalesTaxes' },
-  payment:        { fn: exportPaymentSummary,name: 'Payment' },
-  tally_purchase: { fn: exportTallyPurchase, name: 'TallyPurchase' },
+  payment:        { fn: exportPaymentSummary,name: 'Payment',        needsCfg: true },
+  tally_purchase: { fn: exportTallyPurchase, name: 'TallyPurchase',  needsCfg: true },
 };
 
 module.exports = {

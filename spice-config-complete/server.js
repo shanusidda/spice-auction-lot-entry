@@ -2619,7 +2619,10 @@ app.get('/api/exports/:type/:auctionId', requireAdmin, async (req, res) => {
     let buffer;
     if (exportDef.needsCfg) {
       const cfg = getSettingsFlat(db);
-      buffer = await exportDef.fn(db, auctionId, cfg);
+      // Pass state too so exports that need both (e.g. Praman) can filter
+      // by state without losing cfg context. Backward-compatible: existing
+      // needsCfg exports that ignore the 4th arg are unaffected.
+      buffer = await exportDef.fn(db, auctionId, cfg, req.query.state);
     } else {
       buffer = await exportDef.fn(db, auctionId, req.query.state);
     }

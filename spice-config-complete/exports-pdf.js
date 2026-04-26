@@ -360,21 +360,28 @@ async function getRowsForType(db, type, auctionId, cfg, extra) {
          FROM invoices WHERE ano = (SELECT ano FROM auctions WHERE id = ?)
          ORDER BY sale, invo`, [auctionId]);
 
-    case 'payment':
+    case 'payment': {
+      // Mode-aware discount column — see exports.js exportPaymentSummary.
+      const mode = (cfg && cfg.business_mode || 'e-Trade').toLowerCase();
+      const discountCol = (mode === 'auction') ? 'advance' : 'refund';
       return db.all(
         `SELECT name as poolername, lot_no as lot, bags as bag, qty, price, amount,
-          pqty, prate, puramt, advance as discount, balance as payable
+          pqty, prate, puramt, ${discountCol} as discount, balance as payable
          FROM lots WHERE auction_id = ? AND amount > 0
          ORDER BY state, name`, [auctionId]);
+    }
 
-    case 'tally_purchase':
+    case 'tally_purchase': {
+      const mode = (cfg && cfg.business_mode || 'e-Trade').toLowerCase();
+      const discountCol = (mode === 'auction') ? 'advance' : 'refund';
       return db.all(
         `SELECT name, padd as add, ppla as place, cr as gstin, tel,
           lot_no as lot, bags as bag, pqty as qty, prate as price, puramt as amount,
-          cgst, sgst, igst, advance as discount, puramt as bilamt
+          cgst, sgst, igst, ${discountCol} as discount, puramt as bilamt
          FROM lots WHERE auction_id = ? AND amount > 0
           AND cr NOT LIKE 'GSTIN.%'
          ORDER BY name`, [auctionId]);
+    }
 
     case 'tds_return': {
       const { getTDSReturnData } = require('./calculations');
