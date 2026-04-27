@@ -978,13 +978,15 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
       ? (cfg.dispatched_through_asp || cfg.dispatched_through || '')
       : (cfg.dispatched_through_isp || cfg.dispatched_through || ''));
   labeledCell(rightX,         ry2, rCell, rSmall, 'Dispatched through', dispThrough);
-  // Destination: ISP invoices use the buyer's place (since ISP ships TO the
-  // buyer); ASP invoices use the configured dispatch_destination (which is
-  // typically ISPL's location, since ASP→ISPL is internal). Falls back to
-  // dispatch_destination if buyer place is missing for whatever reason.
+  // Destination for ISP invoices uses the buyer's CONSIGNEE place (cpla)
+  // since ISP delivers TO the consignee/ship-to address. Falls back to
+  // buyer's main place (pla) if no separate consignee is set, then to
+  // configured dispatch_destination as a last resort.
+  // ASP invoices use the configured dispatch_destination directly because
+  // ASP→ISPL is internal and the destination is always ISPL's location.
   const destination = isASP
     ? (cfg.dispatch_destination || '')
-    : (buyer.pla || cfg.dispatch_destination || '');
+    : (buyer.cpla || buyer.pla || cfg.dispatch_destination || '');
   labeledCell(rightX + rCell, ry2, rCell, rSmall, 'Destination', destination);
   ry2 += rSmall;
 

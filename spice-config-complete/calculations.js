@@ -382,27 +382,58 @@ function buildPurchaseInvoice(db, auctionId, sellerName, cfg) {
  * Generate payment summary for sellers (PAYCHECK.PRG equivalent)
  */
 function getPaymentSummary(db, auctionId, state, cfg) {
-  // Mode-aware "discount" column. In e-Trade mode, the discount amount
-  // is stored in `lots.refund` (with `lots.advance` holding GST on the
-  // discount). In auction mode, `lots.advance` holds the commission +
-  // handling + GST aggregate which acts as the trader-side deduction.
-  // Default to e-Trade since that's what Ideal Spices uses today.
+  // The "discount" column is the sum of two parts per seller per auction:
+  //   1. Per-lot computed discount (lots.refund in e-Trade, lots.advance in
+  //      auction mode) — based on discount_pct × days × puramt
+  //   2. Per-seller debit notes for this auction — manual adjustments
+  //      (e.g., quality complaints, settlement deductions). Joined by
+  //      seller name + auction ano so we sum all debit_notes that apply.
+  // Total payable already accounts for these via balance recalc, but the
+  // displayed "Discount" column needs the COMBINED figure so the user
+  // sees both the policy discount and any manual adjustments.
   const mode = (cfg && cfg.business_mode || 'e-Trade').toLowerCase();
   const discountCol = (mode === 'auction') ? 'advance' : 'refund';
-  let query = `SELECT name, cr, 
-    SUM(qty) as total_qty, SUM(amount) as total_amount,
-    SUM(pqty) as total_pqty, SUM(prate) as avg_prate,
-    SUM(puramt) as total_puramt,
-    SUM(${discountCol}) as total_discount,
-    SUM(balance) as total_payable,
+  // First fetch the per-lot summary
+  let query = `SELECT l.name, l.cr,
+    SUM(l.qty) as total_qty, SUM(l.amount) as total_amount,
+    SUM(l.pqty) as total_pqty, SUM(l.prate) as avg_prate,
+    SUM(l.puramt) as total_puramt,
+    SUM(l.${discountCol}) as lot_discount,
+    SUM(l.balance) as total_payable,
     COUNT(*) as lot_count
-    FROM lots WHERE auction_id = ? AND amount > 0`;
+    FROM lots l WHERE l.auction_id = ? AND l.amount > 0`;
   const params = [auctionId];
+  if (state) { query += ' AND l.state = ?'; params.push(state); }
+  query += ' GROUP BY l.name, l.cr ORDER BY l.state, l.name';
+  const sellers = db.all(query, params);
 
-  if (state) { query += ' AND state = ?'; params.push(state); }
-  query += ' GROUP BY name, cr ORDER BY state, name';
-
-  return db.all(query, params);
+  // Fetch this auction's identifier (ano) so we can match debit_notes.
+  // Debit notes are keyed by ano + seller name (no FK to auctions.id),
+  // mirroring the legacy FoxPro flow.
+  const auction = db.get('SELECT ano FROM auctions WHERE id = ?', [auctionId]);
+  const ano = auction ? auction.ano : null;
+  // Build a name → debit_note total map for fast lookup
+  const debitMap = {};
+  if (ano) {
+    const debits = db.all(
+      'SELECT name, SUM(amount) as total FROM debit_notes WHERE ano = ? GROUP BY name',
+      [ano]
+    );
+    for (const d of debits) debitMap[d.name] = Number(d.total) || 0;
+  }
+  // Merge: total_discount = lot-policy discount + any manual debit notes
+  return sellers.map(s => {
+    const lotDisc = Number(s.lot_discount) || 0;
+    const manualDisc = Number(debitMap[s.name]) || 0;
+    return {
+      ...s,
+      total_discount: lotDisc + manualDisc,
+      // Subtract the manual debit_notes from payable since balance was
+      // computed before debit_notes were added. Lot-policy discount is
+      // already factored into balance via puramt - cgst - sgst - igst.
+      total_payable: (Number(s.total_payable) || 0) - manualDisc,
+    };
+  });
 }
 
 /**

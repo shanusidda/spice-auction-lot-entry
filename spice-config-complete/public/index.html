@@ -767,6 +767,24 @@ tr:hover td{background:var(--spice-cream)}
    instead of showing a useless "0 items" header. Set via display:none on
    the wrapper itself by JS. */
 
+/* ── Search inputs (native clear button) ──────────────────
+   type="search" inputs get a built-in clear (×) button when they
+   contain text. Chrome/Edge hide it by default; this re-enables and
+   themes it to match the spice palette. */
+input[type="search"]{
+  -webkit-appearance:none;appearance:none;
+  /* Right-padding so native clear icon doesn't overlap the placeholder text */
+  padding-right:34px !important;
+}
+input[type="search"]::-webkit-search-cancel-button{
+  -webkit-appearance:none;appearance:none;
+  height:18px;width:18px;cursor:pointer;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23166534' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'/><line x1='15' y1='9' x2='9' y2='15'/><line x1='9' y1='9' x2='15' y2='15'/></svg>");
+  background-size:contain;background-repeat:no-repeat;
+  opacity:.55;transition:opacity .15s
+}
+input[type="search"]::-webkit-search-cancel-button:hover{opacity:1}
+
 /* ── Permission-based visibility ───────────────────────
    Elements with .needs-X class are hidden when the user lacks
    capability X. Pattern: hide by default, restore display when
@@ -1191,7 +1209,7 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
       </div>
       <div class="set-wrap">
         <aside class="set-nav">
-          <input type="text" class="set-search" id="set-search" placeholder="Search settings..." oninput="filterSettings(this.value)">
+          <input type="search" class="set-search" id="set-search" placeholder="Search settings..." oninput="filterSettings(this.value)">
           <div id="set-nav-items"></div>
         </aside>
         <div class="set-panel">
@@ -1311,7 +1329,7 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
       <div class="card">
         <h2>Sellers / Poolers <button class="needs-trader-write btn btn-g" onclick="openTraderAdd()">+ Add Seller</button></h2>
         <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:end">
-          <div class="fg" style="margin:0;flex:1;min-width:180px"><input placeholder="Search by name, phone, GSTIN, PAN, place..." oninput="searchTraders(this.value)"></div>
+          <div class="fg" style="margin:0;flex:1;min-width:180px"><input type="search" placeholder="Search by name, phone, GSTIN, PAN, place..." oninput="searchTraders(this.value)"></div>
           <button class="btn btn-a" onclick="document.getElementById('imp-traders').click()">Import XLS/XLSX</button>
           <button class="btn btn-o" onclick="downloadTemplate('traders')">Download Template</button>
           <button class="needs-delete-all btn" style="background:#c0392b;color:#fff" onclick="deleteAll('traders','Sellers')">Delete All</button>
@@ -1327,7 +1345,7 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
       <div class="card">
         <h2>Buyers / Dealers <button class="needs-buyer-write btn btn-g" onclick="openBuyerAdd()">+ Add Buyer</button></h2>
         <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:end">
-          <div class="fg" style="margin:0;flex:1;min-width:180px"><input placeholder="Search by name, phone, GSTIN, PAN, TI..." oninput="searchBuyers(this.value)"></div>
+          <div class="fg" style="margin:0;flex:1;min-width:180px"><input type="search" placeholder="Search by name, phone, GSTIN, PAN, TI..." oninput="searchBuyers(this.value)"></div>
           <button class="btn btn-a" onclick="document.getElementById('imp-buyers').click()">Import XLS/XLSX</button>
           <button class="btn btn-o" onclick="downloadTemplate('buyers')">Download Template</button>
           <button class="needs-delete-all btn" style="background:#c0392b;color:#fff" onclick="deleteAll('buyers','Buyers')">Delete All</button>
@@ -2759,7 +2777,7 @@ const DataTable = (function(){
     const toolbar = `
       <div class="dt-toolbar">
         <div class="dt-search-wrap">
-          <input type="text" class="dt-search" placeholder="Search all columns…" value="${esc(s.search||'')}" oninput="DataTable._search('${tbodyId}',this.value)">
+          <input type="search" class="dt-search" placeholder="Search all columns…" value="${esc(s.search||'')}" oninput="DataTable._search('${tbodyId}',this.value)">
           ${hasSearch ? `<button class="dt-search-clear" title="Clear search" onclick="DataTable._clear('${tbodyId}')" aria-label="Clear">&times;</button>` : ''}
         </div>
         <span class="dt-count">${filtered.length} row${filtered.length===1?'':'s'}${s.data.length!==filtered.length?` (of ${s.data.length})`:''}</span>

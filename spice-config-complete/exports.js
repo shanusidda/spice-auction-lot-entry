@@ -199,18 +199,47 @@ async function exportSalesTaxes(db, auctionId) {
 
 // ── Export: Payment Summary ──────────────────────────────────
 async function exportPaymentSummary(db, auctionId, cfg) {
-  // Mode-aware discount column. In e-Trade, the discount amount is in
-  // `lots.refund` (with `lots.advance` holding GST on the discount).
-  // In auction mode, `lots.advance` is the commission + handling + GST
-  // aggregate. See calculations.js getPaymentSummary for the same logic.
+  // Match getPaymentSummary semantics: discount includes BOTH the per-lot
+  // policy discount AND any manual debit_notes for this auction's sellers.
+  // We compute it per-row by adding debit_notes (joined by ano + name).
   const mode = (cfg && cfg.business_mode || 'e-Trade').toLowerCase();
   const discountCol = (mode === 'auction') ? 'advance' : 'refund';
+  const auction = db.get('SELECT ano FROM auctions WHERE id = ?', [auctionId]);
+  const ano = auction ? auction.ano : null;
+  // Build name → manual debit total map (debit_notes can have multiple
+  // rows per seller per auction; we sum)
+  const debitMap = {};
+  if (ano) {
+    const debits = db.all(
+      'SELECT name, SUM(amount) as total FROM debit_notes WHERE ano = ? GROUP BY name',
+      [ano]
+    );
+    for (const d of debits) debitMap[d.name] = Number(d.total) || 0;
+  }
   const rows = db.all(
     `SELECT name as poolername, lot_no as lot, bags as bag, qty, price, amount,
-      pqty, prate, puramt, ${discountCol} as discount, balance as payable
+      pqty, prate, puramt, ${discountCol} as lot_discount, balance as payable
      FROM lots WHERE auction_id = ? AND amount > 0
      ORDER BY state, name`, [auctionId]
   );
+  // Spread debit_notes amount across the seller's lots proportionally so
+  // every row totals to the same SUM as the payments view. Simpler approach:
+  // attribute the FULL manual debit on the FIRST row for each seller; later
+  // rows show only the lot policy discount. Avoids per-row arithmetic but
+  // still preserves the seller-level total.
+  const seenSellers = new Set();
+  const enriched = rows.map(r => {
+    const lotDisc = Number(r.lot_discount) || 0;
+    const manualDisc = (!seenSellers.has(r.poolername))
+      ? (Number(debitMap[r.poolername]) || 0)
+      : 0;
+    seenSellers.add(r.poolername);
+    return {
+      ...r,
+      discount: lotDisc + manualDisc,
+      payable: (Number(r.payable) || 0) - manualDisc,
+    };
+  });
   const cols = [
     { header: 'POOLERNAME', key: 'poolername', width: 30 },
     { header: 'LOT', key: 'lot', width: 8 }, { header: 'BAG', key: 'bag', width: 6 },
@@ -220,7 +249,7 @@ async function exportPaymentSummary(db, auctionId, cfg) {
     { header: 'DISCOUNT', key: 'discount', width: 14 },
     { header: 'PAYABLE', key: 'payable', width: 14 },
   ];
-  return createExcelBuffer('Payment', cols, rows);
+  return createExcelBuffer('Payment', cols, enriched);
 }
 
 // ── Export: TDS Return ───────────────────────────────────────
