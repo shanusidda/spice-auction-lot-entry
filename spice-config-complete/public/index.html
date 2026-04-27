@@ -729,6 +729,44 @@ tr:hover td{background:var(--spice-cream)}
 .empty-state h3{font-size:18px;font-weight:700;color:var(--text);margin-bottom:8px;letter-spacing:-.2px}
 .empty-state p{font-size:14px;margin-bottom:20px;max-width:380px;margin-left:auto;margin-right:auto;line-height:1.6;color:var(--spice-text-mute)}
 
+/* ── Collapsible summary panels ─────────────────────────
+   Wraps KPI strips + charts in a section that can be hidden
+   to save vertical space. Header shows a one-line summary
+   (count + total) so dad still gets at-a-glance info even
+   when collapsed. Per-page state persisted in localStorage. */
+.summary-panel{
+  border:1px solid var(--spice-line);border-radius:14px;
+  background:#fff;margin-bottom:18px;overflow:hidden;
+  transition:border-color .15s
+}
+.summary-panel:hover{border-color:var(--spice-line-strong)}
+.summary-head{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:14px 18px;cursor:pointer;user-select:none;
+  background:linear-gradient(to right,var(--spice-cardamom-lt) 0%,#fff 60%);
+  transition:background .15s
+}
+.summary-head:hover{background:linear-gradient(to right,var(--spice-cardamom-lt) 0%,var(--spice-cream) 60%)}
+.summary-head .chev{
+  display:inline-block;width:18px;height:18px;flex-shrink:0;color:var(--spice-cardamom);
+  transition:transform .2s ease-out
+}
+.summary-panel[data-collapsed="1"] .chev{transform:rotate(-90deg)}
+.summary-head .title{
+  display:flex;align-items:center;gap:10px;font-weight:700;font-size:14px;color:var(--spice-text-main)
+}
+.summary-head .stats-line{
+  font-size:12.5px;color:var(--spice-text-mute);font-weight:500;
+  display:flex;gap:14px;align-items:center;flex-wrap:wrap
+}
+.summary-head .stats-line strong{color:var(--spice-cardamom-dk);font-weight:700}
+.summary-body{padding:18px;border-top:1px solid var(--spice-line)}
+.summary-panel[data-collapsed="1"] .summary-body{display:none}
+.summary-panel[data-collapsed="1"] .summary-head{background:#fff}
+/* When the summary panel is fully empty (no data yet), hide the whole panel
+   instead of showing a useless "0 items" header. Set via display:none on
+   the wrapper itself by JS. */
+
 /* ── Comfort Mode ──────────────────────────────────────
    Toggleable larger-text mode for older / vision-impaired users.
    Activated via the topbar A↑ button; persisted in localStorage.
@@ -971,6 +1009,10 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
   .content{padding:18px 16px}
 }
 </style>
+<!-- Chart.js for dashboard + payments charts. Loaded from cdnjs to keep
+     the app fully self-contained on Railway (no build step needed).
+     Pinned version for stability — bump only after testing. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 </head>
 <body>
 <div id="login">
@@ -1485,6 +1527,18 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
             <button class="btn btn-a" style="height:38px;padding:0 16px;font-weight:600" onclick="exportType('bank_payment')" title="Export bulk RTGS/NEFT file for bank portal upload">📤 Export Bank Payment</button>
             <button class="btn btn-a" style="height:38px;padding:0 16px;font-weight:600" onclick="exportType('payment')" title="Per-lot detailed payment breakdown">📊 Export Payment XLSX</button>
           </div>
+        </div>
+
+        <!-- ── Top Sellers chart ────────────────────────────────────────
+             Horizontal bar chart showing the top 10 sellers by payable
+             amount. Hidden until first data load and only when there's
+             enough sellers to make a chart meaningful (>= 2). -->
+        <div id="pay-chart-card" style="background:var(--spice-cream);border:1px solid var(--spice-line);border-radius:14px;padding:16px 22px;margin-bottom:14px;display:none">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <h3 style="font-size:14px;font-weight:700;margin:0;color:var(--spice-text-main)">Top Sellers by Payable</h3>
+            <span style="font-size:11px;color:var(--spice-text-hint)">Top 10 · hover bars for details</span>
+          </div>
+          <div style="height:280px;position:relative"><canvas id="pay-top-sellers-chart"></canvas></div>
         </div>
 
         <div style="overflow-x:auto"><table><thead><tr><th>Seller</th><th>Lots</th><th>Qty</th><th>Amount</th><th>Purchase</th><th>Discount</th><th>Payable</th></tr></thead><tbody id="payments-list"></tbody></table></div>
@@ -2262,6 +2316,125 @@ function toggleComfort(){
 (function(){
   try { if (localStorage.getItem('comfort') === '1') document.body.setAttribute('data-comfort','1'); } catch(e){}
 })();
+
+// ── Summary panel: collapsible KPI strips + charts ──────
+// Each KPI strip and (where applicable) its companion chart card on a tab
+// is wrapped at runtime in a <div class="summary-panel"> with a click-to-
+// collapse header. Header shows a one-line stats summary so the user still
+// sees key totals at-a-glance even when the heavy tile grid is hidden.
+//
+// Per-tab collapsed state is persisted in localStorage under keys like
+// `summary:invoices`, `summary:lots`, etc. — defaults to expanded for
+// first-time users.
+
+const SUMMARY_PANELS = [
+  { kpiId:'lot-kpis',  chartId:null,                  key:'lots',      label:'Summary' },
+  { kpiId:'inv-kpis',  chartId:null,                  key:'invoices',  label:'Summary' },
+  { kpiId:'pur-kpis',  chartId:null,                  key:'purchases', label:'Summary' },
+  { kpiId:'pay-kpis',  chartId:'pay-chart-card',      key:'payments',  label:'Summary' },
+  { kpiId:'bill-kpis', chartId:null,                  key:'bills',     label:'Summary' },
+];
+
+function summaryStorageKey(key){ return 'summary:' + key; }
+function isSummaryCollapsed(key){
+  try { return localStorage.getItem(summaryStorageKey(key)) === '1'; } catch(_) { return false; }
+}
+function setSummaryCollapsed(key, collapsed){
+  try { localStorage.setItem(summaryStorageKey(key), collapsed ? '1' : '0'); } catch(_){}
+}
+
+// Wrap a KPI grid + optional chart card in a collapsible summary panel.
+// Idempotent — running it twice is safe (skips already-wrapped panels).
+function wrapSummaryPanel(spec){
+  const kpi = document.getElementById(spec.kpiId);
+  if (!kpi) return;
+  // Already wrapped? Skip.
+  if (kpi.parentElement && kpi.parentElement.classList.contains('summary-body')) return;
+
+  const chart = spec.chartId ? document.getElementById(spec.chartId) : null;
+  const collapsed = isSummaryCollapsed(spec.key);
+
+  const panel = document.createElement('div');
+  panel.className = 'summary-panel';
+  panel.id = 'summary-panel-' + spec.key;
+  panel.dataset.collapsed = collapsed ? '1' : '0';
+  // Hide entire panel until first data load populates the strip
+  panel.style.display = 'none';
+
+  const head = document.createElement('div');
+  head.className = 'summary-head';
+  head.innerHTML = `
+    <span class="title">
+      <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      ${esc(spec.label)}
+    </span>
+    <span class="stats-line" id="summary-stats-${spec.key}"></span>
+  `;
+  head.addEventListener('click', () => {
+    const cur = panel.dataset.collapsed === '1';
+    panel.dataset.collapsed = cur ? '0' : '1';
+    setSummaryCollapsed(spec.key, !cur);
+  });
+
+  const body = document.createElement('div');
+  body.className = 'summary-body';
+
+  // Move the KPI grid (and chart card if present) INTO the body.
+  // Important: keep their original IDs so the loaders that update them
+  // continue to work without modification. We also strip the inline
+  // margin-bottom that was on the KPI grid since the wrapper handles
+  // spacing now.
+  const kpiParent = kpi.parentElement;
+  kpi.style.marginBottom = '0';
+  body.appendChild(kpi);
+  if (chart) {
+    chart.style.marginBottom = '0';
+    body.appendChild(chart);
+  }
+  panel.appendChild(head);
+  panel.appendChild(body);
+  // Insert the panel where the KPI grid used to be.
+  // (kpi was the first thing we picked up; insert at the same
+  // position by inserting before the next sibling at the time of
+  // the first removal — which is now invalid, so use kpiParent's
+  // first child as the insertion point.)
+  if (kpiParent) {
+    kpiParent.insertBefore(panel, kpiParent.firstChild ? kpiParent.firstChild.nextSibling : null);
+    // Find the right place: after the H2 header (.card h2) so summary
+    // sits between header and toolbar.
+    const h2 = kpiParent.querySelector(':scope > h2');
+    if (h2 && h2.nextSibling !== panel) {
+      kpiParent.insertBefore(panel, h2.nextSibling);
+    }
+  }
+}
+
+// Update the one-line summary text shown when the panel is collapsed.
+// Called by each loader after computing the totals. Pass a small string
+// like "3 invoices · ₹6,50,250 grand total".
+function updateSummaryStats(key, statsText){
+  const el = document.getElementById('summary-stats-' + key);
+  if (el) el.innerHTML = statsText;
+  const panel = document.getElementById('summary-panel-' + key);
+  if (panel) panel.style.display = ''; // reveal the panel now that data exists
+}
+
+// Hide a summary panel entirely (e.g., empty list).
+function hideSummaryPanel(key){
+  const panel = document.getElementById('summary-panel-' + key);
+  if (panel) panel.style.display = 'none';
+}
+
+// Wrap all panels when the document is ready. Done after DOMContentLoaded
+// so the static HTML for each tab has been parsed.
+function initSummaryPanels(){
+  for (const spec of SUMMARY_PANELS) wrapSummaryPanel(spec);
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initSummaryPanels);
+} else {
+  initSummaryPanels();
+}
 function showModal(id){document.getElementById(id).classList.add('show')}
 function hideModal(id){document.getElementById(id).classList.remove('show')}
 function esc(s){return s?String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'):''}
@@ -2728,6 +2901,21 @@ async function loadStats(auctionId){
   `);
 
   // Per-trade breakdown table (shown only in All-Trades mode, below the hero row)
+  // Companion: a bar chart of revenue per trade rendered above the table
+  // (chart container is empty here; real Chart.js drawing happens in a
+  // requestAnimationFrame after innerHTML lands so the canvas exists).
+  const chartHTML = isAllMode && PT.length ? `
+    <div class="card" style="padding:0;margin-bottom:20px">
+      <div style="padding:18px 22px 12px;border-bottom:1px solid var(--spice-line);display:flex;justify-content:space-between;align-items:center">
+        <h2 style="font-size:17px;font-weight:700;margin:0;color:var(--spice-text-main)">Revenue by Trade</h2>
+        <span style="font-size:12px;color:var(--spice-text-hint)">Hover bars for exact amount</span>
+      </div>
+      <div style="padding:18px 22px;height:280px;position:relative">
+        <canvas id="dash-revenue-chart"></canvas>
+      </div>
+    </div>
+  ` : '';
+
   const ptHTML = isAllMode && PT.length ? `
     <div class="card" style="padding:0;margin-bottom:20px">
       <div style="padding:18px 22px 12px;border-bottom:1px solid var(--spice-line);display:flex;justify-content:space-between;align-items:center">
@@ -2906,6 +3094,8 @@ async function loadStats(auctionId){
       </div>
     </div>
 
+    ${chartHTML}
+
     ${ptHTML}
 
     <div class="dash-row-eq">
@@ -2925,6 +3115,73 @@ async function loadStats(auctionId){
       </div>
     </div>
   `;
+
+  // Render the dashboard revenue chart AFTER the HTML is in the DOM so
+  // the canvas element exists for Chart.js to grab. requestAnimationFrame
+  // ensures layout has settled before we measure the canvas size.
+  if (typeof Chart !== 'undefined' && isAllMode && PT.length) {
+    requestAnimationFrame(() => {
+      const canvas = document.getElementById('dash-revenue-chart');
+      if (!canvas) return;
+      // Destroy previous chart if any (loadStats can re-render multiple times)
+      if (canvas._chart) { canvas._chart.destroy(); canvas._chart = null; }
+      // Show most recent ~12 trades, oldest first (left to right). PT comes
+      // sorted by trade ano descending; reverse for chart order.
+      const data = PT.slice(0, 12).reverse();
+      const labels = data.map(t => `#${t.ano}`);
+      const amounts = data.map(t => Number(t.amount) || 0);
+      const ctx = canvas.getContext('2d');
+      // Spice-themed gradient for the bars
+      const grad = ctx.createLinearGradient(0, 0, 0, 240);
+      grad.addColorStop(0, '#10B981');
+      grad.addColorStop(1, '#166534');
+      canvas._chart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Revenue',
+            data: amounts,
+            backgroundColor: grad,
+            borderRadius: 6,
+            barThickness: 'flex',
+            maxBarThickness: 56,
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: '#0F172A',
+              padding: 10,
+              titleFont: { weight: '600' },
+              callbacks: {
+                title: (items) => `Trade ${items[0].label}`,
+                label: (ctx) => '₹' + Math.round(ctx.parsed.y).toLocaleString('en-IN'),
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: { display: false },
+              ticks: { font: { size: 11, weight: '600' }, color: '#475569' }
+            },
+            y: {
+              beginAtZero: true,
+              grid: { color: '#E2E8F0', drawBorder: false },
+              ticks: {
+                font: { size: 11 },
+                color: '#94A3B8',
+                callback: (v) => v >= 100000 ? `₹${(v/100000).toFixed(1)}L` : `₹${(v/1000).toFixed(0)}k`
+              }
+            }
+          }
+        }
+      });
+    });
+  }
 }
 
 // ── Users & Sessions ─────────────────────────────────────
@@ -4688,6 +4945,7 @@ async function loadLots(){const aid=document.getElementById('lot-auction').value
   if (kpiStrip) {
     if (arr.length === 0) {
       kpiStrip.style.display = 'none';
+      hideSummaryPanel('lots');
     } else {
       kpiStrip.style.display = 'grid';
       const totalQty    = arr.reduce((a,i) => a + (Number(i.qty)    || 0), 0);
@@ -4703,6 +4961,11 @@ async function loadLots(){const aid=document.getElementById('lot-auction').value
       if ($('lot-kpi-qty'))    $('lot-kpi-qty').innerHTML      = `${fmtI(totalQty, 0)}<span class="kpi-unit">kg</span>`;
       if ($('lot-kpi-amount')) $('lot-kpi-amount').innerHTML   = `<span class="kpi-unit" style="margin-right:4px">₹</span>${fmtI(totalAmount, 0)}`;
       if ($('lot-kpi-calc'))   $('lot-kpi-calc').innerHTML     = `${pct}%<span class="kpi-unit"> done</span>`;
+      updateSummaryStats('lots',
+        `<strong>${arr.length}</strong> lot${arr.length===1?'':'s'} · `
+        + `<strong>${fmtI(totalQty,0)} kg</strong> · `
+        + `<strong>₹${fmtI(totalAmount,0)}</strong> · `
+        + `<strong>${pct}%</strong> calculated`);
     }
   }
 
@@ -4982,6 +5245,7 @@ async function loadInvoices(){
   if (kpiStrip) {
     if (arr.length === 0) {
       kpiStrip.style.display = 'none';
+      hideSummaryPanel('invoices');
     } else {
       kpiStrip.style.display = 'grid';
       const totalQty    = arr.reduce((a,i) => a + (Number(i.qty)    || 0), 0);
@@ -4992,6 +5256,11 @@ async function loadInvoices(){
       if ($('inv-kpi-qty'))    $('inv-kpi-qty').innerHTML      = `${fmtI(totalQty, 0)}<span class="kpi-unit">kg</span>`;
       if ($('inv-kpi-amount')) $('inv-kpi-amount').innerHTML   = `<span class="kpi-unit" style="margin-right:4px">₹</span>${fmtI(totalAmount, 0)}`;
       if ($('inv-kpi-total'))  $('inv-kpi-total').innerHTML    = `<span class="kpi-unit" style="margin-right:4px">₹</span>${fmtI(grandTotal, 0)}`;
+      // Compact summary line shown when collapsed
+      updateSummaryStats('invoices',
+        `<strong>${arr.length}</strong> invoice${arr.length===1?'':'s'} · `
+        + `<strong>${fmtI(totalQty,0)} kg</strong> · `
+        + `<strong>₹${fmtI(grandTotal,0)}</strong> total`);
     }
   }
 
@@ -5504,6 +5773,7 @@ async function loadPurchases(){
   if (kpiStrip) {
     if (arr.length === 0) {
       kpiStrip.style.display = 'none';
+      hideSummaryPanel('purchases');
     } else {
       kpiStrip.style.display = 'grid';
       const totalQty    = arr.reduce((a,i) => a + (Number(i.qty)    || 0), 0);
@@ -5514,6 +5784,10 @@ async function loadPurchases(){
       if ($('pur-kpi-qty'))    $('pur-kpi-qty').innerHTML      = `${fmtI(totalQty, 0)}<span class="kpi-unit">kg</span>`;
       if ($('pur-kpi-amount')) $('pur-kpi-amount').innerHTML   = `<span class="kpi-unit" style="margin-right:4px">₹</span>${fmtI(totalAmount, 0)}`;
       if ($('pur-kpi-total'))  $('pur-kpi-total').innerHTML    = `<span class="kpi-unit" style="margin-right:4px">₹</span>${fmtI(grandTotal, 0)}`;
+      updateSummaryStats('purchases',
+        `<strong>${arr.length}</strong> invoice${arr.length===1?'':'s'} · `
+        + `<strong>${fmtI(totalQty,0)} kg</strong> · `
+        + `<strong>₹${fmtI(grandTotal,0)}</strong> total`);
     }
   }
 
@@ -5589,6 +5863,7 @@ async function loadPayments(){
     if (kpiStrip) {
       if (arr.length === 0) {
         kpiStrip.style.display = 'none';
+        hideSummaryPanel('payments');
       } else {
         kpiStrip.style.display = 'grid';
         const totalQty      = arr.reduce((a,i) => a + (Number(i.total_qty)      || 0), 0);
@@ -5599,6 +5874,10 @@ async function loadPayments(){
         if ($('pay-kpi-qty'))      $('pay-kpi-qty').innerHTML        = `${fmtI(totalQty, 0)}<span class="kpi-unit">kg</span>`;
         if ($('pay-kpi-discount')) $('pay-kpi-discount').innerHTML   = `<span class="kpi-unit" style="margin-right:4px">₹</span>${fmtI(totalDiscount, 0)}`;
         if ($('pay-kpi-payable'))  $('pay-kpi-payable').innerHTML    = `<span class="kpi-unit" style="margin-right:4px">₹</span>${fmtI(totalPayable, 0)}`;
+        updateSummaryStats('payments',
+          `<strong>${arr.length}</strong> seller${arr.length===1?'':'s'} · `
+          + `<strong>${fmtI(totalQty,0)} kg</strong> · `
+          + `<strong>₹${fmtI(totalPayable,0)}</strong> payable`);
       }
     }
 
@@ -5626,6 +5905,76 @@ async function loadPayments(){
           render:(p)=>`<span style="font-weight:700;color:var(--spice-cardamom-dk);font-size:14px">${fmtI(p.total_payable||0,2)}</span>` }
       ]
     });
+
+    // Top Sellers chart — horizontal bars, top 10 by payable.
+    // Hidden when fewer than 2 sellers (chart isn't meaningful).
+    const chartCard = document.getElementById('pay-chart-card');
+    if (chartCard) {
+      if (typeof Chart !== 'undefined' && arr.length >= 2) {
+        chartCard.style.display = 'block';
+        requestAnimationFrame(() => {
+          const canvas = document.getElementById('pay-top-sellers-chart');
+          if (!canvas) return;
+          if (canvas._chart) { canvas._chart.destroy(); canvas._chart = null; }
+          // Sort descending by payable, take top 10, then reverse so the
+          // highest bar is at the TOP of the chart (Chart.js indexAxis:y
+          // draws first label at top).
+          const sorted = [...arr]
+            .sort((a, b) => (Number(b.total_payable)||0) - (Number(a.total_payable)||0))
+            .slice(0, 10)
+            .reverse();
+          const labels = sorted.map(s => s.name || '—');
+          const amounts = sorted.map(s => Number(s.total_payable) || 0);
+          const ctx = canvas.getContext('2d');
+          canvas._chart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+              labels,
+              datasets: [{
+                label: 'Payable',
+                data: amounts,
+                backgroundColor: '#10B981',
+                borderRadius: 4,
+                barThickness: 'flex',
+                maxBarThickness: 22,
+              }]
+            },
+            options: {
+              indexAxis: 'y',
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                legend: { display: false },
+                tooltip: {
+                  backgroundColor: '#0F172A',
+                  padding: 10,
+                  callbacks: {
+                    label: (ctx) => '₹' + Math.round(ctx.parsed.x).toLocaleString('en-IN'),
+                  }
+                }
+              },
+              scales: {
+                x: {
+                  beginAtZero: true,
+                  grid: { color: '#E2E8F0', drawBorder: false },
+                  ticks: {
+                    font: { size: 11 },
+                    color: '#94A3B8',
+                    callback: (v) => v >= 100000 ? `₹${(v/100000).toFixed(1)}L` : `₹${(v/1000).toFixed(0)}k`
+                  }
+                },
+                y: {
+                  grid: { display: false },
+                  ticks: { font: { size: 11, weight: '600' }, color: '#475569' }
+                }
+              }
+            }
+          });
+        });
+      } else {
+        chartCard.style.display = 'none';
+      }
+    }
   }catch(e){
     body.innerHTML=`<tr><td colspan="7" style="text-align:center;color:var(--red);padding:24px">Failed to load: ${esc(e.message)}</td></tr>`;
   }
@@ -5721,6 +6070,7 @@ async function loadBills(){
   if (kpiStrip) {
     if (arr.length === 0) {
       kpiStrip.style.display = 'none';
+      hideSummaryPanel('bills');
     } else {
       kpiStrip.style.display = 'grid';
       const totalQty = arr.reduce((a,i) => a + (Number(i.qty) || 0), 0);
@@ -5729,6 +6079,10 @@ async function loadBills(){
       if ($('bill-kpi-count')) $('bill-kpi-count').textContent = arr.length;
       if ($('bill-kpi-qty'))   $('bill-kpi-qty').innerHTML     = `${fmtI(totalQty, 0)}<span class="kpi-unit">kg</span>`;
       if ($('bill-kpi-net'))   $('bill-kpi-net').innerHTML     = `<span class="kpi-unit" style="margin-right:4px">₹</span>${fmtI(totalNet, 0)}`;
+      updateSummaryStats('bills',
+        `<strong>${arr.length}</strong> bill${arr.length===1?'':'s'} · `
+        + `<strong>${fmtI(totalQty,0)} kg</strong> · `
+        + `<strong>₹${fmtI(totalNet,0)}</strong> net`);
     }
   }
 
