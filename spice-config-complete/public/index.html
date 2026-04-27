@@ -162,22 +162,53 @@ body[data-theme="trust"]{
 }
 
 /* Small floating theme switcher at bottom-right */
-#theme-switcher{
-  position:fixed;bottom:16px;right:16px;z-index:999;
-  background:#fff;border:1.5px solid var(--spice-line);
-  border-radius:24px;padding:6px;display:flex;gap:4px;flex-wrap:wrap;
-  max-width:232px;justify-content:flex-end;align-items:center;
-  box-shadow:0 4px 16px rgba(0,0,0,.12)
+/* ── Theme chips (in Settings → Appearance card) ───────────
+   Larger labelled chips than the old floating switcher. Each chip
+   shows a sample of the theme's primary color with the theme name
+   below. Active chip gets a cardamom ring + check mark overlay. */
+.theme-chip-large{
+  position:relative;display:inline-flex;flex-direction:column;
+  align-items:center;gap:6px;cursor:pointer;
+  padding:6px 4px;border-radius:10px;
+  transition:transform .15s,background .15s
 }
-body[data-dark="1"] #theme-switcher{
-  background:var(--spice-paper);border-color:var(--spice-line-strong)
+.theme-chip-large::before{
+  content:'';width:48px;height:48px;border-radius:50%;
+  border:3px solid #fff;box-shadow:0 0 0 1.5px var(--spice-line),0 4px 10px rgba(0,0,0,.08);
+  transition:box-shadow .15s
 }
-.theme-chip{
-  width:28px;height:28px;border-radius:50%;cursor:pointer;
-  border:2px solid #fff;box-shadow:0 0 0 1.5px var(--spice-line);
-  transition:transform .15s
+.theme-chip-large:hover{background:var(--spice-cream)}
+.theme-chip-large:hover::before{box-shadow:0 0 0 2px var(--spice-cardamom),0 6px 14px rgba(0,0,0,.12)}
+.theme-chip-large.active::before{box-shadow:0 0 0 3px var(--spice-cardamom),0 4px 10px rgba(22,101,52,.18)}
+.theme-chip-large.active::after{
+  content:'\2713';position:absolute;top:6px;left:50%;transform:translateX(-50%);
+  width:24px;height:24px;border-radius:50%;background:var(--spice-cardamom);
+  color:#fff;font-size:14px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 2px 6px rgba(22,101,52,.4);
+  margin-top:8px
 }
-.theme-chip:hover{transform:scale(1.15)}
+.theme-chip-large .chip-label{
+  font-size:11.5px;font-weight:600;color:var(--text2);
+  text-transform:capitalize;letter-spacing:.2px
+}
+.theme-chip-large.active .chip-label{color:var(--spice-cardamom-dk);font-weight:700}
+/* Theme color preview — uses each theme's primary color value.
+   Emerald is the default, defined inline below. Other themes
+   override via body[data-theme="X"] selectors elsewhere — but
+   for the swatch preview we want each chip to show ITS OWN color
+   regardless of currently-active theme, so we hardcode here. */
+.theme-chip-large[data-t="emerald"]::before{background:#10B981}
+.theme-chip-large[data-t="coral"]::before{background:#F97066}
+.theme-chip-large[data-t="violet"]::before{background:#8B5CF6}
+.theme-chip-large[data-t="sunshine"]::before{background:#F59E0B}
+.theme-chip-large[data-t="electric"]::before{background:#3B82F6}
+.theme-chip-large[data-t="ocean"]::before{background:#06B6D4}
+.theme-chip-large[data-t="tech"]::before{background:#0EA5E9}
+.theme-chip-large[data-t="minimal"]::before{background:linear-gradient(135deg,#1E293B 50%,#10B981 50%)}
+.theme-chip-large[data-t="trust"]::before{background:#1E3A8A}
+
+
 .theme-chip.active{box-shadow:0 0 0 2.5px var(--spice-text-main)}
 .theme-chip[data-t="emerald"]{background:linear-gradient(135deg,#10B981,#84CC16)}
 .theme-chip[data-t="coral"]{background:linear-gradient(135deg,#F43F5E,#FB7185)}
@@ -908,16 +939,6 @@ body[data-dark="1"] input,body[data-dark="1"] select,body[data-dark="1"] textare
 }
 body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
 
-/* Theme switcher chip size + dark toggle spacing */
-#theme-switcher .dark-toggle{
-  width:28px;height:28px;border-radius:50%;border:2px solid #fff;
-  box-shadow:0 0 0 1.5px var(--spice-line);cursor:pointer;
-  background:linear-gradient(135deg,#FBBF24,#1E293B);
-  display:flex;align-items:center;justify-content:center;font-size:14px;
-  transition:transform .15s
-}
-#theme-switcher .dark-toggle:hover{transform:scale(1.15)}
-
 /* ── DataTable ────────────────────────────────────────── */
 .dt-wrap{position:relative;display:flex;flex-direction:column}
 
@@ -1200,6 +1221,45 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
 
     <!-- SETTINGS -->
     <div class="tc" id="tc-settings">
+      <!-- ── Appearance card — theme + dark mode picker ───────────────
+           Moved here from the bottom-right floating panel so it doesn't
+           overlap content. The chips are larger and labeled for clarity
+           since this lives in a settings page rather than a quick-toggle. -->
+      <div class="card" id="appearance-card">
+        <h2 style="display:flex;align-items:center;gap:10px">
+          <span style="width:32px;height:32px;border-radius:10px;background:var(--spice-saffron-lt);display:inline-flex;align-items:center;justify-content:center">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--spice-saffron)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c3.31 0 6-2.69 6-6 0-4.42-4.5-8-10-8z"/></svg>
+          </span>
+          Appearance
+          <span style="font-weight:400;font-size:12px;color:var(--text3)">Theme & dark mode — your choice is remembered on this device</span>
+        </h2>
+        <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start;margin-top:10px">
+          <!-- Theme chips -->
+          <div style="flex:1;min-width:280px">
+            <div style="font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">Color theme</div>
+            <div id="settings-theme-chips" style="display:flex;flex-wrap:wrap;gap:10px">
+              <span class="theme-chip-large" data-t="emerald"  title="Emerald (fresh)"   onclick="setTheme('emerald')"><span class="chip-label">Emerald</span></span>
+              <span class="theme-chip-large" data-t="coral"    title="Coral sunset"      onclick="setTheme('coral')"><span class="chip-label">Coral</span></span>
+              <span class="theme-chip-large" data-t="violet"   title="Violet (premium)"  onclick="setTheme('violet')"><span class="chip-label">Violet</span></span>
+              <span class="theme-chip-large" data-t="sunshine" title="Sunshine (gold)"   onclick="setTheme('sunshine')"><span class="chip-label">Sunshine</span></span>
+              <span class="theme-chip-large" data-t="electric" title="Electric (bold)"   onclick="setTheme('electric')"><span class="chip-label">Electric</span></span>
+              <span class="theme-chip-large" data-t="ocean"    title="Ocean (sky)"       onclick="setTheme('ocean')"><span class="chip-label">Ocean</span></span>
+              <span class="theme-chip-large" data-t="tech"     title="Tech (analytics)"  onclick="setTheme('tech')"><span class="chip-label">Tech</span></span>
+              <span class="theme-chip-large" data-t="minimal"  title="Minimal (B&amp;W + mint)" onclick="setTheme('minimal')"><span class="chip-label">Minimal</span></span>
+              <span class="theme-chip-large" data-t="trust"    title="Trust (deep blue)" onclick="setTheme('trust')"><span class="chip-label">Trust</span></span>
+            </div>
+          </div>
+          <!-- Dark mode toggle -->
+          <div style="min-width:180px">
+            <div style="font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">Display mode</div>
+            <button class="btn btn-o" onclick="toggleDark()" id="dark-mode-toggle" style="height:42px;padding:0 18px;display:inline-flex;align-items:center;gap:8px;font-weight:600">
+              <span id="dark-mode-icon">🌓</span>
+              <span id="dark-mode-label">Toggle dark mode</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
       <div class="set-actions-bar">
         <h2 style="font-size:16px;margin:0;margin-right:auto">Company Settings</h2>
         <button class="btn btn-g" onclick="saveSettings()">Save Changes</button>
@@ -2395,6 +2455,8 @@ function toggleDark(){
   const next = cur ? '0' : '1';
   document.body.setAttribute('data-dark', next);
   try { localStorage.setItem('dark', next); } catch(e){}
+  // Refresh the toggle button label/icon if visible
+  if (typeof syncAppearanceUI === 'function') syncAppearanceUI();
 }
 // Apply on load
 (function(){
@@ -6605,7 +6667,10 @@ function setTheme(t){
   if (!_THEMES.includes(t)) t = 'emerald';
   document.body.setAttribute('data-theme', t);
   try { localStorage.setItem('theme', t); } catch(e){}
-  document.querySelectorAll('.theme-chip').forEach(c=>{
+  // Update active state on the Settings-tab chips. Selector matches
+  // both old (.theme-chip) and new (.theme-chip-large) for safety even
+  // though only the latter exists now.
+  document.querySelectorAll('.theme-chip, .theme-chip-large').forEach(c=>{
     c.classList.toggle('active', c.dataset.t === t);
   });
 }
@@ -6615,28 +6680,26 @@ function setTheme(t){
   try { saved = localStorage.getItem('theme') || 'emerald'; } catch(e){}
   document.body.setAttribute('data-theme', saved);
 })();
-
-</script>
-<div id="theme-switcher" title="Pick a theme — it'll remember your choice">
-  <span class="theme-chip" data-t="emerald"  title="Emerald (fresh)"   onclick="setTheme('emerald')"></span>
-  <span class="theme-chip" data-t="coral"    title="Coral sunset"      onclick="setTheme('coral')"></span>
-  <span class="theme-chip" data-t="violet"   title="Violet (premium)"  onclick="setTheme('violet')"></span>
-  <span class="theme-chip" data-t="sunshine" title="Sunshine (gold)"   onclick="setTheme('sunshine')"></span>
-  <span class="theme-chip" data-t="electric" title="Electric (bold)"   onclick="setTheme('electric')"></span>
-  <span class="theme-chip" data-t="ocean"    title="Ocean (sky)"       onclick="setTheme('ocean')"></span>
-  <span class="theme-chip" data-t="tech"     title="Tech (analytics)"  onclick="setTheme('tech')"></span>
-  <span class="theme-chip" data-t="minimal"  title="Minimal (B&amp;W + mint)" onclick="setTheme('minimal')"></span>
-  <span class="theme-chip" data-t="trust"    title="Trust (deep blue)" onclick="setTheme('trust')"></span>
-  <span class="dark-toggle" title="Toggle dark mode" onclick="toggleDark()" role="button" aria-label="Toggle dark mode">🌓</span>
-</div>
-<script>
-// Highlight the active chip on initial render
-(function(){
+// Highlight active chip + sync dark-mode label whenever the Settings tab renders.
+// Settings uses go('settings') which switches tabs without re-rendering markup,
+// so we run sync on tab-show and on initial DOMContentLoaded.
+function syncAppearanceUI(){
   const t = document.body.getAttribute('data-theme') || 'emerald';
-  document.querySelectorAll('.theme-chip').forEach(c=>{
+  document.querySelectorAll('.theme-chip-large').forEach(c=>{
     c.classList.toggle('active', c.dataset.t === t);
   });
-})();
+  const isDark = document.body.getAttribute('data-dark') === '1';
+  const lbl = document.getElementById('dark-mode-label');
+  const ico = document.getElementById('dark-mode-icon');
+  if (lbl) lbl.textContent = isDark ? 'Switch to light mode' : 'Switch to dark mode';
+  if (ico) ico.textContent = isDark ? '\u2600\uFE0F' : '\u{1F319}'; // sun / moon
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', syncAppearanceUI);
+} else {
+  syncAppearanceUI();
+}
+
 </script>
 </body>
 </html>
