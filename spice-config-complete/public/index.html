@@ -359,10 +359,12 @@ body{background:var(--bg);color:var(--text);min-height:100vh;font-size:14px}
 
 /* ── Cards ───────────────────────────────────────────────── */
 .card{
-  background:var(--card);border:1px solid var(--border);border-radius:14px;
-  padding:20px;margin-bottom:16px;
-  box-shadow:0 1px 3px rgba(15,23,42,.04),0 4px 12px rgba(15,23,42,.04)
+  background:var(--card);border:1px solid var(--border);border-radius:16px;
+  padding:22px;margin-bottom:18px;
+  box-shadow:0 1px 2px rgba(15,23,42,.04),0 8px 24px rgba(15,23,42,.06);
+  transition:box-shadow .2s
 }
+.card:hover{box-shadow:0 2px 4px rgba(15,23,42,.05),0 12px 32px rgba(15,23,42,.08)}
 .card h2{
   font-size:17px;font-weight:700;margin-bottom:14px;color:var(--text);
   display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap
@@ -661,34 +663,101 @@ tr:hover td{background:var(--spice-cream)}
 }
 /* Full-screen overlay for heavy ops (PDFs, exports) */
 .busy-overlay{
-  position:fixed;inset:0;z-index:9000;background:rgba(15,23,42,.25);
-  display:flex;align-items:center;justify-content:center;backdrop-filter:blur(2px);
+  position:fixed;inset:0;z-index:9000;background:rgba(15,23,42,.35);
+  display:flex;align-items:center;justify-content:center;backdrop-filter:blur(3px);
   animation:fadeIn .15s
 }
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 .busy-card{
-  background:var(--card);border-radius:14px;padding:24px 32px;
-  display:flex;align-items:center;gap:16px;min-width:220px;
-  box-shadow:0 20px 48px rgba(0,0,0,.18)
+  background:var(--card);border-radius:16px;padding:28px 36px;
+  display:flex;align-items:center;gap:20px;min-width:260px;
+  box-shadow:0 24px 56px rgba(0,0,0,.22)
 }
+/* Branded spinner — three concentric arcs in spice-themed colors,
+   each rotating at a different speed. Suggests a spice grinder or
+   bloom of saffron threads. */
 .busy-card .spinner{
-  width:28px;height:28px;border:3px solid var(--border);
-  border-top-color:var(--spice-saffron);border-radius:50%;
-  animation:spin .8s linear infinite;flex-shrink:0
+  width:42px;height:42px;flex-shrink:0;position:relative
 }
-.busy-card .msg{font-size:14px;font-weight:600;color:var(--text)}
+.busy-card .spinner::before,
+.busy-card .spinner::after,
+.busy-card .spinner > div{
+  content:'';position:absolute;inset:0;border-radius:50%;
+  border:3px solid transparent
+}
+.busy-card .spinner::before{
+  border-top-color:var(--spice-cardamom);border-right-color:var(--spice-cardamom);
+  animation:spin 1.2s cubic-bezier(.5,.1,.4,.9) infinite
+}
+.busy-card .spinner::after{
+  inset:6px;border-top-color:var(--spice-saffron);
+  animation:spin 1.5s cubic-bezier(.5,.1,.4,.9) infinite reverse
+}
+.busy-card .spinner > div{
+  inset:12px;border-top-color:var(--spice-turmeric);border-left-color:var(--spice-turmeric);
+  animation:spin .9s cubic-bezier(.5,.1,.4,.9) infinite
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+.busy-card .msg{font-size:14px;font-weight:600;color:var(--text);line-height:1.4}
 
 /* ── Empty-state illustrations ────────────────────────── */
 .empty-state{
-  text-align:center;padding:48px 24px;color:var(--text2)
+  text-align:center;padding:64px 24px;color:var(--text2);
+  display:flex;flex-direction:column;align-items:center;justify-content:center
+}
+.empty-state .illus-wrap{
+  width:120px;height:120px;border-radius:50%;
+  background:linear-gradient(135deg,var(--spice-cardamom-lt) 0%,var(--spice-saffron-lt) 100%);
+  display:flex;align-items:center;justify-content:center;margin-bottom:20px;
+  position:relative;
+  box-shadow:0 8px 24px rgba(16,185,129,.12);
+}
+.empty-state .illus-wrap::before{
+  content:'';position:absolute;inset:-8px;border-radius:50%;
+  background:radial-gradient(circle,rgba(16,185,129,.08) 0%,transparent 70%);
+  z-index:-1;animation:emptyPulse 3s ease-in-out infinite
+}
+@keyframes emptyPulse{
+  0%,100%{transform:scale(1);opacity:.6}
+  50%{transform:scale(1.1);opacity:.3}
 }
 .empty-state svg{
-  width:64px;height:64px;margin-bottom:16px;opacity:.5;
-  stroke:var(--spice-saffron);fill:none;stroke-width:1.5;
-  stroke-linecap:round;stroke-linejoin:round
+  width:56px;height:56px;opacity:1;
+  stroke:var(--spice-cardamom);fill:none;stroke-width:1.5;
+  stroke-linecap:round;stroke-linejoin:round;margin:0
 }
-.empty-state h3{font-size:16px;font-weight:700;color:var(--text);margin-bottom:6px}
-.empty-state p{font-size:13px;margin-bottom:16px;max-width:340px;margin-left:auto;margin-right:auto;line-height:1.5}
+.empty-state h3{font-size:18px;font-weight:700;color:var(--text);margin-bottom:8px;letter-spacing:-.2px}
+.empty-state p{font-size:14px;margin-bottom:20px;max-width:380px;margin-left:auto;margin-right:auto;line-height:1.6;color:var(--spice-text-mute)}
+
+/* ── Comfort Mode ──────────────────────────────────────
+   Toggleable larger-text mode for older / vision-impaired users.
+   Activated via the topbar A↑ button; persisted in localStorage.
+   Bumps base font-size, button heights, table row spacing, and
+   form control sizing so dad doesn't squint. */
+body[data-comfort="1"]{font-size:15.5px}
+body[data-comfort="1"] .btn{padding:10px 18px;font-size:14px;min-height:44px}
+body[data-comfort="1"] .btn-a,
+body[data-comfort="1"] .btn-g,
+body[data-comfort="1"] .btn-o{padding:10px 20px;font-size:14px;min-height:44px}
+body[data-comfort="1"] table{font-size:14.5px}
+body[data-comfort="1"] td,
+body[data-comfort="1"] th{padding:14px 16px}
+body[data-comfort="1"] th{font-size:12px}
+body[data-comfort="1"] input[type="text"],
+body[data-comfort="1"] input[type="number"],
+body[data-comfort="1"] input[type="date"],
+body[data-comfort="1"] input[type="email"],
+body[data-comfort="1"] input[type="password"],
+body[data-comfort="1"] select,
+body[data-comfort="1"] textarea{font-size:15px;padding:10px 12px}
+body[data-comfort="1"] .kpi-value{font-size:36px}
+body[data-comfort="1"] .kpi-label{font-size:13px}
+body[data-comfort="1"] .icon-btn{width:36px;height:36px}
+body[data-comfort="1"] .card h2{font-size:19px}
+body[data-comfort="1"] .side-item{font-size:15px;padding:12px 16px}
+/* Active-state pill on the toggle when comfort mode is ON */
+body[data-comfort="1"] #comfort-toggle{background:var(--spice-saffron-lt);color:var(--spice-saffron-dk);border-color:var(--spice-saffron)}
+body[data-comfort="1"] #comfort-toggle-label::after{content:'\2191';margin-left:1px}
 
 /* ── Contextual help tooltips ─────────────────────────── */
 .help-icon{
@@ -927,6 +996,10 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
       <span id="sync-indicator" class="sync-pill sync-ok" title="Last successful sync"></span>
       <span id="logo-badge" style="font-size:11px;font-weight:700;color:var(--green);background:var(--green-bg);padding:4px 10px;border-radius:12px;border:1px solid var(--green-border);display:none" title="Active company for invoices & calculations"></span>
       <span id="user-lbl" class="topbar-user"></span>
+      <button class="btn btn-o" id="comfort-toggle" onclick="toggleComfort()" title="Comfort Mode — bigger text and buttons for easier reading" style="padding:6px 10px;display:flex;align-items:center;gap:6px;font-weight:700">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg>
+        <span id="comfort-toggle-label">A</span>
+      </button>
       <button class="btn btn-o" onclick="logout()">Logout</button>
     </div>
   </div>
@@ -1156,14 +1229,62 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
     <!-- LOTS -->
     <div class="tc" id="tc-lots">
       <div class="card">
-        <h2>Lot Data <span style="font-weight:400;font-size:12px;color:var(--text3)">Select an auction from Auctions tab first</span></h2>
-        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
-          <select id="lot-auction" onchange="loadLots()" style="padding:6px;border:1px solid var(--border);border-radius:6px"></select>
-          <button class="btn btn-o" onclick="refreshLots(this)" title="Reload the lots table from the server">🔄 Refresh</button>
-          <button class="btn btn-a" id="btn-calculate-all" onclick="calculateAll()">Calculate All</button>
-          <button class="btn btn-o" onclick="validateLots()">Validate</button>
-          <button class="btn btn-g" style="margin-left:auto" onclick="showModal('price-import-modal')">📥 Price Import</button>
+        <h2>
+          <span style="display:flex;align-items:center;gap:10px">
+            <span style="width:32px;height:32px;border-radius:10px;background:var(--spice-cardamom-lt);display:inline-flex;align-items:center;justify-content:center">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--spice-cardamom)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+            </span>
+            Lot Data
+            <span style="font-weight:400;font-size:12px;color:var(--text3)">Select an auction from Auctions tab first</span>
+          </span>
+        </h2>
+
+        <!-- KPI strip -->
+        <div id="lot-kpis" class="kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px;display:none">
+          <div class="kpi cardamom">
+            <div class="kpi-label">Lots</div>
+            <div class="kpi-value" id="lot-kpi-count">0</div>
+            <div class="kpi-icon">
+              <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+            </div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-label">Total Quantity</div>
+            <div class="kpi-value" id="lot-kpi-qty">0<span class="kpi-unit">kg</span></div>
+            <div class="kpi-icon">
+              <svg viewBox="0 0 24 24"><path d="M5 3h14l-1 9H6z"/><line x1="6" y1="20" x2="18" y2="20"/></svg>
+            </div>
+          </div>
+          <div class="kpi turmeric">
+            <div class="kpi-label">Total Amount</div>
+            <div class="kpi-value" id="lot-kpi-amount" style="font-size:24px"><span class="kpi-unit" style="margin-right:4px">₹</span>0</div>
+            <div class="kpi-icon">
+              <svg viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            </div>
+          </div>
+          <div class="kpi chili">
+            <div class="kpi-label">Calculated</div>
+            <div class="kpi-value" id="lot-kpi-calc">0%</div>
+            <div class="kpi-icon">
+              <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+            </div>
+          </div>
         </div>
+
+        <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
+          <select id="lot-auction" onchange="loadLots()" style="padding:0 14px;height:38px;border:1px solid var(--border);border-radius:8px;background:#fff;font-size:13px;font-weight:500;min-width:180px"></select>
+
+          <div style="display:flex;gap:6px;padding:0 4px;border-left:2px solid var(--spice-line);margin-left:4px">
+            <button class="btn btn-o" style="height:38px;padding:0 16px;font-weight:600" onclick="refreshLots(this)" title="Reload the lots table from the server">🔄 Refresh</button>
+            <button class="btn btn-a" id="btn-calculate-all" style="height:38px;padding:0 16px;font-weight:600" onclick="calculateAll()">Calculate All</button>
+            <button class="btn btn-o" style="height:38px;padding:0 16px;font-weight:600" onclick="validateLots()">Validate</button>
+          </div>
+
+          <div style="display:flex;gap:6px;padding:0 4px;border-left:2px solid var(--spice-line);margin-left:auto">
+            <button class="btn btn-g" style="height:38px;padding:0 16px;font-weight:600" onclick="showModal('price-import-modal')">📥 Price Import</button>
+          </div>
+        </div>
+
         <div style="overflow-x:auto"><table><thead><tr><th>Lot</th><th>Name</th><th>Branch</th><th>Bags</th><th>Qty</th><th>Price</th><th>Amount</th><th>Buyer</th><th>PurAmt</th><th>Payable</th><th>Actions</th></tr></thead><tbody id="lots-list"></tbody></table></div>
       </div>
     </div>
@@ -1171,24 +1292,75 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
     <!-- INVOICES -->
     <div class="tc" id="tc-invoices">
       <div class="card">
-        <h2>Sales Invoices <span id="inv-count-badge" style="font-size:12px;font-weight:500;color:var(--text2);background:var(--green-bg);padding:3px 10px;border-radius:10px;margin-left:8px;display:none"></span></h2>
-        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
-          <select id="inv-auction" onchange="loadInvoices();loadInvEligibleBuyers()" style="padding:6px 10px;height:36px;border:1px solid var(--border);border-radius:6px"></select>
-          <!-- Primary generation actions -->
-          <button class="btn btn-g" style="height:36px;padding:0 14px" onclick="openGenInvModal()">+ Generate Invoice</button>
-          <button class="btn btn-a" style="height:36px;padding:0 14px" onclick="openGenAllModal('invoices')">⚡ Generate for All Buyers</button>
-          <!-- Selection + print group — visually separated by a divider -->
-          <span style="width:1px;height:24px;background:var(--border);margin:0 2px"></span>
-          <button class="btn" style="height:36px;padding:0 14px;background:var(--spice-saffron);color:#fff" onclick="printSelectedInvoices()" title="Print all ticked invoices">🖨 Print Selected</button>
-          <!-- ASP-only: Print Selected Purchase (mirror PDFs of ticked rows
-               from the ISPL/buyer perspective). Hidden entirely outside ASP
-               context to avoid confusion in TN mode. Visibility is toggled
-               by applyAspContextVisibility() at load time + on state switch. -->
-          <button id="btn-print-asp-purchase" class="btn" style="display:none;height:36px;padding:0 14px;background:var(--spice-cardamom);color:#fff" onclick="printSelectedPurchaseFromInvoices()" title="Print purchase-side mirror PDF for all ticked invoices (ASP context only)">🖨 Print Selected Purchase</button>
-          <!-- Destructive actions — pushed to the right -->
-          <button class="btn" style="height:36px;padding:0 12px;background:var(--spice-turmeric);color:#fff;margin-left:auto" onclick="revertAllInvoices()" title="Revert all invoices — deletes them and re-enables lots for re-invoicing">⟲ Revert All</button>
-          <button class="btn" style="height:36px;padding:0 12px;background:#c0392b;color:#fff" onclick="deleteAll('invoices','Invoices')" title="Permanently delete all invoices">🗑 Delete All</button>
+        <h2>
+          <span style="display:flex;align-items:center;gap:10px">
+            <span style="width:32px;height:32px;border-radius:10px;background:var(--spice-saffron-lt);display:inline-flex;align-items:center;justify-content:center">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--spice-saffron)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+            </span>
+            Sales Invoices
+          </span>
+          <span id="inv-count-badge" style="font-size:12px;font-weight:500;color:var(--text2);background:var(--green-bg);padding:3px 10px;border-radius:10px;margin-left:8px;display:none"></span>
+        </h2>
+
+        <!-- ── KPI strip — at-a-glance summary of current invoice list ───────── -->
+        <!-- Updated by loadInvoices() based on the visible/filtered invoices.
+             Hidden until first data load completes (via display:none on container). -->
+        <div id="inv-kpis" class="kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px;display:none">
+          <div class="kpi cardamom">
+            <div class="kpi-label">Invoices</div>
+            <div class="kpi-value" id="inv-kpi-count">0</div>
+            <div class="kpi-icon">
+              <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            </div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-label">Total Quantity</div>
+            <div class="kpi-value" id="inv-kpi-qty">0<span class="kpi-unit">kg</span></div>
+            <div class="kpi-icon">
+              <svg viewBox="0 0 24 24"><path d="M5 3h14l-1 9H6z"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="6" y1="20" x2="18" y2="20"/></svg>
+            </div>
+          </div>
+          <div class="kpi turmeric">
+            <div class="kpi-label">Taxable Amount</div>
+            <div class="kpi-value" id="inv-kpi-amount" style="font-size:24px"><span class="kpi-unit" style="margin-right:4px">₹</span>0</div>
+            <div class="kpi-icon">
+              <svg viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            </div>
+          </div>
+          <div class="kpi chili">
+            <div class="kpi-label">Grand Total (incl. tax)</div>
+            <div class="kpi-value" id="inv-kpi-total" style="font-size:24px"><span class="kpi-unit" style="margin-right:4px">₹</span>0</div>
+            <div class="kpi-icon">
+              <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            </div>
+          </div>
         </div>
+
+        <!-- ── Action toolbar — grouped: Auction selector / Create / Print / Manage ── -->
+        <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
+          <select id="inv-auction" onchange="loadInvoices();loadInvEligibleBuyers()" style="padding:0 14px;height:38px;border:1px solid var(--border);border-radius:8px;background:#fff;font-size:13px;font-weight:500;min-width:180px"></select>
+
+          <!-- Create group -->
+          <div style="display:flex;gap:6px;padding:0 4px;border-left:2px solid var(--spice-line);margin-left:4px">
+            <button class="btn btn-g" style="height:38px;padding:0 16px;font-weight:600" onclick="openGenInvModal()">+ Generate Invoice</button>
+            <button class="btn btn-a" style="height:38px;padding:0 16px;font-weight:600" onclick="openGenAllModal('invoices')">⚡ Generate for All Buyers</button>
+          </div>
+
+          <!-- Print group -->
+          <div style="display:flex;gap:6px;padding:0 4px;border-left:2px solid var(--spice-line)">
+            <button class="btn" style="height:38px;padding:0 16px;background:var(--spice-saffron);color:#fff;font-weight:600;box-shadow:0 2px 6px rgba(16,185,129,.28)" onclick="printSelectedInvoices()" title="Print all ticked invoices">🖨 Print Selected</button>
+            <!-- ASP-only: Print Selected Purchase. Hidden outside ASP context.
+                 Visibility toggled by applyAspContextVisibility() at load + state switch. -->
+            <button id="btn-print-asp-purchase" class="btn" style="display:none;height:38px;padding:0 16px;background:var(--spice-cardamom);color:#fff;font-weight:600;box-shadow:0 2px 6px rgba(22,101,52,.22)" onclick="printSelectedPurchaseFromInvoices()" title="Print purchase-side mirror PDF for all ticked invoices (ASP context only)">🖨 Print Selected Purchase</button>
+          </div>
+
+          <!-- Destructive group — pushed right -->
+          <div style="display:flex;gap:6px;padding:0 4px;border-left:2px solid var(--spice-line);margin-left:auto">
+            <button class="btn" style="height:38px;padding:0 14px;background:var(--spice-turmeric);color:#fff;font-weight:600" onclick="revertAllInvoices()" title="Revert all invoices — deletes them and re-enables lots for re-invoicing">⟲ Revert All</button>
+            <button class="btn" style="height:38px;padding:0 14px;background:var(--spice-chili);color:#fff;font-weight:600" onclick="deleteAll('invoices','Invoices')" title="Permanently delete all invoices">🗑 Delete All</button>
+          </div>
+        </div>
+
         <div style="overflow-x:auto"><table><thead><tr><th style="width:32px"></th><th>Sale</th><th>Inv#</th><th>ASP Inv#</th><th>Buyer</th><th>Qty</th><th>Amount</th><th>CGST</th><th>SGST</th><th>IGST</th><th>Total</th><th>Actions</th></tr></thead><tbody id="invoices-list"></tbody></table></div>
       </div>
     </div>
@@ -1196,15 +1368,64 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
     <!-- PURCHASES -->
     <div class="tc" id="tc-purchases">
       <div class="card">
-        <h2>Purchase Invoices</h2>
-        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
-          <select id="pur-auction" onchange="loadPurchases();loadPurEligibleSellers()" style="padding:6px;border:1px solid var(--border);border-radius:6px"></select>
-          <button class="btn btn-g" onclick="openGenPurModal()">+ Generate Purchase Invoice</button>
-          <button class="btn btn-a" onclick="openGenAllModal('purchases')">⚡ Generate for All Dealers</button>
-          <div style="width:1px;height:24px;background:var(--border)"></div>
-          <button class="btn" style="height:36px;padding:0 14px;background:var(--spice-saffron);color:#fff" onclick="printSelectedPurchases()" title="Print all ticked purchase invoices">🖨 Print Selected</button>
-          <button class="btn" style="background:#c0392b;color:#fff;margin-left:auto" onclick="deleteAll('purchases','Purchase Invoices')">Delete All</button>
+        <h2>
+          <span style="display:flex;align-items:center;gap:10px">
+            <span style="width:32px;height:32px;border-radius:10px;background:var(--spice-cardamom-lt);display:inline-flex;align-items:center;justify-content:center">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--spice-cardamom)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+            </span>
+            Purchase Invoices
+          </span>
+        </h2>
+
+        <!-- KPI strip — shown after first data load -->
+        <div id="pur-kpis" class="kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px;display:none">
+          <div class="kpi cardamom">
+            <div class="kpi-label">Purchase Invoices</div>
+            <div class="kpi-value" id="pur-kpi-count">0</div>
+            <div class="kpi-icon">
+              <svg viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/></svg>
+            </div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-label">Total Quantity</div>
+            <div class="kpi-value" id="pur-kpi-qty">0<span class="kpi-unit">kg</span></div>
+            <div class="kpi-icon">
+              <svg viewBox="0 0 24 24"><path d="M5 3h14l-1 9H6z"/><line x1="6" y1="20" x2="18" y2="20"/></svg>
+            </div>
+          </div>
+          <div class="kpi turmeric">
+            <div class="kpi-label">Taxable Amount</div>
+            <div class="kpi-value" id="pur-kpi-amount" style="font-size:24px"><span class="kpi-unit" style="margin-right:4px">₹</span>0</div>
+            <div class="kpi-icon">
+              <svg viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            </div>
+          </div>
+          <div class="kpi chili">
+            <div class="kpi-label">Grand Total (incl. tax)</div>
+            <div class="kpi-value" id="pur-kpi-total" style="font-size:24px"><span class="kpi-unit" style="margin-right:4px">₹</span>0</div>
+            <div class="kpi-icon">
+              <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            </div>
+          </div>
         </div>
+
+        <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
+          <select id="pur-auction" onchange="loadPurchases();loadPurEligibleSellers()" style="padding:0 14px;height:38px;border:1px solid var(--border);border-radius:8px;background:#fff;font-size:13px;font-weight:500;min-width:180px"></select>
+
+          <div style="display:flex;gap:6px;padding:0 4px;border-left:2px solid var(--spice-line);margin-left:4px">
+            <button class="btn btn-g" style="height:38px;padding:0 16px;font-weight:600" onclick="openGenPurModal()">+ Generate Purchase</button>
+            <button class="btn btn-a" style="height:38px;padding:0 16px;font-weight:600" onclick="openGenAllModal('purchases')">⚡ Generate for All Dealers</button>
+          </div>
+
+          <div style="display:flex;gap:6px;padding:0 4px;border-left:2px solid var(--spice-line)">
+            <button class="btn" style="height:38px;padding:0 16px;background:var(--spice-saffron);color:#fff;font-weight:600;box-shadow:0 2px 6px rgba(16,185,129,.28)" onclick="printSelectedPurchases()" title="Print all ticked purchase invoices">🖨 Print Selected</button>
+          </div>
+
+          <div style="display:flex;gap:6px;padding:0 4px;border-left:2px solid var(--spice-line);margin-left:auto">
+            <button class="btn" style="height:38px;padding:0 14px;background:var(--spice-chili);color:#fff;font-weight:600" onclick="deleteAll('purchases','Purchase Invoices')">🗑 Delete All</button>
+          </div>
+        </div>
+
         <div style="overflow-x:auto"><table><thead><tr><th style="width:32px"></th><th>Inv#</th><th>Name</th><th>Qty</th><th>Amount</th><th>CGST</th><th>SGST</th><th>IGST</th><th>TDS</th><th>Total</th><th>Actions</th></tr></thead><tbody id="purchases-list"></tbody></table></div>
       </div>
     </div>
@@ -1212,13 +1433,60 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
     <!-- PAYMENTS -->
     <div class="tc" id="tc-payments">
       <div class="card">
-        <h2>Payment Summary</h2>
-        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
-          <select id="pay-auction" onchange="loadPayments()" style="padding:6px;border:1px solid var(--border);border-radius:6px"></select>
-          <button class="btn btn-g" onclick="loadPayments()">Reload</button>
-          <button class="btn btn-a" onclick="exportType('bank_payment')">Export Bank Payment</button>
-          <button class="btn btn-a" onclick="exportType('payment')">Export Payment XLSX</button>
+        <h2>
+          <span style="display:flex;align-items:center;gap:10px">
+            <span style="width:32px;height:32px;border-radius:10px;background:var(--spice-turmeric-lt);display:inline-flex;align-items:center;justify-content:center">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#B45309" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            </span>
+            Payment Summary
+          </span>
+        </h2>
+
+        <!-- KPI strip — shown after first data load -->
+        <div id="pay-kpis" class="kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px;display:none">
+          <div class="kpi cardamom">
+            <div class="kpi-label">Sellers</div>
+            <div class="kpi-value" id="pay-kpi-sellers">0</div>
+            <div class="kpi-icon">
+              <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            </div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-label">Total Quantity</div>
+            <div class="kpi-value" id="pay-kpi-qty">0<span class="kpi-unit">kg</span></div>
+            <div class="kpi-icon">
+              <svg viewBox="0 0 24 24"><path d="M5 3h14l-1 9H6z"/><line x1="6" y1="20" x2="18" y2="20"/></svg>
+            </div>
+          </div>
+          <div class="kpi turmeric">
+            <div class="kpi-label">Total Discount</div>
+            <div class="kpi-value" id="pay-kpi-discount" style="font-size:24px"><span class="kpi-unit" style="margin-right:4px">₹</span>0</div>
+            <div class="kpi-icon">
+              <svg viewBox="0 0 24 24"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>
+            </div>
+          </div>
+          <div class="kpi chili">
+            <div class="kpi-label">Total Payable</div>
+            <div class="kpi-value" id="pay-kpi-payable" style="font-size:24px"><span class="kpi-unit" style="margin-right:4px">₹</span>0</div>
+            <div class="kpi-icon">
+              <svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+            </div>
+          </div>
         </div>
+
+        <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
+          <select id="pay-auction" onchange="loadPayments()" style="padding:0 14px;height:38px;border:1px solid var(--border);border-radius:8px;background:#fff;font-size:13px;font-weight:500;min-width:180px"></select>
+
+          <div style="display:flex;gap:6px;padding:0 4px;border-left:2px solid var(--spice-line);margin-left:4px">
+            <button class="btn btn-g" style="height:38px;padding:0 16px;font-weight:600" onclick="loadPayments()">↻ Reload</button>
+          </div>
+
+          <div style="display:flex;gap:6px;padding:0 4px;border-left:2px solid var(--spice-line)">
+            <button class="btn btn-a" style="height:38px;padding:0 16px;font-weight:600" onclick="exportType('bank_payment')" title="Export bulk RTGS/NEFT file for bank portal upload">📤 Export Bank Payment</button>
+            <button class="btn btn-a" style="height:38px;padding:0 16px;font-weight:600" onclick="exportType('payment')" title="Per-lot detailed payment breakdown">📊 Export Payment XLSX</button>
+          </div>
+        </div>
+
         <div style="overflow-x:auto"><table><thead><tr><th>Seller</th><th>Lots</th><th>Qty</th><th>Amount</th><th>Purchase</th><th>Discount</th><th>Payable</th></tr></thead><tbody id="payments-list"></tbody></table></div>
       </div>
     </div>
@@ -1279,15 +1547,58 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
     <!-- BILLS (Agriculturist Bills of Supply) -->
     <div class="tc" id="tc-bills">
       <div class="card">
-        <h2>Bills of Supply <span style="font-weight:400;font-size:12px;color:var(--text3)">For agriculturist sellers without GSTIN</span></h2>
-        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
-          <select id="bill-auction" onchange="loadBills();loadEligibleSellers()" style="padding:6px;border:1px solid var(--border);border-radius:6px"></select>
-          <button class="btn btn-g" onclick="showModal('gen-bill-modal')">+ Generate Bill</button>
-          <button class="btn btn-a" onclick="openGenAllModal('bills')">⚡ Generate for All Agri Sellers</button>
-          <div style="width:1px;height:24px;background:var(--border)"></div>
-          <button class="btn" style="height:36px;padding:0 14px;background:var(--spice-saffron);color:#fff" onclick="printSelectedBills()" title="Print all ticked bills">🖨 Print Selected</button>
-          <button class="btn" style="background:#c0392b;color:#fff;margin-left:auto" onclick="deleteAll('bills','Bills of Supply')">Delete All</button>
+        <h2>
+          <span style="display:flex;align-items:center;gap:10px">
+            <span style="width:32px;height:32px;border-radius:10px;background:var(--spice-saffron-lt);display:inline-flex;align-items:center;justify-content:center">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--spice-saffron)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+            </span>
+            Bills of Supply
+            <span style="font-weight:400;font-size:12px;color:var(--text3)">For agriculturist sellers without GSTIN</span>
+          </span>
+        </h2>
+
+        <!-- KPI strip — shown after first data load -->
+        <div id="bill-kpis" class="kpi-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:20px;display:none">
+          <div class="kpi cardamom">
+            <div class="kpi-label">Bills</div>
+            <div class="kpi-value" id="bill-kpi-count">0</div>
+            <div class="kpi-icon">
+              <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+            </div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-label">Total Quantity</div>
+            <div class="kpi-value" id="bill-kpi-qty">0<span class="kpi-unit">kg</span></div>
+            <div class="kpi-icon">
+              <svg viewBox="0 0 24 24"><path d="M5 3h14l-1 9H6z"/><line x1="6" y1="20" x2="18" y2="20"/></svg>
+            </div>
+          </div>
+          <div class="kpi turmeric">
+            <div class="kpi-label">Net Amount</div>
+            <div class="kpi-value" id="bill-kpi-net" style="font-size:24px"><span class="kpi-unit" style="margin-right:4px">₹</span>0</div>
+            <div class="kpi-icon">
+              <svg viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            </div>
+          </div>
         </div>
+
+        <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
+          <select id="bill-auction" onchange="loadBills();loadEligibleSellers()" style="padding:0 14px;height:38px;border:1px solid var(--border);border-radius:8px;background:#fff;font-size:13px;font-weight:500;min-width:180px"></select>
+
+          <div style="display:flex;gap:6px;padding:0 4px;border-left:2px solid var(--spice-line);margin-left:4px">
+            <button class="btn btn-g" style="height:38px;padding:0 16px;font-weight:600" onclick="showModal('gen-bill-modal')">+ Generate Bill</button>
+            <button class="btn btn-a" style="height:38px;padding:0 16px;font-weight:600" onclick="openGenAllModal('bills')">⚡ Generate for All Agri Sellers</button>
+          </div>
+
+          <div style="display:flex;gap:6px;padding:0 4px;border-left:2px solid var(--spice-line)">
+            <button class="btn" style="height:38px;padding:0 16px;background:var(--spice-saffron);color:#fff;font-weight:600;box-shadow:0 2px 6px rgba(16,185,129,.28)" onclick="printSelectedBills()" title="Print all ticked bills">🖨 Print Selected</button>
+          </div>
+
+          <div style="display:flex;gap:6px;padding:0 4px;border-left:2px solid var(--spice-line);margin-left:auto">
+            <button class="btn" style="height:38px;padding:0 14px;background:var(--spice-chili);color:#fff;font-weight:600" onclick="deleteAll('bills','Bills of Supply')">🗑 Delete All</button>
+          </div>
+        </div>
+
         <div style="overflow-x:auto"><table><thead><tr><th style="width:32px"></th><th>Bill#</th><th>Date</th><th>Name</th><th>Place</th><th>Qty</th><th>Cost</th><th>Net</th><th>Actions</th></tr></thead><tbody id="bills-list"></tbody></table></div>
       </div>
     </div>
@@ -1873,7 +2184,7 @@ function showBusy(message){
   const el = document.createElement('div');
   el.id = 'busy-overlay';
   el.className = 'busy-overlay';
-  el.innerHTML = `<div class="busy-card"><div class="spinner"></div><div class="msg">${esc(message||'Working…')}</div></div>`;
+  el.innerHTML = `<div class="busy-card"><div class="spinner"><div></div></div><div class="msg">${esc(message||'Working…')}</div></div>`;
   document.body.appendChild(el);
   const hide = () => {
     // Remove THIS overlay (by reference) AND any stragglers (defensive)
@@ -1900,6 +2211,8 @@ function emptyStateHTML(opts){
     buyers:   '<svg viewBox="0 0 24 24"><path d="M3 3h2l2 10h13l2-7H6"/><circle cx="9" cy="20" r="1.5"/><circle cx="18" cy="20" r="1.5"/></svg>',
     auctions: '<svg viewBox="0 0 24 24"><path d="M14 7L9 12l-4-4"/><path d="M14 17l5-5 1 1"/><path d="M6 19h12"/></svg>',
     invoices: '<svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h6"/></svg>',
+    payments: '<svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><circle cx="7" cy="15" r="1.5"/></svg>',
+    bills:    '<svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>',
     search:   '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>',
     empty:    '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M8 15h8M9 9h.01M15 9h.01"/></svg>'
   };
@@ -1908,7 +2221,7 @@ function emptyStateHTML(opts){
     ? `<button class="btn btn-a" onclick="${opts.onAction||''}">${esc(opts.actionLabel)}</button>`
     : '';
   return `<div class="empty-state">
-    ${icon}
+    <div class="illus-wrap">${icon}</div>
     <h3>${esc(opts.title||'Nothing here yet')}</h3>
     ${opts.body ? `<p>${esc(opts.body)}</p>` : ''}
     ${action}
@@ -1931,6 +2244,23 @@ function toggleDark(){
 // Apply on load
 (function(){
   try { if (localStorage.getItem('dark') === '1') document.body.setAttribute('data-dark','1'); } catch(e){}
+})();
+
+// ── Comfort Mode (larger fonts/buttons for dad) ─────────
+// Activated via topbar A button; persisted across sessions in localStorage.
+// CSS rules under body[data-comfort="1"] do the heavy lifting.
+function toggleComfort(){
+  const cur = document.body.getAttribute('data-comfort') === '1';
+  const next = cur ? '0' : '1';
+  document.body.setAttribute('data-comfort', next);
+  try { localStorage.setItem('comfort', next); } catch(e){}
+  if (typeof toast === 'function') {
+    toast(next === '1' ? 'Comfort Mode: bigger text & buttons' : 'Comfort Mode: off');
+  }
+}
+// Apply on load
+(function(){
+  try { if (localStorage.getItem('comfort') === '1') document.body.setAttribute('data-comfort','1'); } catch(e){}
 })();
 function showModal(id){document.getElementById(id).classList.add('show')}
 function hideModal(id){document.getElementById(id).classList.remove('show')}
@@ -4351,6 +4681,31 @@ async function loadLots(){const aid=document.getElementById('lot-auction').value
   // Cache-buster ensures the browser actually hits the server (otherwise Refresh
   // may return stale cached JSON and nothing visibly changes)
   const d=await j(`/api/lots/${aid}?_=${Date.now()}`);
+  const arr = Array.isArray(d) ? d : [];
+
+  // Update KPI strip — count, qty, amount, calculated %
+  const kpiStrip = document.getElementById('lot-kpis');
+  if (kpiStrip) {
+    if (arr.length === 0) {
+      kpiStrip.style.display = 'none';
+    } else {
+      kpiStrip.style.display = 'grid';
+      const totalQty    = arr.reduce((a,i) => a + (Number(i.qty)    || 0), 0);
+      const totalAmount = arr.reduce((a,i) => a + (Number(i.amount) || 0), 0);
+      // Calculated = lots with non-zero puramt (computed) AND non-zero amount (real)
+      const calculatedCount = arr.filter(i =>
+        (Number(i.amount) || 0) > 0 &&
+        ((Number(i.puramt) || 0) > 0 || (Number(i.balance) || 0) > 0)).length;
+      const realLotCount = arr.filter(i => (Number(i.amount) || 0) > 0).length;
+      const pct = realLotCount > 0 ? Math.round((calculatedCount / realLotCount) * 100) : 0;
+      const $ = (id) => document.getElementById(id);
+      if ($('lot-kpi-count'))  $('lot-kpi-count').textContent  = arr.length;
+      if ($('lot-kpi-qty'))    $('lot-kpi-qty').innerHTML      = `${fmtI(totalQty, 0)}<span class="kpi-unit">kg</span>`;
+      if ($('lot-kpi-amount')) $('lot-kpi-amount').innerHTML   = `<span class="kpi-unit" style="margin-right:4px">₹</span>${fmtI(totalAmount, 0)}`;
+      if ($('lot-kpi-calc'))   $('lot-kpi-calc').innerHTML     = `${pct}%<span class="kpi-unit"> done</span>`;
+    }
+  }
+
   const mode = getCurrentBusinessMode();
   const isAuction = (mode === 'e-Auction');
   // Update the Calculate All button label to show which mode + company will be applied.
@@ -4557,26 +4912,65 @@ async function loadInvoices(){
   const d=await j(url);
   // Invoice count badge
   const badge=document.getElementById('inv-count-badge');
+  const arr = Array.isArray(d) ? d : [];
   if(badge){
-    const n=Array.isArray(d)?d.length:0;
-    const totalValue=Array.isArray(d)?d.reduce((a,i)=>a+(Number(i.tot)||0),0):0;
-    badge.style.display=n>0?'inline-block':'none';
-    badge.innerHTML=`${n} invoice${n===1?'':'s'} &middot; Total: ₹${fmtI(totalValue,2)}`;
+    const totalValue = arr.reduce((a,i)=>a+(Number(i.tot)||0),0);
+    badge.style.display = arr.length>0 ? 'inline-block' : 'none';
+    badge.innerHTML = `${arr.length} invoice${arr.length===1?'':'s'} &middot; Total: ₹${fmtI(totalValue,2)}`;
   }
+
+  // ── Update KPI strip ───────────────────────────────────────────
+  // Show 4 stats: count, total qty, taxable amount (sum of `amount`),
+  // and grand total including all GST + round (sum of `tot`). Strip is
+  // hidden until at least one invoice exists so empty auctions don't
+  // show a row of zeros.
+  const kpiStrip = document.getElementById('inv-kpis');
+  if (kpiStrip) {
+    if (arr.length === 0) {
+      kpiStrip.style.display = 'none';
+    } else {
+      kpiStrip.style.display = 'grid';
+      const totalQty    = arr.reduce((a,i) => a + (Number(i.qty)    || 0), 0);
+      const totalAmount = arr.reduce((a,i) => a + (Number(i.amount) || 0), 0);
+      const grandTotal  = arr.reduce((a,i) => a + (Number(i.tot)    || 0), 0);
+      const $ = (id) => document.getElementById(id);
+      if ($('inv-kpi-count'))  $('inv-kpi-count').textContent  = arr.length;
+      if ($('inv-kpi-qty'))    $('inv-kpi-qty').innerHTML      = `${fmtI(totalQty, 0)}<span class="kpi-unit">kg</span>`;
+      if ($('inv-kpi-amount')) $('inv-kpi-amount').innerHTML   = `<span class="kpi-unit" style="margin-right:4px">₹</span>${fmtI(totalAmount, 0)}`;
+      if ($('inv-kpi-total'))  $('inv-kpi-total').innerHTML    = `<span class="kpi-unit" style="margin-right:4px">₹</span>${fmtI(grandTotal, 0)}`;
+    }
+  }
+
   DataTable.mount('invoices-list', d, {
     emptyState: { icon: 'invoices', title: "No invoices yet", body: "Once you have calculated lots for a buyer, use Generate Invoice to create one." }, 
     columns: [
       { key:'_select', label:'', labelHTML:'<input type="checkbox" id="inv-select-all" onclick="event.stopPropagation();toggleAllInvoices(this.checked)" title="Select / clear all visible" style="cursor:pointer;width:16px;height:16px;vertical-align:middle;accent-color:var(--green)">', sortable:false, searchable:false,
         render:(i)=>`<input type="checkbox" class="inv-select-cb" value="${i.id}" onclick="event.stopPropagation()" style="cursor:pointer">` },
       { key:'sale', label:'Sale', sort:'text', totalKind:'count',
+        // Color-coded pills for sale type so dad can scan the column visually:
+        //   L (Local)        → cardamom green
+        //   I (Inter-state)  → turmeric/amber (out-of-state, "warning"-ish)
+        //   E (Export)       → saffron green (international, distinct)
+        //   default          → muted grey
+        render:(i)=>{
+          const s = String(i.sale || '').trim().toUpperCase();
+          const cfg = {
+            L: { bg:'var(--spice-cardamom-lt)', fg:'var(--spice-cardamom-dk)', label:'Local' },
+            I: { bg:'var(--spice-turmeric-lt)', fg:'#B45309',                  label:'Inter-state' },
+            E: { bg:'var(--spice-saffron-lt)',  fg:'var(--spice-saffron-dk)',  label:'Export' },
+          }[s] || { bg:'#f1f5f9', fg:'#64748b', label: s || '—' };
+          return `<span title="${cfg.label}" style="display:inline-block;min-width:24px;padding:3px 9px;border-radius:6px;background:${cfg.bg};color:${cfg.fg};font-weight:700;font-size:11px;letter-spacing:.4px;text-align:center">${s || '—'}</span>`;
+        },
         totalLabel: (n)=> String(n) },
-      { key:'invo', label:'Inv#', sort:'text' },
+      { key:'invo', label:'Inv#', sort:'text',
+        // Bold + dark green to make the primary identifier pop in a wide row
+        render:(i)=>`<strong style="color:var(--spice-cardamom-dk);font-weight:700">${esc(i.invo)}</strong>` },
       { key:'asp_invo', label:'ASP Inv#', sort:'text',
         // Empty string for ASP rows (state=Kerala) so the column shows
         // only on ISP rows where the ASP→ISP cross-reference is meaningful.
-        // Saffron text + small font visually distinguishes from primary Inv#.
+        // Saffron pill visually distinguishes from primary Inv#.
         render:(i)=> i.asp_invo
-          ? `<span style="color:var(--spice-saffron);font-weight:600">${esc(i.asp_invo)}</span>`
+          ? `<span style="display:inline-block;padding:2px 8px;border-radius:5px;background:var(--spice-saffron-lt);color:var(--spice-saffron-dk);font-weight:600;font-size:12px">${esc(i.asp_invo)}</span>`
           : '<span style="color:var(--text3)">—</span>' },
       { key:'_buyer', label:'Buyer', sort:'text',
         value:(i)=>i.buyer1||i.buyer,
@@ -4588,7 +4982,8 @@ async function loadInvoices(){
       { key:'igst', label:'IGST', sort:'number', numeric:true, fmt:(n)=>fmtI(n,2) },
       { key:'tot', label:'Total', sort:'number', numeric:true,
         fmt:(n)=>fmtI(n,2),
-        render:(i)=>`<strong>${fmtI(i.tot||0,2)}</strong>` },
+        // Bigger + darker total to make it the "answer" column at a glance
+        render:(i)=>`<span style="font-weight:700;color:var(--spice-text-main);font-size:14px">${fmtI(i.tot||0,2)}</span>` },
       { key:'_actions', label:'Actions', sortable:false, searchable:false, render:(i)=>{
           // Purchase-view button is ALWAYS shown so users see the feature exists,
           // but is DISABLED outside ASP context (not Kerala + e-Trade). The
@@ -5048,7 +5443,28 @@ async function loadPurchases(){
   const aid=document.getElementById('pur-auction')?.value;
   const url=aid?`/api/purchases?auction_id=${aid}`:'/api/purchases';
   const d=await j(url);
+  const arr = Array.isArray(d) ? d : [];
+
+  // Update KPI strip (same pattern as loadInvoices)
+  const kpiStrip = document.getElementById('pur-kpis');
+  if (kpiStrip) {
+    if (arr.length === 0) {
+      kpiStrip.style.display = 'none';
+    } else {
+      kpiStrip.style.display = 'grid';
+      const totalQty    = arr.reduce((a,i) => a + (Number(i.qty)    || 0), 0);
+      const totalAmount = arr.reduce((a,i) => a + (Number(i.amount) || 0), 0);
+      const grandTotal  = arr.reduce((a,i) => a + (Number(i.total)  || 0), 0);
+      const $ = (id) => document.getElementById(id);
+      if ($('pur-kpi-count'))  $('pur-kpi-count').textContent  = arr.length;
+      if ($('pur-kpi-qty'))    $('pur-kpi-qty').innerHTML      = `${fmtI(totalQty, 0)}<span class="kpi-unit">kg</span>`;
+      if ($('pur-kpi-amount')) $('pur-kpi-amount').innerHTML   = `<span class="kpi-unit" style="margin-right:4px">₹</span>${fmtI(totalAmount, 0)}`;
+      if ($('pur-kpi-total'))  $('pur-kpi-total').innerHTML    = `<span class="kpi-unit" style="margin-right:4px">₹</span>${fmtI(grandTotal, 0)}`;
+    }
+  }
+
   DataTable.mount('purchases-list', d, {
+    emptyState: { icon: 'invoices', title: "No purchase invoices yet", body: "Once lots are calculated, generate purchase invoices for sellers using + Generate Purchase or the Generate for All Dealers button." },
     columns: [
       { key:'_select', label:'',
         labelHTML:'<input type="checkbox" id="pur-select-all" onclick="event.stopPropagation();toggleAllPurchases(this.checked)" title="Select / clear all visible" style="cursor:pointer;width:16px;height:16px;vertical-align:middle;accent-color:var(--green)">',
@@ -5112,17 +5528,48 @@ async function loadPayments(){
   if(!aid){body.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:24px">Select an auction above</td></tr>';return}
   try{
     const d=await j(`/api/payments/${aid}`);
+    const arr = Array.isArray(d) ? d : [];
+
+    // Update KPI strip
+    const kpiStrip = document.getElementById('pay-kpis');
+    if (kpiStrip) {
+      if (arr.length === 0) {
+        kpiStrip.style.display = 'none';
+      } else {
+        kpiStrip.style.display = 'grid';
+        const totalQty      = arr.reduce((a,i) => a + (Number(i.total_qty)      || 0), 0);
+        const totalDiscount = arr.reduce((a,i) => a + (Number(i.total_discount) || 0), 0);
+        const totalPayable  = arr.reduce((a,i) => a + (Number(i.total_payable)  || 0), 0);
+        const $ = (id) => document.getElementById(id);
+        if ($('pay-kpi-sellers'))  $('pay-kpi-sellers').textContent  = arr.length;
+        if ($('pay-kpi-qty'))      $('pay-kpi-qty').innerHTML        = `${fmtI(totalQty, 0)}<span class="kpi-unit">kg</span>`;
+        if ($('pay-kpi-discount')) $('pay-kpi-discount').innerHTML   = `<span class="kpi-unit" style="margin-right:4px">₹</span>${fmtI(totalDiscount, 0)}`;
+        if ($('pay-kpi-payable'))  $('pay-kpi-payable').innerHTML    = `<span class="kpi-unit" style="margin-right:4px">₹</span>${fmtI(totalPayable, 0)}`;
+      }
+    }
+
     DataTable.mount('payments-list', d, {
+      emptyState: { icon: 'payments', title: "No payments to summarize yet", body: "Calculate the lots in this auction to see per-seller payable amounts here." },
       columns: [
-        { key:'name', label:'Seller', sort:'text' },
+        { key:'name', label:'Seller', sort:'text',
+          render:(p)=>`<span style="font-weight:600;color:var(--spice-text-main)">${esc(p.name||'')}</span>` },
         { key:'lot_count', label:'Lots', sort:'number', numeric:true },
         { key:'total_qty', label:'Qty', sort:'number', numeric:true, fmt:(n)=>fmtI(n,3) },
         { key:'total_amount', label:'Amount', sort:'number', numeric:true, fmt:(n)=>fmtI(n,2) },
         { key:'total_puramt', label:'Purchase', sort:'number', numeric:true, fmt:(n)=>fmtI(n,2) },
-        { key:'total_discount', label:'Discount', sort:'number', numeric:true, fmt:(n)=>fmtI(n,2) },
+        { key:'total_discount', label:'Discount', sort:'number', numeric:true,
+          fmt:(n)=>fmtI(n,2),
+          // Discount in turmeric/amber for visual distinction
+          render:(p)=>{
+            const v = Number(p.total_discount)||0;
+            return v>0
+              ? `<span style="color:#B45309;font-weight:600">${fmtI(v,2)}</span>`
+              : `<span style="color:var(--text3)">0.00</span>`;
+          } },
         { key:'total_payable', label:'Payable', sort:'number', numeric:true,
           fmt:(n)=>fmtI(n,2),
-          render:(p)=>`<strong>${fmtI(p.total_payable||0,2)}</strong>` }
+          // Payable as the "answer" — bigger, darker, cardamom
+          render:(p)=>`<span style="font-weight:700;color:var(--spice-cardamom-dk);font-size:14px">${fmtI(p.total_payable||0,2)}</span>` }
       ]
     });
   }catch(e){
@@ -5213,6 +5660,24 @@ async function loadBills(){
   const aid=document.getElementById('bill-auction')?.value;
   const url=aid?`/api/bills?auction_id=${aid}`:'/api/bills';
   const d=await j(url);
+  const arr = Array.isArray(d) ? d : [];
+
+  // Update KPI strip
+  const kpiStrip = document.getElementById('bill-kpis');
+  if (kpiStrip) {
+    if (arr.length === 0) {
+      kpiStrip.style.display = 'none';
+    } else {
+      kpiStrip.style.display = 'grid';
+      const totalQty = arr.reduce((a,i) => a + (Number(i.qty) || 0), 0);
+      const totalNet = arr.reduce((a,i) => a + (Number(i.net) || 0), 0);
+      const $ = (id) => document.getElementById(id);
+      if ($('bill-kpi-count')) $('bill-kpi-count').textContent = arr.length;
+      if ($('bill-kpi-qty'))   $('bill-kpi-qty').innerHTML     = `${fmtI(totalQty, 0)}<span class="kpi-unit">kg</span>`;
+      if ($('bill-kpi-net'))   $('bill-kpi-net').innerHTML     = `<span class="kpi-unit" style="margin-right:4px">₹</span>${fmtI(totalNet, 0)}`;
+    }
+  }
+
   DataTable.mount('bills-list', d, {
     emptyState: { icon: 'invoices', title: "No agri bills yet", body: "Generate agriculturist purchase bills for eligible sellers using the form above." }, 
     columns: [
@@ -5220,7 +5685,8 @@ async function loadBills(){
         labelHTML:'<input type="checkbox" id="bill-select-all" onclick="event.stopPropagation();toggleAllBills(this.checked)" title="Select / clear all visible" style="cursor:pointer;width:16px;height:16px;vertical-align:middle;accent-color:var(--green)">',
         sortable:false, searchable:false,
         render:(b)=>`<input type="checkbox" class="bill-select-cb" value="${b.id}" onclick="event.stopPropagation()" style="cursor:pointer">` },
-      { key:'bil', label:'Bill#', sort:'text' },
+      { key:'bil', label:'Bill#', sort:'text',
+        render:(b)=>`<strong style="color:var(--spice-cardamom-dk);font-weight:700">${esc(b.bil)}</strong>` },
       { key:'date', label:'Date', sort:'date', render:(b)=>fmtD(b.date) },
       { key:'name', label:'Name', sort:'text' },
       { key:'pla', label:'Place', sort:'text' },
