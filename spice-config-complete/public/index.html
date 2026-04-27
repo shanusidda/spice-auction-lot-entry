@@ -2777,7 +2777,7 @@ const DataTable = (function(){
     const toolbar = `
       <div class="dt-toolbar">
         <div class="dt-search-wrap">
-          <input type="search" class="dt-search" placeholder="Search all columns…" value="${esc(s.search||'')}" oninput="DataTable._search('${tbodyId}',this.value)">
+          <input type="text" class="dt-search" placeholder="Search all columns…" value="${esc(s.search||'')}" oninput="DataTable._search('${tbodyId}',this.value)">
           ${hasSearch ? `<button class="dt-search-clear" title="Clear search" onclick="DataTable._clear('${tbodyId}')" aria-label="Clear">&times;</button>` : ''}
         </div>
         <span class="dt-count">${filtered.length} row${filtered.length===1?'':'s'}${s.data.length!==filtered.length?` (of ${s.data.length})`:''}</span>
