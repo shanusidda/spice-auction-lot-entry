@@ -650,6 +650,10 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
   //         invoices don't reference a separate dispatch), logo swap.
   const isASP = (cfg.business_mode || '').toLowerCase() === 'e-trade'
              && (cfg.business_state || '').toUpperCase() === 'KERALA';
+  // ISP inter-state invoices should not bill Transport/Insurance separately
+  // (item 5: those costs are absorbed in the buyer's freight, not invoiced).
+  // Combine with the existing ASP rule: ASP also hides them.
+  const hideTransportInsurance = isASP || (String(saleType || '').toUpperCase() === 'I');
   // Read a boolean-ish flag cfg value, respecting undefined→default semantics.
   // Used for user-facing toggle flags like flag_ship, flag_dispatch.
   function readFlagSafe(val, defaultOn) {
@@ -660,9 +664,12 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
   // Ship-To visibility:
   //   ASP invoices → ALWAYS hidden (Consignee block doesn't apply to the
   //     ASP→ISP internal transfer, per user spec)
-  //   ISP invoices → toggled by flag_ship ("Show Ship To Address")
-  const showShipTo = isASP ? false : readFlagSafe(cfg.flag_ship, true);
-  const showDispatch  = readFlagSafe(cfg.flag_dispatch, true); // item 2
+  //   ISP invoices → ALWAYS shown (per business rule: TN invoices need
+  //     buyer ship-to and dispatch addresses on the PDF). The cfg flags
+  //     flag_ship / flag_dispatch are kept for backward compat but
+  //     overridden in the TN/ISP path.
+  const showShipTo   = isASP ? false : true;
+  const showDispatch = isASP ? readFlagSafe(cfg.flag_dispatch, true) : true;
 
   // ── Page geometry ───────────────────────────────────────────
   const pageW = doc.page.width;
@@ -971,7 +978,14 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
       ? (cfg.dispatched_through_asp || cfg.dispatched_through || '')
       : (cfg.dispatched_through_isp || cfg.dispatched_through || ''));
   labeledCell(rightX,         ry2, rCell, rSmall, 'Dispatched through', dispThrough);
-  labeledCell(rightX + rCell, ry2, rCell, rSmall, 'Destination', cfg.dispatch_destination || '');
+  // Destination: ISP invoices use the buyer's place (since ISP ships TO the
+  // buyer); ASP invoices use the configured dispatch_destination (which is
+  // typically ISPL's location, since ASP→ISPL is internal). Falls back to
+  // dispatch_destination if buyer place is missing for whatever reason.
+  const destination = isASP
+    ? (cfg.dispatch_destination || '')
+    : (buyer.pla || cfg.dispatch_destination || '');
+  labeledCell(rightX + rCell, ry2, rCell, rSmall, 'Destination', destination);
   ry2 += rSmall;
 
   // Dispatch From block (sister company) — fills remaining middle height.
@@ -1145,8 +1159,8 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
   // us past where padding would help). The bottom reserve below covers
   // every optional summary row + amount-words + HSN summary + signature.
   const gunnyH_pre     = (summary.totalBags > 0 && summary.gunnyCost > 0) ? rowH : 0;
-  const transportH_pre = (summary.transportCost > 0) ? rowH : 0;
-  const insuranceH_pre = (summary.insuranceCost > 0) ? rowH : 0;
+  const transportH_pre = (summary.transportCost > 0 && !hideTransportInsurance) ? rowH : 0;
+  const insuranceH_pre = (summary.insuranceCost > 0 && !hideTransportInsurance) ? rowH : 0;
   const gstRowCount_pre = summary.isInterState ? 1 : 2;
   // Required height for the summary + bottom blocks (matches the existing
   // ensureRoomFor estimate below)
@@ -1184,8 +1198,8 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
   //   Tax words:    16
   //   Bank/Sig:     90
   const gunnyH     = (summary.totalBags > 0 && summary.gunnyCost > 0) ? rowH : 0;
-  const transportH = (summary.transportCost > 0) ? rowH : 0;
-  const insuranceH = (summary.insuranceCost > 0) ? rowH : 0;
+  const transportH = (summary.transportCost > 0 && !hideTransportInsurance) ? rowH : 0;
+  const insuranceH = (summary.insuranceCost > 0 && !hideTransportInsurance) ? rowH : 0;
   const gstRowCount = summary.isInterState ? 1 : 2;
   const summaryBlockH = gunnyH + transportH + insuranceH
                       + rowH + (rowH * gstRowCount) + rowH + (rowH + 2)
@@ -1228,7 +1242,7 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
   // ASP invoices never bill Transport/Insurance separately (item 5).
   // Wrap both rows + their HSN summary entries in an isASP guard.
   const sacTransport = cfg.sac_transport || '996791';
-  if (summary.transportCost > 0 && !isASP) {
+  if (summary.transportCost > 0 && !hideTransportInsurance) {
     stripeFill(y, rowH, sl - 1);
     rowVerticals(y, rowH);
     // sl.no shown only on lot rows (not on Gunny/Transport/Insurance footer rows)
@@ -1251,7 +1265,7 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
     ? pickRate(cfg.local_insurance, cfg.insurance, 0.75)
     : pickRate(cfg.insurance, 0.75);
   const sacInsurance = cfg.sac_insurance || '997136';
-  if (summary.insuranceCost > 0 && !isASP) {
+  if (summary.insuranceCost > 0 && !hideTransportInsurance) {
     stripeFill(y, rowH, sl - 1);
     rowVerticals(y, rowH);
     // sl.no shown only on lot rows (not on Gunny/Transport/Insurance footer rows)
@@ -1355,8 +1369,8 @@ function generateSalesInvoicePDF(invoiceData, cfg, saleType, invoiceNo, invoiceD
   hsnRows.push(hsnRow(hsnCardamom, 'Cardamom', summary.totalAmount));
   if (summary.gunnyCost > 0)     hsnRows.push(hsnRow(hsnGunny, 'Gunny', summary.gunnyCost));
   // ASP invoices: Transport/Insurance are not billed, so skip them from HSN summary too
-  if (summary.transportCost > 0 && !isASP) hsnRows.push(hsnRow(sacTransport, 'Transport', summary.transportCost));
-  if (summary.insuranceCost > 0 && !isASP) hsnRows.push(hsnRow(sacInsurance, 'Insurance', summary.insuranceCost));
+  if (summary.transportCost > 0 && !hideTransportInsurance) hsnRows.push(hsnRow(sacTransport, 'Transport', summary.transportCost));
+  if (summary.insuranceCost > 0 && !hideTransportInsurance) hsnRows.push(hsnRow(sacInsurance, 'Insurance', summary.insuranceCost));
 
   const hsnHdrH = 20;
   const hsnRowH = 12;

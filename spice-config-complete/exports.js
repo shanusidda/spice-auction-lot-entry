@@ -376,9 +376,10 @@ async function exportPramanCSV(db, auctionId, cfg, state) {
 
   const lines = [header.join(',')];
   for (const r of rows) {
-    // Grade 1 → ASP (intra-company transfer rule); else → ISPL
-    const gradeStr = String(r.grade || '').trim();
-    const lotCompany = (gradeStr === '1') ? 'ASP' : 'ISPL';
+    // Per business rule: every Praman row reports ISPL as the lot company
+    // regardless of grade. Earlier rule (Grade 1 → ASP) is no longer applied
+    // since the upload flow now treats all e-Trade lots as ISPL-fronted.
+    const lotCompany = 'ISPL';
 
     lines.push([
       r.lot_no || '',
@@ -410,7 +411,7 @@ async function exportPramanCSV(db, auctionId, cfg, state) {
 const EXPORT_TYPES = {
   lot_slip:       { fn: exportLotSlip,       name: 'LotSlip' },
   lot_slip_after: { fn: exportLotSlipAfter,  name: 'LotSlipAfter' },
-  praman_csv:     { fn: exportPramanCSV,     name: 'PramanLotSlip', ext: 'csv', mime: 'text/csv', needsCfg: true },
+  praman_csv:     { fn: exportPramanCSV,     name: 'eTrade_Praman', ext: 'csv', mime: 'text/csv', needsCfg: true },
   price_list:     { fn: exportPriceList,     name: 'PriceList' },
   bank_payment:   { fn: exportBankPayment,   name: 'BankPayment', needsCfg: true },
   pooler_register:{ fn: exportPoolerRegister,name: 'PoolerRegister' },

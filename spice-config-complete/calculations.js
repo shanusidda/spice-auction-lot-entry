@@ -256,10 +256,14 @@ function buildSalesInvoice(db, auctionId, buyerCode, saleType, cfg) {
   // ASP invoices (Kerala + e-Trade, already computed in `isASP` above) do NOT
   // bill Transport/Insurance as separate line-items — only Cardamom + Gunny.
   // Force both to zero so subtotal, GST, and grand total agree with the PDF.
-  const transportRate = isASP ? 0 : (isLocal
+  // ISP inter-state invoices ('I') don't bill transport/insurance separately
+  // (the buyer covers freight). Match the rendering rule that hides these
+  // rows from the PDF — see invoice-pdf.js hideTransportInsurance.
+  const hideTI = !isASP && (String(saleType || '').toUpperCase() === 'I');
+  const transportRate = isASP || hideTI ? 0 : (isLocal
     ? pickRate(cfg.local_transport, cfg.transport, 2.5)
     : pickRate(cfg.transport, 2.5));
-  const insuranceRate = isASP ? 0 : (isLocal
+  const insuranceRate = isASP || hideTI ? 0 : (isLocal
     ? pickRate(cfg.local_insurance, cfg.insurance, 0.75)
     : pickRate(cfg.insurance, 0.75));
 

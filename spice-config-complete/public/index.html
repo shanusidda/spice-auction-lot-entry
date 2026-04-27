@@ -4790,6 +4790,60 @@ function openLotEdit(l){
   document.getElementById('lot-modal-title').textContent='Edit Lot #'+l.lot_no;
   document.getElementById('l-id').value=l.id;
   L_FIELDS.forEach(f=>{const el=document.getElementById(L_IDS[f]);if(el)el.value=l[f]!=null?l[f]:''});
+
+  // Wire field-level reactivity for the edit modal:
+  //   1) Changing CODE → look up the matching buyer (by code, ti, or full
+  //      buyer string) and auto-fill buyer/buyer1/cr/sale fields. Saves
+  //      dad from typing those manually after picking a buyer code.
+  //   2) Changing QTY or PRICE → auto-recalculate AMOUNT (qty × price)
+  //      so the totals stay consistent without a separate save+recalc.
+  // Handlers are attached fresh each open so we don't need to track
+  // listener identity for cleanup.
+  const codeEl  = document.getElementById('l-code');
+  const qtyEl   = document.getElementById('l-qty');
+  const priceEl = document.getElementById('l-price');
+  const amtEl   = document.getElementById('l-amount');
+  if (codeEl && !codeEl._wiredLookup) {
+    codeEl._wiredLookup = true;
+    codeEl.addEventListener('change', async () => {
+      const code = (codeEl.value || '').trim().toUpperCase();
+      if (!code) return;
+      try {
+        const buyers = await j('/api/buyers');
+        // Match preference: exact code → exact ti → exact buyer
+        const u = code;
+        const match = buyers.find(b => String(b.code||'').trim().toUpperCase() === u)
+          || buyers.find(b => String(b.ti||'').trim().toUpperCase() === u)
+          || buyers.find(b => String(b.buyer||'').trim().toUpperCase() === u);
+        if (!match) {
+          if (typeof toast === 'function') toast(`No buyer found for code '${code}'`);
+          return;
+        }
+        const setIf = (id, val) => {
+          const el = document.getElementById(id);
+          if (el) el.value = val == null ? '' : val;
+        };
+        setIf('l-buyer',  match.buyer  || '');
+        setIf('l-buyer1', match.buyer1 || '');
+        setIf('l-cr',     match.gstin  || match.cr || '');
+        setIf('l-sale',   match.sale   || '');
+        // Normalize the code field too — if user typed lowercase, snap to canonical
+        codeEl.value = match.code || code;
+        if (typeof toast === 'function') toast(`Filled buyer: ${match.buyer1 || match.buyer}`);
+      } catch (e) {
+        console.warn('Code lookup failed', e);
+      }
+    });
+  }
+  // Auto-recalculate amount when qty or price changes
+  const recalcAmount = () => {
+    const q = parseFloat(qtyEl?.value)   || 0;
+    const p = parseFloat(priceEl?.value) || 0;
+    if (amtEl) amtEl.value = (q * p).toFixed(2);
+  };
+  if (qtyEl   && !qtyEl._wiredRecalc)   { qtyEl._wiredRecalc   = true; qtyEl.addEventListener('input', recalcAmount); }
+  if (priceEl && !priceEl._wiredRecalc) { priceEl._wiredRecalc = true; priceEl.addEventListener('input', recalcAmount); }
+
   showModal('lot-modal');
 }
 async function saveLot(){
@@ -5578,7 +5632,7 @@ async function loadPayments(){
 }
 
 // ── Exports ───────────────────────────────────────────────
-const EXP_LABELS={lot_slip:'Lot Slip',lot_slip_after:'Lot Slip (After)',praman_csv:'Praman Lot Slip (CSV)',price_list:'Price List',bank_payment:'Bank Payment (RTGS/NEFT)',
+const EXP_LABELS={lot_slip:'Lot Slip',lot_slip_after:'Lot Slip (After)',praman_csv:'e-Trade CSV (Praman)',price_list:'Price List',bank_payment:'Bank Payment (RTGS/NEFT)',
   pooler_register:'Pooler Register',full_file:'Full File',collection:'Collection/Lorry',dealer_list:'Dealer List',
   sales_taxes:'Sales & Taxes',payment:'Payment Summary',tally_purchase:'Tally Purchase'};
 // Export types that only support a specific format (no XLSX/PDF choice).
