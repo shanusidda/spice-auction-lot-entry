@@ -140,6 +140,102 @@ function requireAdmin(req, res, next) {
 }
 
 // ══════════════════════════════════════════════════════════════
+// ROLE-BASED PERMISSIONS
+// ══════════════════════════════════════════════════════════════
+// Four pre-defined role tiers, each granting a fixed set of capabilities.
+// Capabilities are referenced by name everywhere in the code that needs
+// permission gating, so adding/removing a capability touches one place.
+//
+// Hierarchy (least → most privileged):
+//   viewer    — read-only
+//   operator  — daily auction-floor work (lots, invoices, buyers/traders)
+//   manager   — branch oversight (auctions, settings, revert)
+//   admin     — full control (delete, user management, business state)
+//
+// Capability names are short snake_case strings. New capabilities are
+// added by including the name in the appropriate role(s) below.
+const ROLE_PERMISSIONS = {
+  viewer: new Set([
+    'view',         // read any list / detail
+    'export',       // download XLSX / PDF / CSV exports
+    'self_password' // change own password
+  ]),
+  operator: new Set([
+    'view', 'export', 'self_password',
+    'lot_write',     // create/edit lots, calculate, validate, price-import
+    'invoice_write', // generate sales/purchase/bills + edit
+    'trader_write',  // create/edit/delete-bank traders
+    'buyer_write'    // create/edit buyers (per user decision: tax fields editable)
+  ]),
+  manager: new Set([
+    'view', 'export', 'self_password',
+    'lot_write', 'invoice_write', 'trader_write', 'buyer_write',
+    'auction_write',  // create/edit auctions (trades)
+    'invoice_revert', // revert sales/purchase/bills (undo invoice)
+    'settings_write', // edit company settings (rates, addresses, flags)
+    'state_toggle'    // toggle business state TN ↔ KL
+  ]),
+  admin: new Set([
+    'view', 'export', 'self_password',
+    'lot_write', 'invoice_write', 'trader_write', 'buyer_write',
+    'auction_write', 'invoice_revert', 'settings_write', 'state_toggle',
+    'delete',       // delete any individual record
+    'delete_all',   // bulk Delete All (sales, purchases, lots, etc.)
+    'user_manage'   // create/delete users, reset passwords, revoke sessions
+  ])
+};
+
+// Best-effort capability lookup. Unknown roles get treated as 'viewer'
+// (safest default — fails closed instead of open).
+function userHas(role, capability) {
+  const perms = ROLE_PERMISSIONS[role] || ROLE_PERMISSIONS.viewer;
+  return perms.has(capability);
+}
+
+// Middleware factory: returns an Express middleware that requires the
+// authenticated user to have a specific capability.
+//
+// Usage:
+//   app.post('/api/lots', requirePermission('lot_write'), handler)
+//   app.delete('/api/invoices/:id', requirePermission('delete'), handler)
+//
+// Falls through to next() on success; sends 403 with a clear message
+// indicating both the user's current role AND the capability required
+// (helps the client show a useful error rather than a generic "denied").
+function requirePermission(capability) {
+  return (req, res, next) => {
+    requireAuth(req, res, (err) => {
+      if (err) return next(err);
+      if (!req.user) return res.status(401).json({ error: 'Authentication required' });
+      if (!userHas(req.user.role, capability)) {
+        return res.status(403).json({
+          error: `Your role (${req.user.role}) does not allow this action`,
+          required: capability,
+          role: req.user.role
+        });
+      }
+      next();
+    });
+  };
+}
+
+// Convenience aliases — readable names for the most common gate points.
+// Encapsulates the permission name so callers don't repeat string literals.
+const requireView          = requirePermission('view');
+const requireLotWrite      = requirePermission('lot_write');
+const requireInvoiceWrite  = requirePermission('invoice_write');
+const requireInvoiceRevert = requirePermission('invoice_revert');
+const requireTraderWrite   = requirePermission('trader_write');
+const requireBuyerWrite    = requirePermission('buyer_write');
+const requireAuctionWrite  = requirePermission('auction_write');
+const requireSettingsWrite = requirePermission('settings_write');
+const requireStateToggle   = requirePermission('state_toggle');
+const requireDelete        = requirePermission('delete');
+const requireDeleteAll     = requirePermission('delete_all');
+const requireUserManage    = requirePermission('user_manage');
+const requireExport        = requirePermission('export');
+
+// ══════════════════════════════════════════════════════════════
 // AUTH
 // ══════════════════════════════════════════════════════════════
 app.post('/api/login', (req, res) => {
@@ -154,19 +250,25 @@ app.post('/api/login', (req, res) => {
   db.run('INSERT INTO sessions (token, user_id, device_label) VALUES (?, ?, ?)', [token, user.id, device_label || '']);
   // Clean up very old sessions (> 30 days) so the table doesn't grow forever
   db.run(`DELETE FROM sessions WHERE last_used_at < datetime('now','-30 days')`);
-  res.json({ token, role: user.role, username: user.username });
+  // Return the user's capabilities array so the client can hide buttons
+  // they're not allowed to use. Server still validates every request.
+  const permissions = Array.from(ROLE_PERMISSIONS[user.role] || ROLE_PERMISSIONS.viewer);
+  res.json({ token, role: user.role, username: user.username, permissions });
 });
 app.post('/api/logout', (req, res) => {
   const t = (req.headers.authorization||'').replace('Bearer ','');
   if (t) getDb().run('DELETE FROM sessions WHERE token = ?', [t]);
   res.json({ success: true });
 });
-app.get('/api/me', requireAdmin, (req, res) => res.json({ username: req.user.username, role: req.user.role }));
+app.get('/api/me', requireView, (req, res) => {
+  const permissions = Array.from(ROLE_PERMISSIONS[req.user.role] || ROLE_PERMISSIONS.viewer);
+  res.json({ username: req.user.username, role: req.user.role, permissions });
+});
 
 // ══════════════════════════════════════════════════════════════
 // USER MANAGEMENT (admin-only)
 // ══════════════════════════════════════════════════════════════
-app.get('/api/users', requireAdmin, (req, res) => {
+app.get('/api/users', requireUserManage, (req, res) => {
   const db = getDb();
   const users = db.all(`
     SELECT u.id, u.username, u.role, u.created_at,
@@ -177,23 +279,55 @@ app.get('/api/users', requireAdmin, (req, res) => {
   res.json(users);
 });
 
-app.post('/api/users', requireAdmin, (req, res) => {
+app.post('/api/users', requireUserManage, (req, res) => {
   const { username, password, role } = req.body || {};
   if (!username || !password) return res.status(400).json({ error: 'username and password are required' });
   if (password.length < 4) return res.status(400).json({ error: 'Password must be at least 4 characters' });
   if (!/^[a-zA-Z0-9_.-]{3,30}$/.test(username)) return res.status(400).json({ error: 'Username: 3–30 chars, letters/digits/._- only' });
+  // Validate role against the known set. Default to 'operator' (the most
+  // common and least privileged write-capable role) if missing or invalid.
+  // Legacy 'user' role is mapped to 'viewer' for backward compat.
+  const VALID_ROLES = ['viewer', 'operator', 'manager', 'admin'];
+  let finalRole = (role || '').toLowerCase();
+  if (finalRole === 'user') finalRole = 'viewer';
+  if (!VALID_ROLES.includes(finalRole)) finalRole = 'operator';
   const db = getDb();
   const existing = db.get('SELECT id FROM users WHERE username = ?', [username]);
   if (existing) return res.status(400).json({ error: 'Username already exists' });
   db.run(
     'INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)',
-    [username, hash(password), role === 'user' ? 'user' : 'admin']  // default admin if not explicitly 'user'
+    [username, hash(password), finalRole]
   );
-  const created = db.get('SELECT id, username FROM users WHERE username = ?', [username]);
-  res.json({ success: true, id: created ? created.id : null, username });
+  const created = db.get('SELECT id, username, role FROM users WHERE username = ?', [username]);
+  res.json({ success: true, id: created ? created.id : null, username, role: finalRole });
 });
 
-app.put('/api/users/:id/password', requireAdmin, (req, res) => {
+// Update an existing user's role (for promoting/demoting users without
+// recreating them). Admin-only — same gate as creating users.
+app.put('/api/users/:id/role', requireUserManage, (req, res) => {
+  const { role } = req.body || {};
+  const VALID_ROLES = ['viewer', 'operator', 'manager', 'admin'];
+  let finalRole = String(role || '').toLowerCase();
+  if (finalRole === 'user') finalRole = 'viewer';
+  if (!VALID_ROLES.includes(finalRole)) {
+    return res.status(400).json({ error: `Role must be one of: ${VALID_ROLES.join(', ')}` });
+  }
+  const db = getDb();
+  const target = db.get('SELECT id, username, role FROM users WHERE id = ?', [req.params.id]);
+  if (!target) return res.status(404).json({ error: 'User not found' });
+  // Safety: don't let admins demote the last remaining admin (would lock
+  // everyone out of user management).
+  if (target.role === 'admin' && finalRole !== 'admin') {
+    const adminCount = db.get(`SELECT COUNT(*) as n FROM users WHERE role = 'admin'`).n;
+    if (adminCount <= 1) {
+      return res.status(400).json({ error: 'Cannot demote the last admin — promote someone else first' });
+    }
+  }
+  db.run('UPDATE users SET role = ? WHERE id = ?', [finalRole, target.id]);
+  res.json({ success: true, username: target.username, role: finalRole });
+});
+
+app.put('/api/users/:id/password', requireUserManage, (req, res) => {
   const { password } = req.body || {};
   if (!password || password.length < 4) return res.status(400).json({ error: 'Password must be at least 4 characters' });
   const db = getDb();
@@ -205,7 +339,7 @@ app.put('/api/users/:id/password', requireAdmin, (req, res) => {
   res.json({ success: true, username: user.username });
 });
 
-app.delete('/api/users/:id', requireAdmin, (req, res) => {
+app.delete('/api/users/:id', requireUserManage, (req, res) => {
   const db = getDb();
   const target = db.get('SELECT id, username, role FROM users WHERE id = ?', [req.params.id]);
   if (!target) return res.status(404).json({ error: 'User not found' });
@@ -220,7 +354,7 @@ app.delete('/api/users/:id', requireAdmin, (req, res) => {
 });
 
 // Change own password — shortcut that doesn't require user id
-app.put('/api/me/password', requireAdmin, (req, res) => {
+app.put('/api/me/password', requirePermission('self_password'), (req, res) => {
   const { current_password, new_password } = req.body || {};
   if (!current_password || !new_password) return res.status(400).json({ error: 'Both current and new password required' });
   if (new_password.length < 4) return res.status(400).json({ error: 'New password must be at least 4 characters' });
@@ -234,7 +368,7 @@ app.put('/api/me/password', requireAdmin, (req, res) => {
 });
 
 // See my active sessions (all devices signed in as me)
-app.get('/api/me/sessions', requireAdmin, (req, res) => {
+app.get('/api/me/sessions', requireView, (req, res) => {
   const db = getDb();
   const sessions = db.all(
     `SELECT token, device_label, created_at, last_used_at,
@@ -247,7 +381,7 @@ app.get('/api/me/sessions', requireAdmin, (req, res) => {
 });
 
 // Revoke (log out) another session I own
-app.delete('/api/me/sessions/:tokenSuffix', requireAdmin, (req, res) => {
+app.delete('/api/me/sessions/:tokenSuffix', requireView, (req, res) => {
   const suffix = req.params.tokenSuffix;
   const db = getDb();
   // Find session by matching suffix, for THIS user only
@@ -262,14 +396,14 @@ app.delete('/api/me/sessions/:tokenSuffix', requireAdmin, (req, res) => {
 // ══════════════════════════════════════════════════════════════
 // COMPANY SETTINGS
 // ══════════════════════════════════════════════════════════════
-app.get('/api/company-settings', requireAdmin, (req, res) => {
+app.get('/api/company-settings', requireView, (req, res) => {
   res.json({ categories: CATEGORIES, settings: getAllSettings(getDb()) });
 });
-app.put('/api/company-settings', requireAdmin, (req, res) => {
+app.put('/api/company-settings', requireSettingsWrite, (req, res) => {
   const count = updateSettings(getDb(), req.body.settings || {});
   res.json({ success: true, updated: count });
 });
-app.get('/api/company-settings/flat', requireAdmin, (req, res) => res.json(getSettingsFlat(getDb())));
+app.get('/api/company-settings/flat', requireView, (req, res) => res.json(getSettingsFlat(getDb())));
 
 // ── Company identity presets (ISP / ASP) ─────────────────────────────
 // Two named snapshots of the 8 fields in category='company'. The active
@@ -279,7 +413,7 @@ app.get('/api/company-settings/flat', requireAdmin, (req, res) => res.json(getSe
 // one is active.
 
 // Returns: {ISP: {logo:..., trade_name:..., ...}, ASP: {...}, active: 'ISP'}
-app.get('/api/company-presets', requireAdmin, (req, res) => {
+app.get('/api/company-presets', requireView, (req, res) => {
   try { res.json(getAllPresets(getDb())); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -291,7 +425,7 @@ app.get('/api/company-presets', requireAdmin, (req, res) => {
 // NOTE: This route MUST be declared before PUT /:code because Express
 // routes match in declaration order. If /:code comes first, 'active'
 // gets captured as the code parameter and this route is unreachable.
-app.put('/api/company-presets/active', requireAdmin, (req, res) => {
+app.put('/api/company-presets/active', requireStateToggle, (req, res) => {
   try {
     const code = req.body.code;
     if (code !== 'ISP' && code !== 'ASP') {
@@ -307,7 +441,7 @@ app.put('/api/company-presets/active', requireAdmin, (req, res) => {
 
 // Save values to a specific preset (does not change the active preset).
 // Body: {values: {logo: 'ASP', trade_name: 'AMAZING SPICE PARK', ...}}
-app.put('/api/company-presets/:code', requireAdmin, (req, res) => {
+app.put('/api/company-presets/:code', requireSettingsWrite, (req, res) => {
   try {
     const code = req.params.code;
     if (code !== 'ISP' && code !== 'ASP') {
@@ -329,7 +463,7 @@ const LOGO_FILES = {
   ispl: path.join(__dirname, 'public', 'logo-ispl.png'),
   asp:  path.join(__dirname, 'public', 'logo-asp.png'),
 };
-app.post('/api/company-settings/logo/:which', requireAdmin, upload.single('file'), (req, res) => {
+app.post('/api/company-settings/logo/:which', requireSettingsWrite, upload.single('file'), (req, res) => {
   const which = req.params.which;
   if (!LOGO_FILES[which]) return res.status(400).json({ error: 'Invalid logo type (use ispl or asp)' });
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
@@ -346,7 +480,7 @@ app.post('/api/company-settings/logo/:which', requireAdmin, upload.single('file'
   fs.unlinkSync(req.file.path);
   res.json({ success: true, path: `/logo-${which}.png`, size: fs.statSync(target).size });
 });
-app.delete('/api/company-settings/logo/:which', requireAdmin, (req, res) => {
+app.delete('/api/company-settings/logo/:which', requireSettingsWrite, (req, res) => {
   const which = req.params.which;
   if (!LOGO_FILES[which]) return res.status(400).json({ error: 'Invalid logo type' });
   const target = LOGO_FILES[which];
@@ -354,7 +488,7 @@ app.delete('/api/company-settings/logo/:which', requireAdmin, (req, res) => {
   res.json({ success: true });
 });
 // Quick probe so the UI knows whether a logo is uploaded
-app.get('/api/company-settings/logo/:which', requireAdmin, (req, res) => {
+app.get('/api/company-settings/logo/:which', requireView, (req, res) => {
   const which = req.params.which;
   if (!LOGO_FILES[which]) return res.status(400).json({ error: 'Invalid logo type' });
   const target = LOGO_FILES[which];
@@ -363,11 +497,11 @@ app.get('/api/company-settings/logo/:which', requireAdmin, (req, res) => {
   res.json({ exists: true, size: stat.size, mtime: stat.mtime });
 });
 
-app.get('/api/company-settings/export', requireAdmin, (req, res) => {
+app.get('/api/company-settings/export', requireExport, (req, res) => {
   res.setHeader('Content-Disposition', 'attachment; filename="company-settings.json"');
   res.json(getSettingsFlat(getDb()));
 });
-app.post('/api/company-settings/import', requireAdmin, (req, res) => {
+app.post('/api/company-settings/import', requireSettingsWrite, (req, res) => {
   const count = updateSettings(getDb(), req.body.settings || {});
   res.json({ success: true, imported: count });
 });
@@ -391,7 +525,7 @@ function makeDeleteAll(table) {
 // Traders have a FK from trader_banks.trader_id → traders.id. A plain
 // DELETE FROM traders fails with "FOREIGN KEY constraint failed" whenever
 // any seller has a row in trader_banks. Wipe children first, then parents.
-app.delete('/api/traders/delete-all', requireAdmin, (req, res) => {
+app.delete('/api/traders/delete-all', requireDeleteAll, (req, res) => {
   try {
     const db = getDb();
     const before = db.get('SELECT COUNT(*) as c FROM traders').c;
@@ -406,11 +540,11 @@ app.delete('/api/traders/delete-all', requireAdmin, (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
-app.delete('/api/buyers/delete-all',      requireAdmin, makeDeleteAll('buyers'));
-app.delete('/api/invoices/delete-all',    requireAdmin, makeDeleteAll('invoices'));
-app.delete('/api/purchases/delete-all',   requireAdmin, makeDeleteAll('purchases'));
-app.delete('/api/bills/delete-all',       requireAdmin, makeDeleteAll('bills'));
-app.delete('/api/debit-notes/delete-all', requireAdmin, makeDeleteAll('debit_notes'));
+app.delete('/api/buyers/delete-all',      requireDeleteAll, makeDeleteAll('buyers'));
+app.delete('/api/invoices/delete-all',    requireDeleteAll, makeDeleteAll('invoices'));
+app.delete('/api/purchases/delete-all',   requireDeleteAll, makeDeleteAll('purchases'));
+app.delete('/api/bills/delete-all',       requireDeleteAll, makeDeleteAll('bills'));
+app.delete('/api/debit-notes/delete-all', requireDeleteAll, makeDeleteAll('debit_notes'));
 
 // ══════════════════════════════════════════════════════════════
 // GST LOOKUP — fetch trade name/address/state from GSTIN
@@ -428,7 +562,7 @@ const STATE_CODES = {
 };
 const GSTIN_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
 
-app.get('/api/gst-lookup/:gstin', requireAdmin, async (req, res) => {
+app.get('/api/gst-lookup/:gstin', requireView, async (req, res) => {
   const gstin = String(req.params.gstin || '').toUpperCase().trim();
   if (!GSTIN_RE.test(gstin)) {
     return res.status(400).json({ valid: false, error: 'Invalid GSTIN format' });
@@ -488,7 +622,7 @@ app.get('/api/gst-lookup/:gstin', requireAdmin, async (req, res) => {
 // ══════════════════════════════════════════════════════════════
 // TRADERS (NAM.DBF — sellers/poolers)
 // ══════════════════════════════════════════════════════════════
-app.get('/api/traders', requireAdmin, (req, res) => {
+app.get('/api/traders', requireView, (req, res) => {
   const { search, limit } = req.query;
   const db = getDb();
   // Helper: attach the `banks` array to each trader row (from trader_banks
@@ -524,7 +658,7 @@ app.get('/api/traders', requireAdmin, (req, res) => {
   }
   res.json(hydrateBanks(db.all('SELECT * FROM traders ORDER BY name LIMIT 500')));
 });
-app.get('/api/traders/:id', requireAdmin, (req, res) => {
+app.get('/api/traders/:id', requireView, (req, res) => {
   const db = getDb();
   const row = db.get('SELECT * FROM traders WHERE id = ?', [req.params.id]);
   if (!row) return res.status(404).json({ error: 'Not found' });
@@ -559,7 +693,7 @@ function syncTraderBanks(db, traderId, banks) {
   );
 }
 
-app.post('/api/traders', requireAdmin, (req, res) => {
+app.post('/api/traders', requireTraderWrite, (req, res) => {
   const t = req.body;
   const db = getDb();
   const info = db.run(`INSERT INTO traders (name,cr,pan,tel,aadhar,padd,ppla,pin,pstate,pst_code,ifsc,acctnum,holder_name) 
@@ -572,7 +706,7 @@ app.post('/api/traders', requireAdmin, (req, res) => {
   }
   res.json({ success: true, id: info.lastInsertRowid });
 });
-app.put('/api/traders/:id', requireAdmin, (req, res) => {
+app.put('/api/traders/:id', requireTraderWrite, (req, res) => {
   const t = req.body;
   const db = getDb();
   db.run(`UPDATE traders SET name=?,cr=?,pan=?,tel=?,aadhar=?,padd=?,ppla=?,pin=?,pstate=?,pst_code=?,ifsc=?,acctnum=?,holder_name=? WHERE id=?`,
@@ -582,7 +716,7 @@ app.put('/api/traders/:id', requireAdmin, (req, res) => {
   }
   res.json({ success: true });
 });
-app.delete('/api/traders/:id', requireAdmin, (req, res) => {
+app.delete('/api/traders/:id', requireDelete, (req, res) => {
   const db = getDb();
   // Clear child rows first (trader_banks FK) before deleting the parent
   db.run('DELETE FROM trader_banks WHERE trader_id = ?', [req.params.id]);
@@ -591,7 +725,7 @@ app.delete('/api/traders/:id', requireAdmin, (req, res) => {
 });
 
 // ── Import Sellers from XLS/XLSX ──────────────────────────────
-app.post('/api/traders/import', requireAdmin, upload.single('file'), async (req, res) => {
+app.post('/api/traders/import', requireTraderWrite, upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
   try {
     const workbook = XLSX.readFile(req.file.path);
@@ -657,7 +791,7 @@ app.post('/api/traders/import', requireAdmin, upload.single('file'), async (req,
 });
 
 // ── Download Seller template XLSX ────────────────────────────
-app.get('/api/traders/template', requireAdmin, async (req, res) => {
+app.get('/api/traders/template', requireExport, async (req, res) => {
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet('Sellers');
   ws.columns = ['NAME','CR','PAN','TEL','AADHAR','PADD','PPLA','PIN','PSTATE','PST_CODE','IFSC','ACCTNUM','HOLDER_NAME']
@@ -677,7 +811,7 @@ app.get('/api/traders/template', requireAdmin, async (req, res) => {
 // ══════════════════════════════════════════════════════════════
 // BUYERS (SBL.DBF — dealers/traders)
 // ══════════════════════════════════════════════════════════════
-app.get('/api/buyers', requireAdmin, (req, res) => {
+app.get('/api/buyers', requireView, (req, res) => {
   const { search } = req.query;
   const db = getDb();
   if (search) {
@@ -691,7 +825,7 @@ app.get('/api/buyers', requireAdmin, (req, res) => {
   }
   res.json(db.all('SELECT * FROM buyers ORDER BY buyer1 LIMIT 500'));
 });
-app.post('/api/buyers', requireAdmin, (req, res) => {
+app.post('/api/buyers', requireBuyerWrite, (req, res) => {
   const b = req.body;
   getDb().run(`INSERT INTO buyers (
       buyer, buyer1, code, sbl, add1, add2, pla, pin, state, st_code,
@@ -703,7 +837,7 @@ app.post('/api/buyers', requireAdmin, (req, res) => {
      b.cbuyer1||'', b.cadd1||'', b.cadd2||'', b.cpla||'', b.cpin||'', b.cstate||'', b.cst_code||'', b.cgstin||'']);
   res.json({ success: true });
 });
-app.put('/api/buyers/:id', requireAdmin, (req, res) => {
+app.put('/api/buyers/:id', requireBuyerWrite, (req, res) => {
   const b = req.body;
   getDb().run(`UPDATE buyers SET
       buyer=?, buyer1=?, code=?, sbl=?, add1=?, add2=?, pla=?, pin=?, state=?, st_code=?,
@@ -716,12 +850,12 @@ app.put('/api/buyers/:id', requireAdmin, (req, res) => {
      req.params.id]);
   res.json({ success: true });
 });
-app.delete('/api/buyers/:id', requireAdmin, (req, res) => {
+app.delete('/api/buyers/:id', requireDelete, (req, res) => {
   getDb().run('DELETE FROM buyers WHERE id = ?', [req.params.id]); res.json({ success: true });
 });
 
 // ── Import Buyers from XLS/XLSX ───────────────────────────────
-app.post('/api/buyers/import', requireAdmin, upload.single('file'), async (req, res) => {
+app.post('/api/buyers/import', requireBuyerWrite, upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
   try {
     const workbook = XLSX.readFile(req.file.path);
@@ -804,7 +938,7 @@ app.post('/api/buyers/import', requireAdmin, upload.single('file'), async (req, 
 });
 
 // ── Download Buyer template XLSX ─────────────────────────────
-app.get('/api/buyers/template', requireAdmin, async (req, res) => {
+app.get('/api/buyers/template', requireExport, async (req, res) => {
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet('Buyers');
   ws.columns = ['BUYER','BUYER1','ADD1','ADD2','PLA','PIN','STATE','ST_CODE','GSTIN','PAN','TEL','TI','SALE']
@@ -822,11 +956,11 @@ app.get('/api/buyers/template', requireAdmin, async (req, res) => {
 // ══════════════════════════════════════════════════════════════
 // AUCTIONS
 // ══════════════════════════════════════════════════════════════
-app.get('/api/auctions', requireAdmin, (req, res) => {
+app.get('/api/auctions', requireView, (req, res) => {
   const rows = getDb().all('SELECT *, (SELECT COUNT(*) FROM lots WHERE auction_id=auctions.id) as lot_count FROM auctions ORDER BY date DESC, ano DESC LIMIT 100');
   res.json(withFmtDate(rows));
 });
-app.post('/api/auctions', requireAdmin, (req, res) => {
+app.post('/api/auctions', requireAuctionWrite, (req, res) => {
   const { ano, date, crop_type, state } = req.body;
   const db = getDb();
   const d = normalizeDate(date);
@@ -834,13 +968,13 @@ app.post('/api/auctions', requireAdmin, (req, res) => {
   const created = db.get('SELECT id FROM auctions WHERE ano = ? AND date = ? ORDER BY id DESC LIMIT 1', [ano, d]);
   res.json({ success: true, id: created ? created.id : null });
 });
-app.put('/api/auctions/:id', requireAdmin, (req, res) => {
+app.put('/api/auctions/:id', requireAuctionWrite, (req, res) => {
   const { ano, date, crop_type, state } = req.body;
   getDb().run('UPDATE auctions SET ano=?, date=?, crop_type=?, state=? WHERE id=?',
     [ano, normalizeDate(date), crop_type||'ASP', state||'TAMIL NADU', req.params.id]);
   res.json({ success: true });
 });
-app.delete('/api/auctions/:id', requireAdmin, (req, res) => {
+app.delete('/api/auctions/:id', requireDelete, (req, res) => {
   const db = getDb();
   db.run('DELETE FROM lots WHERE auction_id = ?', [req.params.id]);
   db.run('DELETE FROM auctions WHERE id = ?', [req.params.id]);
@@ -848,7 +982,7 @@ app.delete('/api/auctions/:id', requireAdmin, (req, res) => {
 });
 
 // ── Import Auction + Lots from XLS/XLSX (replaces APPA.PRG) ──
-app.post('/api/auctions/import', requireAdmin, upload.single('file'), async (req, res) => {
+app.post('/api/auctions/import', requireAuctionWrite, upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
   try {
     const workbook = XLSX.readFile(req.file.path);
@@ -1112,7 +1246,7 @@ app.post('/api/auctions/import', requireAdmin, upload.single('file'), async (req
 });
 
 // ── Download Auction/Lots template XLSX ──────────────────────
-app.get('/api/auctions/template', requireAdmin, async (req, res) => {
+app.get('/api/auctions/template', requireExport, async (req, res) => {
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet('Lots');
   ws.columns = ['ANO','DATE','LOT','CROP','GRADE','CRPT','BR','STATE','NAME','PADD','PPLA','PPIN','PSTATE','PST_CODE',
@@ -1135,7 +1269,7 @@ app.get('/api/auctions/template', requireAdmin, async (req, res) => {
 // ══════════════════════════════════════════════════════════════
 // LOTS (CPA1.DBF — main data)
 // ══════════════════════════════════════════════════════════════
-app.get('/api/lots/:auctionId', requireAdmin, (req, res) => {
+app.get('/api/lots/:auctionId', requireView, (req, res) => {
   const { branch, name, buyer } = req.query;
   // Correlated subquery (not LEFT JOIN) to avoid any risk of row duplication
   // if the same buyer code exists multiple times in the buyers table.
@@ -1151,7 +1285,7 @@ app.get('/api/lots/:auctionId', requireAdmin, (req, res) => {
   res.json(getDb().all(q, p));
 });
 
-app.post('/api/lots', requireAdmin, (req, res) => {
+app.post('/api/lots', requireLotWrite, (req, res) => {
   const l = req.body;
   getDb().run(`INSERT INTO lots (auction_id,lot_no,crop,grade,crpt,branch,state,trader_id,name,padd,ppla,ppin,pstate,pst_code,cr,pan,tel,aadhar,bags,litre,qty,gross_wt,sample_wt,moisture,user_id)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
@@ -1159,7 +1293,7 @@ app.post('/api/lots', requireAdmin, (req, res) => {
   res.json({ success: true });
 });
 
-app.put('/api/lots/:id', requireAdmin, (req, res) => {
+app.put('/api/lots/:id', requireLotWrite, (req, res) => {
   const l = req.body; const sets = []; const vals = [];
   for (const [k,v] of Object.entries(l)) {
     if (k !== 'id' && k !== 'auction_id' && k !== 'created_at') { sets.push(`${k}=?`); vals.push(v); }
@@ -1169,12 +1303,12 @@ app.put('/api/lots/:id', requireAdmin, (req, res) => {
   res.json({ success: true });
 });
 
-app.delete('/api/lots/:id', requireAdmin, (req, res) => {
+app.delete('/api/lots/:id', requireDelete, (req, res) => {
   getDb().run('DELETE FROM lots WHERE id = ?', [req.params.id]); res.json({ success: true });
 });
 
 // ── Calculate all lots for an auction (GENERATE.PRG) ─────────
-app.post('/api/lots/calculate/:auctionId', requireAdmin, (req, res) => {
+app.post('/api/lots/calculate/:auctionId', requireLotWrite, (req, res) => {
   const db = getDb(); const cfg = getSettingsFlat(db);
   const lots = db.all('SELECT * FROM lots WHERE auction_id = ? AND amount > 0', [req.params.auctionId]);
   let count = 0;
@@ -1194,7 +1328,7 @@ app.post('/api/lots/calculate/:auctionId', requireAdmin, (req, res) => {
 //
 // Only touches lots with `amount > 0` (skips empty/auction-floor entries).
 // Returns total lots calculated across all auctions.
-app.post('/api/lots/calculate-all', requireAdmin, (req, res) => {
+app.post('/api/lots/calculate-all', requireLotWrite, (req, res) => {
   const db = getDb(); const cfg = getSettingsFlat(db);
   const lots = db.all('SELECT * FROM lots WHERE amount > 0');
   let count = 0;
@@ -1208,7 +1342,7 @@ app.post('/api/lots/calculate-all', requireAdmin, (req, res) => {
 });
 
 // ── Data validation (PRICHECK.PRG) ───────────────────────────
-app.get('/api/lots/validate/:auctionId', requireAdmin, (req, res) => {
+app.get('/api/lots/validate/:auctionId', requireView, (req, res) => {
   const rows = getDb().all(
     `SELECT * FROM lots WHERE auction_id = ? AND (price = 0 OR amount = 0 OR buyer = '' OR code = '' OR ROUND(qty*price,2) <> ROUND(amount,2))`,
     [req.params.auctionId]);
@@ -1218,7 +1352,7 @@ app.get('/api/lots/validate/:auctionId', requireAdmin, (req, res) => {
 // ══════════════════════════════════════════════════════════════
 // INVOICES — Sales (GSTIN.PRG / KGSTIN.PRG)
 // ══════════════════════════════════════════════════════════════
-app.get('/api/invoices', requireAdmin, (req, res) => {
+app.get('/api/invoices', requireView, (req, res) => {
   const { ano, auction_id, from, to } = req.query;
   const db = getDb();
   const cfg = getSettingsFlat(db);
@@ -1260,7 +1394,7 @@ app.get('/api/invoices', requireAdmin, (req, res) => {
   res.json(rows);
 });
 
-app.post('/api/invoices/generate/:auctionId', requireAdmin, (req, res) => {
+app.post('/api/invoices/generate/:auctionId', requireInvoiceWrite, (req, res) => {
   const db = getDb(); const cfg = getSettingsFlat(db);
   const { saleType, buyerCode, invoiceNo } = req.body;
   
@@ -1331,7 +1465,7 @@ app.post('/api/invoices/generate/:auctionId', requireAdmin, (req, res) => {
 });
 
 // List eligible buyers for an auction (distinct buyers with lots in amount > 0)
-app.get('/api/invoices/eligible-buyers/:auctionId', requireAdmin, (req, res) => {
+app.get('/api/invoices/eligible-buyers/:auctionId', requireView, (req, res) => {
   const { saleType } = req.query;
   const db = getDb();
   const cfg = getSettingsFlat(db);
@@ -1384,7 +1518,7 @@ app.get('/api/invoices/eligible-buyers/:auctionId', requireAdmin, (req, res) => 
 
 // ── Diagnostic: show EVERYTHING about buyers in an auction ──
 // Helps troubleshoot why eligible-buyers returns an unexpected count.
-app.get('/api/invoices/eligibility-debug/:auctionId', requireAdmin, (req, res) => {
+app.get('/api/invoices/eligibility-debug/:auctionId', requireView, (req, res) => {
   const db = getDb();
   const aid = req.params.auctionId;
   const auction = db.get('SELECT * FROM auctions WHERE id = ?', [aid]);
@@ -1447,7 +1581,7 @@ app.get('/api/invoices/eligibility-debug/:auctionId', requireAdmin, (req, res) =
 });
 
 // Batch: generate sales invoice for ALL buyers in an auction
-app.post('/api/invoices/generate-all/:auctionId', requireAdmin, (req, res) => {
+app.post('/api/invoices/generate-all/:auctionId', requireInvoiceWrite, (req, res) => {
   const db = getDb(); const cfg = getSettingsFlat(db);
   const { startInvoiceNo, saleType } = req.body;
   
@@ -1538,7 +1672,7 @@ app.post('/api/invoices/generate-all/:auctionId', requireAdmin, (req, res) => {
 });
 
 // Update invoice fields (edit)
-app.put('/api/invoices/:id', requireAdmin, (req, res) => {
+app.put('/api/invoices/:id', requireInvoiceWrite, (req, res) => {
   const i = req.body;
   const fields = ['ano','date','state','sale','invo','buyer','buyer1','gstin','place',
     'bag','qty','amount','gunny','pava_hc','ins','cgst','sgst','igst','tcs','rund','tot'];
@@ -1553,7 +1687,7 @@ app.put('/api/invoices/:id', requireAdmin, (req, res) => {
 });
 
 // Delete invoice
-app.delete('/api/invoices/:id', requireAdmin, (req, res) => {
+app.delete('/api/invoices/:id', requireDelete, (req, res) => {
   const db = getDb();
   const inv = db.get('SELECT * FROM invoices WHERE id=?', [req.params.id]);
   if (!inv) return res.status(404).json({ error: 'Invoice not found' });
@@ -1571,7 +1705,7 @@ app.delete('/api/invoices/:id', requireAdmin, (req, res) => {
 });
 
 // Explicit revert route (same effect as DELETE but returns richer info)
-app.post('/api/invoices/:id/revert', requireAdmin, (req, res) => {
+app.post('/api/invoices/:id/revert', requireInvoiceRevert, (req, res) => {
   const db = getDb();
   const inv = db.get('SELECT * FROM invoices WHERE id=?', [req.params.id]);
   if (!inv) return res.status(404).json({ error: 'Invoice not found' });
@@ -1597,7 +1731,7 @@ app.post('/api/invoices/:id/revert', requireAdmin, (req, res) => {
 });
 
 // Bulk revert: revert ALL invoices in an auction
-app.post('/api/invoices/revert-all/:auctionId', requireAdmin, (req, res) => {
+app.post('/api/invoices/revert-all/:auctionId', requireInvoiceRevert, (req, res) => {
   const db = getDb();
   const aid = req.params.auctionId;
   const invoices = db.all('SELECT * FROM invoices WHERE auction_id = ?', [aid]);
@@ -1622,7 +1756,7 @@ app.post('/api/invoices/revert-all/:auctionId', requireAdmin, (req, res) => {
 });
 
 // Sales Invoice PDF
-app.get('/api/invoices/pdf/:id', requireAdmin, async (req, res) => {
+app.get('/api/invoices/pdf/:id', requireView, async (req, res) => {
   try {
     const db = getDb();
     const cfg = getSettingsFlat(db);
@@ -1715,7 +1849,7 @@ app.get('/api/invoices/pdf/:id', requireAdmin, async (req, res) => {
 // otherwise returns 400. Uses the same `generateSalesInvoicePDF` code path with
 // variant='purchase' so the math (P_Rate, PurAmt, totals, HSN) stays identical
 // to the source sales invoice.
-app.get('/api/invoices/purchase-pdf/:id', requireAdmin, async (req, res) => {
+app.get('/api/invoices/purchase-pdf/:id', requireView, async (req, res) => {
   try {
     const db = getDb();
     const cfg = getSettingsFlat(db);
@@ -1791,7 +1925,7 @@ app.get('/api/invoices/purchase-pdf/:id', requireAdmin, async (req, res) => {
 // Bulk Sales Invoice PDF — merges N invoices into a single PDF
 // Body: { ids: [1, 2, 3, ...] }
 // Returns: one PDF with each invoice on fresh page(s), in the order given.
-app.post('/api/invoices/pdf-bulk', requireAdmin, async (req, res) => {
+app.post('/api/invoices/pdf-bulk', requireView, async (req, res) => {
   try {
     const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(Number).filter(Boolean) : [];
     if (!ids.length) return res.status(400).json({ error: 'No invoice IDs provided' });
@@ -1882,7 +2016,7 @@ app.post('/api/invoices/pdf-bulk', requireAdmin, async (req, res) => {
 // variant='purchase' so the buyer (ISPL) appears as the issuing company
 // and the active ASP company appears as the seller. ASP context only.
 // Body: { ids: [1, 2, 3, ...] }
-app.post('/api/invoices/purchase-pdf-bulk', requireAdmin, async (req, res) => {
+app.post('/api/invoices/purchase-pdf-bulk', requireView, async (req, res) => {
   try {
     const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(Number).filter(Boolean) : [];
     if (!ids.length) return res.status(400).json({ error: 'No invoice IDs provided' });
@@ -1964,7 +2098,7 @@ app.post('/api/invoices/purchase-pdf-bulk', requireAdmin, async (req, res) => {
 // ══════════════════════════════════════════════════════════════
 // PURCHASES (GSTKBILT.PRG — registered dealer invoices)
 // ══════════════════════════════════════════════════════════════
-app.get('/api/purchases', requireAdmin, (req, res) => {
+app.get('/api/purchases', requireView, (req, res) => {
   const { auction_id, ano, from, to } = req.query;
   let q = 'SELECT * FROM purchases WHERE 1=1'; const p = [];
   if (auction_id) { q += ' AND auction_id = ?'; p.push(parseInt(auction_id)); }
@@ -1974,7 +2108,7 @@ app.get('/api/purchases', requireAdmin, (req, res) => {
   res.json(getDb().all(q, p));
 });
 
-app.post('/api/purchases/generate/:auctionId', requireAdmin, (req, res) => {
+app.post('/api/purchases/generate/:auctionId', requireInvoiceWrite, (req, res) => {
   const db = getDb(); const cfg = getSettingsFlat(db);
   const { sellerName, invoiceNo } = req.body;
   const invoice = buildPurchaseInvoice(db, req.params.auctionId, sellerName, cfg);
@@ -1991,7 +2125,7 @@ app.post('/api/purchases/generate/:auctionId', requireAdmin, (req, res) => {
 });
 
 // List eligible sellers for purchase invoices (with GSTIN, amount > 0)
-app.get('/api/purchases/eligible-sellers/:auctionId', requireAdmin, (req, res) => {
+app.get('/api/purchases/eligible-sellers/:auctionId', requireView, (req, res) => {
   res.json(getDb().all(
     `SELECT name, COUNT(*) as lot_count, SUM(qty) as total_qty, SUM(amount) as total_amount, MAX(cr) as cr
      FROM lots
@@ -2004,7 +2138,7 @@ app.get('/api/purchases/eligible-sellers/:auctionId', requireAdmin, (req, res) =
 });
 
 // Batch: generate purchase invoice for ALL registered dealers in an auction
-app.post('/api/purchases/generate-all/:auctionId', requireAdmin, (req, res) => {
+app.post('/api/purchases/generate-all/:auctionId', requireInvoiceWrite, (req, res) => {
   const db = getDb(); const cfg = getSettingsFlat(db);
   const { startInvoiceNo } = req.body;
   
@@ -2051,7 +2185,7 @@ app.post('/api/purchases/generate-all/:auctionId', requireAdmin, (req, res) => {
 });
 
 // Update purchase (edit)
-app.put('/api/purchases/:id', requireAdmin, (req, res) => {
+app.put('/api/purchases/:id', requireInvoiceWrite, (req, res) => {
   const p = req.body;
   const fields = ['ano','date','state','br','name','add_line','place','gstin','invo',
     'qty','amount','cgst','sgst','igst','rund','total','tds'];
@@ -2066,13 +2200,13 @@ app.put('/api/purchases/:id', requireAdmin, (req, res) => {
 });
 
 // Delete purchase
-app.delete('/api/purchases/:id', requireAdmin, (req, res) => {
+app.delete('/api/purchases/:id', requireDelete, (req, res) => {
   getDb().run('DELETE FROM purchases WHERE id=?', [req.params.id]);
   res.json({ success: true });
 });
 
 // ── Purchase Invoice PDF ─────────────────────────────────────
-app.get('/api/purchases/pdf/:auctionId/:sellerName', requireAdmin, async (req, res) => {
+app.get('/api/purchases/pdf/:auctionId/:sellerName', requireView, async (req, res) => {
   try {
     const db = getDb();
     const cfg = getSettingsFlat(db);
@@ -2174,7 +2308,7 @@ function enrichPurchaseForPDF(invoice, cfg, db, auctionId) {
 // Body: { ids: [1, 2, 3, ...] } — database row IDs from `purchases` table.
 // Returns: one PDF with each purchase on its own page(s), in the order given.
 // Same rebuild-from-lots OR fallback-to-stored pattern as the single route.
-app.post('/api/purchases/pdf-bulk', requireAdmin, async (req, res) => {
+app.post('/api/purchases/pdf-bulk', requireView, async (req, res) => {
   try {
     const db = getDb();
     const cfg = getSettingsFlat(db);
@@ -2233,7 +2367,7 @@ app.post('/api/purchases/pdf-bulk', requireAdmin, async (req, res) => {
 // ══════════════════════════════════════════════════════════════
 // BILLS — Agriculturist Bills of Supply (GSTKBILP/GSTBILP)
 // ══════════════════════════════════════════════════════════════
-app.get('/api/bills', requireAdmin, (req, res) => {
+app.get('/api/bills', requireView, (req, res) => {
   const { auction_id, ano, from, to } = req.query;
   let q = 'SELECT * FROM bills WHERE 1=1'; const p = [];
   if (auction_id) { q += ' AND auction_id = ?'; p.push(parseInt(auction_id)); }
@@ -2244,7 +2378,7 @@ app.get('/api/bills', requireAdmin, (req, res) => {
 });
 
 // Generate agri bill for a seller
-app.post('/api/bills/generate/:auctionId', requireAdmin, (req, res) => {
+app.post('/api/bills/generate/:auctionId', requireInvoiceWrite, (req, res) => {
   const db = getDb(); const cfg = getSettingsFlat(db);
   const { sellerName, billNo } = req.body;
   
@@ -2278,12 +2412,12 @@ app.post('/api/bills/generate/:auctionId', requireAdmin, (req, res) => {
 });
 
 // List eligible agri sellers for an auction (no GSTIN + amount > 0)
-app.get('/api/bills/eligible-sellers/:auctionId', requireAdmin, (req, res) => {
+app.get('/api/bills/eligible-sellers/:auctionId', requireView, (req, res) => {
   res.json(listAgriSellers(getDb(), req.params.auctionId));
 });
 
 // Batch: generate bill of supply for ALL agriculturists (no GSTIN) in an auction
-app.post('/api/bills/generate-all/:auctionId', requireAdmin, (req, res) => {
+app.post('/api/bills/generate-all/:auctionId', requireInvoiceWrite, (req, res) => {
   const db = getDb(); const cfg = getSettingsFlat(db);
   const { startBillNo } = req.body;
   
@@ -2325,7 +2459,7 @@ app.post('/api/bills/generate-all/:auctionId', requireAdmin, (req, res) => {
 });
 
 // Agri bill PDF
-app.get('/api/bills/pdf/:auctionId/:sellerName', requireAdmin, async (req, res) => {
+app.get('/api/bills/pdf/:auctionId/:sellerName', requireView, async (req, res) => {
   try {
     const db = getDb(); const cfg = getSettingsFlat(db);
     const sellerName = decodeURIComponent(req.params.sellerName);
@@ -2367,7 +2501,7 @@ app.get('/api/bills/pdf/:auctionId/:sellerName', requireAdmin, async (req, res) 
 
 // Bulk Agri Bill PDF — merges N bills into a single PDF.
 // Body: { ids: [1, 2, 3, ...] } — DB row IDs from the `bills` table.
-app.post('/api/bills/pdf-bulk', requireAdmin, async (req, res) => {
+app.post('/api/bills/pdf-bulk', requireView, async (req, res) => {
   try {
     const db = getDb();
     const cfg = getSettingsFlat(db);
@@ -2426,13 +2560,13 @@ app.post('/api/bills/pdf-bulk', requireAdmin, async (req, res) => {
   }
 });
 
-app.delete('/api/bills/:id', requireAdmin, (req, res) => {
+app.delete('/api/bills/:id', requireDelete, (req, res) => {
   getDb().run('DELETE FROM bills WHERE id = ?', [req.params.id]);
   res.json({ success: true });
 });
 
 // Update bill (edit)
-app.put('/api/bills/:id', requireAdmin, (req, res) => {
+app.put('/api/bills/:id', requireInvoiceWrite, (req, res) => {
   const b = req.body;
   const fields = ['ano','date','state','br','crpt','bil','name','add_line','pla','pstate','st_code','crr','pan','qty','cost','igst','net'];
   const sets = []; const vals = [];
@@ -2448,7 +2582,7 @@ app.put('/api/bills/:id', requireAdmin, (req, res) => {
 // ══════════════════════════════════════════════════════════════
 // DEBIT NOTES (for discounts/adjustments)
 // ══════════════════════════════════════════════════════════════
-app.get('/api/debit-notes', requireAdmin, (req, res) => {
+app.get('/api/debit-notes', requireView, (req, res) => {
   const { auction_id, ano, from, to } = req.query;
   let q = 'SELECT * FROM debit_notes WHERE 1=1'; const p = [];
   if (auction_id) { q += ' AND auction_id = ?'; p.push(parseInt(auction_id)); }
@@ -2458,7 +2592,7 @@ app.get('/api/debit-notes', requireAdmin, (req, res) => {
   res.json(withFmtDate(getDb().all(q, p)));
 });
 
-app.post('/api/debit-notes/generate', requireAdmin, (req, res) => {
+app.post('/api/debit-notes/generate', requireInvoiceWrite, (req, res) => {
   const db = getDb(); const cfg = getSettingsFlat(db);
   const { invoiceNo, saleType, discount, noteNo } = req.body;
   
@@ -2478,13 +2612,13 @@ app.post('/api/debit-notes/generate', requireAdmin, (req, res) => {
   res.json({ success: true, note });
 });
 
-app.delete('/api/debit-notes/:id', requireAdmin, (req, res) => {
+app.delete('/api/debit-notes/:id', requireDelete, (req, res) => {
   getDb().run('DELETE FROM debit_notes WHERE id = ?', [req.params.id]);
   res.json({ success: true });
 });
 
 // Update debit note (edit)
-app.put('/api/debit-notes/:id', requireAdmin, (req, res) => {
+app.put('/api/debit-notes/:id', requireInvoiceWrite, (req, res) => {
   const n = req.body;
   const fields = ['ano','date','state','name','note_no','amount','cgst','sgst','igst','total'];
   const sets = []; const vals = [];
@@ -2500,20 +2634,20 @@ app.put('/api/debit-notes/:id', requireAdmin, (req, res) => {
 // ══════════════════════════════════════════════════════════════
 // JOURNALS (JOUR.PRG, PUJOUR.PRG, PPUJOUR.PRG)
 // ══════════════════════════════════════════════════════════════
-app.get('/api/journals/sales', requireAdmin, (req, res) => {
+app.get('/api/journals/sales', requireView, (req, res) => {
   const { from, to, saleType } = req.query;
   if (!from || !to) return res.status(400).json({ error: 'from and to required' });
   res.json(getSalesJournal(getDb(), from, to, saleType));
 });
 
-app.get('/api/journals/purchase', requireAdmin, (req, res) => {
+app.get('/api/journals/purchase', requireView, (req, res) => {
   const { from, to, type } = req.query;
   if (!from || !to) return res.status(400).json({ error: 'from and to required' });
   res.json(getPurchaseJournal(getDb(), from, to, type || 'dealer'));
 });
 
 // Journal exports (XLSX only)
-app.get('/api/exports/sales-journal', requireAdmin, async (req, res) => {
+app.get('/api/exports/sales-journal', requireExport, async (req, res) => {
   const { from, to, saleType } = req.query;
   if (!from || !to) return res.status(400).json({ error: 'from/to required' });
   const { exportSalesJournal } = require('./exports');
@@ -2523,7 +2657,7 @@ app.get('/api/exports/sales-journal', requireAdmin, async (req, res) => {
   res.send(Buffer.from(buffer));
 });
 
-app.get('/api/exports/purchase-journal', requireAdmin, async (req, res) => {
+app.get('/api/exports/purchase-journal', requireExport, async (req, res) => {
   const { from, to, type } = req.query;
   if (!from || !to) return res.status(400).json({ error: 'from/to required' });
   const baseName = type === 'agri' ? 'AgriBillJournal' : 'PurchaseJournal';
@@ -2537,7 +2671,7 @@ app.get('/api/exports/purchase-journal', requireAdmin, async (req, res) => {
 // ══════════════════════════════════════════════════════════════
 // INVOICE PREVIEW (PREINVO.PRG) — dry-run, no save
 // ══════════════════════════════════════════════════════════════
-app.post('/api/invoices/preview/:auctionId', requireAdmin, (req, res) => {
+app.post('/api/invoices/preview/:auctionId', requireView, (req, res) => {
   const db = getDb(); const cfg = getSettingsFlat(db);
   const { saleType, buyerCode, type } = req.body;
   
@@ -2566,7 +2700,7 @@ app.post('/api/invoices/preview/:auctionId', requireAdmin, (req, res) => {
 // ══════════════════════════════════════════════════════════════
 // PAYMENTS (PAYCHECK.PRG)
 // ══════════════════════════════════════════════════════════════
-app.get('/api/payments/:auctionId', requireAdmin, (req, res) => {
+app.get('/api/payments/:auctionId', requireView, (req, res) => {
   const db = getDb();
   const cfg = getSettingsFlat(db);
   const summary = getPaymentSummary(db, req.params.auctionId, req.query.state, cfg);
@@ -2574,7 +2708,7 @@ app.get('/api/payments/:auctionId', requireAdmin, (req, res) => {
 });
 
 // ── Bank payment data (BANKPAY.PRG) ──────────────────────────
-app.get('/api/payments/bank/:auctionId', requireAdmin, (req, res) => {
+app.get('/api/payments/bank/:auctionId', requireView, (req, res) => {
   const cfg = getSettingsFlat(getDb());
   const data = getBankPaymentData(getDb(), req.params.auctionId, cfg);
   res.json(data);
@@ -2583,7 +2717,7 @@ app.get('/api/payments/bank/:auctionId', requireAdmin, (req, res) => {
 // ══════════════════════════════════════════════════════════════
 // TDS RETURNS (TDSRETU.PRG)
 // ══════════════════════════════════════════════════════════════
-app.get('/api/tds-return', requireAdmin, (req, res) => {
+app.get('/api/tds-return', requireView, (req, res) => {
   const { from, to, orderBy } = req.query;
   if (!from || !to) return res.status(400).json({ error: 'from and to dates required' });
   const data = getTDSReturnData(getDb(), from, to, orderBy || 'invoice');
@@ -2593,7 +2727,7 @@ app.get('/api/tds-return', requireAdmin, (req, res) => {
 // ══════════════════════════════════════════════════════════════
 // EXPORTS (EXP.PRG — all 11 types + TDS + Tally)
 // ══════════════════════════════════════════════════════════════
-app.get('/api/exports/:type/:auctionId', requireAdmin, async (req, res) => {
+app.get('/api/exports/:type/:auctionId', requireExport, async (req, res) => {
   const { type, auctionId } = req.params;
   const format = (req.query.format || 'xlsx').toLowerCase();
 
@@ -2639,7 +2773,7 @@ app.get('/api/exports/:type/:auctionId', requireAdmin, async (req, res) => {
 });
 
 // TDS export (supports ?format=pdf)
-app.get('/api/exports/tds-return', requireAdmin, async (req, res) => {
+app.get('/api/exports/tds-return', requireExport, async (req, res) => {
   const { from, to } = req.query;
   const format = (req.query.format || 'xlsx').toLowerCase();
   if (!from || !to) return res.status(400).json({ error: 'from/to required' });
@@ -2661,7 +2795,7 @@ app.get('/api/exports/tds-return', requireAdmin, async (req, res) => {
 // ══════════════════════════════════════════════════════════════
 
 // List all available DBF export types with labels
-app.get('/api/dbf-exports/list', requireAdmin, (req, res) => {
+app.get('/api/dbf-exports/list', requireExport, (req, res) => {
   const list = {};
   for (const [key, def] of Object.entries(DBF_EXPORTS)) {
     list[key] = {
@@ -2675,7 +2809,7 @@ app.get('/api/dbf-exports/list', requireAdmin, (req, res) => {
 });
 
 // Generic DBF export endpoint
-app.get('/api/dbf-exports/:type', requireAdmin, async (req, res) => {
+app.get('/api/dbf-exports/:type', requireExport, async (req, res) => {
   const { type } = req.params;
   const def = DBF_EXPORTS[type];
   if (!def) return res.status(400).json({ error: 'Unknown DBF export type', available: Object.keys(DBF_EXPORTS) });
@@ -2714,7 +2848,7 @@ app.get('/api/dbf-exports/:type', requireAdmin, async (req, res) => {
 });
 
 // ── Crop Receipt PDF ─────────────────────────────────────────
-app.get('/api/receipt/:lotId', requireAdmin, async (req, res) => {
+app.get('/api/receipt/:lotId', requireView, async (req, res) => {
   const db = getDb(); const cfg = getSettingsFlat(db);
   const lot = db.get('SELECT l.*, a.ano FROM lots l JOIN auctions a ON a.id=l.auction_id WHERE l.id=?', [req.params.lotId]);
   if (!lot) return res.status(404).json({ error: 'Lot not found' });
@@ -2727,7 +2861,7 @@ app.get('/api/receipt/:lotId', requireAdmin, async (req, res) => {
 // ══════════════════════════════════════════════════════════════
 // SUMMARY STATS
 // ══════════════════════════════════════════════════════════════
-app.get('/api/stats', requireAdmin, (req, res) => {
+app.get('/api/stats', requireView, (req, res) => {
   const db = getDb();
 
   // Counts

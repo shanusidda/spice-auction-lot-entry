@@ -767,6 +767,55 @@ tr:hover td{background:var(--spice-cream)}
    instead of showing a useless "0 items" header. Set via display:none on
    the wrapper itself by JS. */
 
+/* ── Permission-based visibility ───────────────────────
+   Elements with .needs-X class are hidden when the user lacks
+   capability X. Pattern: hide by default, restore display when
+   the matching body[data-perm-X="1"] attribute is present
+   (set by applyPermissionAttributes() at login + /api/me). */
+.needs-lot-write,
+.needs-invoice-write,
+.needs-invoice-revert,
+.needs-trader-write,
+.needs-buyer-write,
+.needs-auction-write,
+.needs-settings-write,
+.needs-state-toggle,
+.needs-delete,
+.needs-delete-all,
+.needs-user-manage,
+.needs-export{display:none !important}
+body[data-perm-lot-write="1"]      .needs-lot-write,
+body[data-perm-invoice-write="1"]  .needs-invoice-write,
+body[data-perm-invoice-revert="1"] .needs-invoice-revert,
+body[data-perm-trader-write="1"]   .needs-trader-write,
+body[data-perm-buyer-write="1"]    .needs-buyer-write,
+body[data-perm-auction-write="1"]  .needs-auction-write,
+body[data-perm-settings-write="1"] .needs-settings-write,
+body[data-perm-state-toggle="1"]   .needs-state-toggle,
+body[data-perm-delete="1"]         .needs-delete,
+body[data-perm-delete-all="1"]     .needs-delete-all,
+body[data-perm-user-manage="1"]    .needs-user-manage,
+body[data-perm-export="1"]         .needs-export{display:initial !important}
+/* Restore inline-flex for buttons since `display:initial` reverts to inline */
+body[data-perm-lot-write="1"]      .btn.needs-lot-write,
+body[data-perm-invoice-write="1"]  .btn.needs-invoice-write,
+body[data-perm-invoice-revert="1"] .btn.needs-invoice-revert,
+body[data-perm-trader-write="1"]   .btn.needs-trader-write,
+body[data-perm-buyer-write="1"]    .btn.needs-buyer-write,
+body[data-perm-auction-write="1"]  .btn.needs-auction-write,
+body[data-perm-settings-write="1"] .btn.needs-settings-write,
+body[data-perm-state-toggle="1"]   .btn.needs-state-toggle,
+body[data-perm-delete="1"]         .btn.needs-delete,
+body[data-perm-delete-all="1"]     .btn.needs-delete-all,
+body[data-perm-user-manage="1"]    .btn.needs-user-manage,
+body[data-perm-export="1"]         .btn.needs-export{display:inline-flex !important}
+/* Icon-only action buttons (per-row delete/revert) — restore to inline-flex */
+body[data-perm-delete="1"]         .icon-btn.needs-delete,
+body[data-perm-invoice-revert="1"] .icon-btn.needs-invoice-revert{display:inline-flex !important}
+/* Sidebar entries for restricted sections */
+body[data-perm-user-manage="1"]    .side-item.needs-user-manage{display:flex !important}
+body[data-perm-settings-write="1"] .side-item.needs-settings-write{display:flex !important}
+
 /* ── Comfort Mode ──────────────────────────────────────
    Toggleable larger-text mode for older / vision-impaired users.
    Activated via the topbar A↑ button; persisted in localStorage.
@@ -1038,6 +1087,7 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
       <span id="sync-indicator" class="sync-pill sync-ok" title="Last successful sync"></span>
       <span id="logo-badge" style="font-size:11px;font-weight:700;color:var(--green);background:var(--green-bg);padding:4px 10px;border-radius:12px;border:1px solid var(--green-border);display:none" title="Active company for invoices & calculations"></span>
       <span id="user-lbl" class="topbar-user"></span>
+      <span id="user-role-badge" style="display:none;font-size:10.5px;font-weight:700;letter-spacing:.4px;padding:3px 8px;border-radius:8px;text-transform:uppercase" title="Your role"></span>
       <button class="btn btn-o" id="comfort-toggle" onclick="toggleComfort()" title="Comfort Mode — bigger text and buttons for easier reading" style="padding:6px 10px;display:flex;align-items:center;gap:6px;font-weight:700">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg>
         <span id="comfort-toggle-label">A</span>
@@ -1056,11 +1106,11 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
           <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
           Dashboard
         </button>
-        <button class="side-item" data-tab="settings" onclick="go('settings')">
+        <button class="side-item needs-settings-write" data-tab="settings" onclick="go('settings')">
           <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
           Settings
         </button>
-        <button class="side-item" data-tab="users" onclick="go('users')">
+        <button class="side-item needs-user-manage" data-tab="users" onclick="go('users')">
           <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
           Users
         </button>
@@ -1205,6 +1255,19 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
       <div class="fg"><label>Password</label><input type="text" id="nu-pw" placeholder="At least 4 characters">
         <div style="font-size:11px;color:var(--spice-text-hint);margin-top:4px">Share this with the person — they can change it later from their account.</div>
       </div>
+      <div class="fg"><label>Role</label>
+        <select id="nu-role" onchange="updateRoleDescription()" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:14px;background:#fff">
+          <option value="operator" selected>Operator — daily auction work</option>
+          <option value="manager">Manager — branch oversight</option>
+          <option value="admin">Admin — full control</option>
+          <option value="viewer">Viewer — read-only</option>
+        </select>
+        <!-- Live description updates when role changes; helps the creator
+             pick the right tier without consulting docs. -->
+        <div id="nu-role-desc" style="font-size:11.5px;color:var(--spice-text-hint);margin-top:6px;line-height:1.5;padding:8px 10px;background:var(--spice-cream);border-radius:6px;border-left:3px solid var(--spice-cardamom)">
+          Can create/edit lots, generate invoices, and manage buyers/traders. Cannot delete records or change settings.
+        </div>
+      </div>
       <div class="actions">
         <button class="btn btn-o" onclick="hideModal('add-user-modal')">Cancel</button>
         <button class="btn btn-g" onclick="createUser()">Create User</button>
@@ -1223,15 +1286,35 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
       </div>
     </div></div>
 
+    <!-- Change Role Modal — promote/demote a user without recreating them -->
+    <div class="modal-bg" id="change-role-modal"><div class="modal">
+      <h2>Change Role</h2>
+      <p style="font-size:13px;color:var(--spice-text-mute);margin-bottom:14px">Update <strong id="change-role-username"></strong>'s permissions. The change takes effect on their next request — they don't need to sign out.</p>
+      <input type="hidden" id="change-role-id">
+      <div class="fg"><label>Role</label>
+        <select id="change-role-select" onchange="updateChangeRoleDescription()" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:14px;background:#fff">
+          <option value="viewer">Viewer — read-only</option>
+          <option value="operator">Operator — daily auction work</option>
+          <option value="manager">Manager — branch oversight</option>
+          <option value="admin">Admin — full control</option>
+        </select>
+        <div id="change-role-desc" style="font-size:11.5px;color:var(--spice-text-hint);margin-top:6px;line-height:1.5;padding:8px 10px;background:var(--spice-cream);border-radius:6px;border-left:3px solid var(--spice-cardamom)"></div>
+      </div>
+      <div class="actions">
+        <button class="btn btn-o" onclick="hideModal('change-role-modal')">Cancel</button>
+        <button class="btn btn-g" onclick="doChangeRole()">Save Role</button>
+      </div>
+    </div></div>
+
     <!-- SELLERS -->
     <div class="tc" id="tc-traders">
       <div class="card">
-        <h2>Sellers / Poolers <button class="btn btn-g" onclick="openTraderAdd()">+ Add Seller</button></h2>
+        <h2>Sellers / Poolers <button class="needs-trader-write btn btn-g" onclick="openTraderAdd()">+ Add Seller</button></h2>
         <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:end">
           <div class="fg" style="margin:0;flex:1;min-width:180px"><input placeholder="Search by name, phone, GSTIN, PAN, place..." oninput="searchTraders(this.value)"></div>
           <button class="btn btn-a" onclick="document.getElementById('imp-traders').click()">Import XLS/XLSX</button>
           <button class="btn btn-o" onclick="downloadTemplate('traders')">Download Template</button>
-          <button class="btn" style="background:#c0392b;color:#fff" onclick="deleteAll('traders','Sellers')">Delete All</button>
+          <button class="needs-delete-all btn" style="background:#c0392b;color:#fff" onclick="deleteAll('traders','Sellers')">Delete All</button>
           <input type="file" id="imp-traders" accept=".xlsx,.xls" style="display:none" onchange="importTraders(event)">
         </div>
         <div id="trader-import-status" style="display:none;padding:8px 14px;border-radius:6px;font-size:12px;margin-bottom:10px"></div>
@@ -1242,12 +1325,12 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
     <!-- BUYERS -->
     <div class="tc" id="tc-buyers">
       <div class="card">
-        <h2>Buyers / Dealers <button class="btn btn-g" onclick="openBuyerAdd()">+ Add Buyer</button></h2>
+        <h2>Buyers / Dealers <button class="needs-buyer-write btn btn-g" onclick="openBuyerAdd()">+ Add Buyer</button></h2>
         <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:end">
           <div class="fg" style="margin:0;flex:1;min-width:180px"><input placeholder="Search by name, phone, GSTIN, PAN, TI..." oninput="searchBuyers(this.value)"></div>
           <button class="btn btn-a" onclick="document.getElementById('imp-buyers').click()">Import XLS/XLSX</button>
           <button class="btn btn-o" onclick="downloadTemplate('buyers')">Download Template</button>
-          <button class="btn" style="background:#c0392b;color:#fff" onclick="deleteAll('buyers','Buyers')">Delete All</button>
+          <button class="needs-delete-all btn" style="background:#c0392b;color:#fff" onclick="deleteAll('buyers','Buyers')">Delete All</button>
           <input type="file" id="imp-buyers" accept=".xlsx,.xls" style="display:none" onchange="importBuyers(event)">
         </div>
         <div id="buyer-import-status" style="display:none;padding:8px 14px;border-radius:6px;font-size:12px;margin-bottom:10px"></div>
@@ -1318,12 +1401,12 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
 
           <div style="display:flex;gap:6px;padding:0 4px;border-left:2px solid var(--spice-line);margin-left:4px">
             <button class="btn btn-o" style="height:38px;padding:0 16px;font-weight:600" onclick="refreshLots(this)" title="Reload the lots table from the server">🔄 Refresh</button>
-            <button class="btn btn-a" id="btn-calculate-all" style="height:38px;padding:0 16px;font-weight:600" onclick="calculateAll()">Calculate All</button>
+            <button class="needs-lot-write btn btn-a" id="btn-calculate-all" style="height:38px;padding:0 16px;font-weight:600" onclick="calculateAll()">Calculate All</button>
             <button class="btn btn-o" style="height:38px;padding:0 16px;font-weight:600" onclick="validateLots()">Validate</button>
           </div>
 
           <div style="display:flex;gap:6px;padding:0 4px;border-left:2px solid var(--spice-line);margin-left:auto">
-            <button class="btn btn-g" style="height:38px;padding:0 16px;font-weight:600" onclick="showModal('price-import-modal')">📥 Price Import</button>
+            <button class="needs-lot-write btn btn-g" style="height:38px;padding:0 16px;font-weight:600" onclick="showModal('price-import-modal')">📥 Price Import</button>
           </div>
         </div>
 
@@ -1384,8 +1467,8 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
 
           <!-- Create group -->
           <div style="display:flex;gap:6px;padding:0 4px;border-left:2px solid var(--spice-line);margin-left:4px">
-            <button class="btn btn-g" style="height:38px;padding:0 16px;font-weight:600" onclick="openGenInvModal()">+ Generate Invoice</button>
-            <button class="btn btn-a" style="height:38px;padding:0 16px;font-weight:600" onclick="openGenAllModal('invoices')">⚡ Generate for All Buyers</button>
+            <button class="needs-invoice-write btn btn-g" style="height:38px;padding:0 16px;font-weight:600" onclick="openGenInvModal()">+ Generate Invoice</button>
+            <button class="needs-invoice-write btn btn-a" style="height:38px;padding:0 16px;font-weight:600" onclick="openGenAllModal('invoices')">⚡ Generate for All Buyers</button>
           </div>
 
           <!-- Print group -->
@@ -1398,8 +1481,8 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
 
           <!-- Destructive group — pushed right -->
           <div style="display:flex;gap:6px;padding:0 4px;border-left:2px solid var(--spice-line);margin-left:auto">
-            <button class="btn" style="height:38px;padding:0 14px;background:var(--spice-turmeric);color:#fff;font-weight:600" onclick="revertAllInvoices()" title="Revert all invoices — deletes them and re-enables lots for re-invoicing">⟲ Revert All</button>
-            <button class="btn" style="height:38px;padding:0 14px;background:var(--spice-chili);color:#fff;font-weight:600" onclick="deleteAll('invoices','Invoices')" title="Permanently delete all invoices">🗑 Delete All</button>
+            <button class="needs-invoice-revert btn" style="height:38px;padding:0 14px;background:var(--spice-turmeric);color:#fff;font-weight:600" onclick="revertAllInvoices()" title="Revert all invoices — deletes them and re-enables lots for re-invoicing">⟲ Revert All</button>
+            <button class="needs-delete-all btn" style="height:38px;padding:0 14px;background:var(--spice-chili);color:#fff;font-weight:600" onclick="deleteAll('invoices','Invoices')" title="Permanently delete all invoices">🗑 Delete All</button>
           </div>
         </div>
 
@@ -1455,8 +1538,8 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
           <select id="pur-auction" onchange="loadPurchases();loadPurEligibleSellers()" style="padding:0 14px;height:38px;border:1px solid var(--border);border-radius:8px;background:#fff;font-size:13px;font-weight:500;min-width:180px"></select>
 
           <div style="display:flex;gap:6px;padding:0 4px;border-left:2px solid var(--spice-line);margin-left:4px">
-            <button class="btn btn-g" style="height:38px;padding:0 16px;font-weight:600" onclick="openGenPurModal()">+ Generate Purchase</button>
-            <button class="btn btn-a" style="height:38px;padding:0 16px;font-weight:600" onclick="openGenAllModal('purchases')">⚡ Generate for All Dealers</button>
+            <button class="needs-invoice-write btn btn-g" style="height:38px;padding:0 16px;font-weight:600" onclick="openGenPurModal()">+ Generate Purchase</button>
+            <button class="needs-invoice-write btn btn-a" style="height:38px;padding:0 16px;font-weight:600" onclick="openGenAllModal('purchases')">⚡ Generate for All Dealers</button>
           </div>
 
           <div style="display:flex;gap:6px;padding:0 4px;border-left:2px solid var(--spice-line)">
@@ -1464,7 +1547,7 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
           </div>
 
           <div style="display:flex;gap:6px;padding:0 4px;border-left:2px solid var(--spice-line);margin-left:auto">
-            <button class="btn" style="height:38px;padding:0 14px;background:var(--spice-chili);color:#fff;font-weight:600" onclick="deleteAll('purchases','Purchase Invoices')">🗑 Delete All</button>
+            <button class="needs-delete-all btn" style="height:38px;padding:0 14px;background:var(--spice-chili);color:#fff;font-weight:600" onclick="deleteAll('purchases','Purchase Invoices')">🗑 Delete All</button>
           </div>
         </div>
 
@@ -1641,7 +1724,7 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
 
           <div style="display:flex;gap:6px;padding:0 4px;border-left:2px solid var(--spice-line);margin-left:4px">
             <button class="btn btn-g" style="height:38px;padding:0 16px;font-weight:600" onclick="showModal('gen-bill-modal')">+ Generate Bill</button>
-            <button class="btn btn-a" style="height:38px;padding:0 16px;font-weight:600" onclick="openGenAllModal('bills')">⚡ Generate for All Agri Sellers</button>
+            <button class="needs-invoice-write btn btn-a" style="height:38px;padding:0 16px;font-weight:600" onclick="openGenAllModal('bills')">⚡ Generate for All Agri Sellers</button>
           </div>
 
           <div style="display:flex;gap:6px;padding:0 4px;border-left:2px solid var(--spice-line)">
@@ -1649,7 +1732,7 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
           </div>
 
           <div style="display:flex;gap:6px;padding:0 4px;border-left:2px solid var(--spice-line);margin-left:auto">
-            <button class="btn" style="height:38px;padding:0 14px;background:var(--spice-chili);color:#fff;font-weight:600" onclick="deleteAll('bills','Bills of Supply')">🗑 Delete All</button>
+            <button class="needs-delete-all btn" style="height:38px;padding:0 14px;background:var(--spice-chili);color:#fff;font-weight:600" onclick="deleteAll('bills','Bills of Supply')">🗑 Delete All</button>
           </div>
         </div>
 
@@ -1663,7 +1746,7 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
         <h2>Debit Notes <span style="font-weight:400;font-size:12px;color:var(--text3)">For discounts/adjustments on sales invoices</span></h2>
         <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
           <button class="btn btn-g" onclick="showModal('gen-debit-modal')">Generate Debit Note</button>
-          <button class="btn" style="background:#c0392b;color:#fff;margin-left:auto" onclick="deleteAll('debit-notes','Debit Notes')">Delete All</button>
+          <button class="needs-delete-all btn" style="background:#c0392b;color:#fff;margin-left:auto" onclick="deleteAll('debit-notes','Debit Notes')">Delete All</button>
         </div>
         <div style="overflow-x:auto"><table><thead><tr><th>Note#</th><th>Date</th><th>Auction</th><th>Name</th><th>Amount</th><th>CGST</th><th>SGST</th><th>IGST</th><th>Total</th><th>Actions</th></tr></thead><tbody id="debit-list"></tbody></table></div>
       </div>
@@ -2493,7 +2576,20 @@ const ICONS={
   // Purchase-view icon: shopping receipt with a down-arrow (outgoing to inbound flip)
   purchase:'<svg viewBox="0 0 24 24"><path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/><path d="M14 2v6h6"/><path d="M12 12v5M9 15l3 3 3-3"/></svg>'
 };
-function iconBtn(kind,title,onclick){return `<button class="icon-btn i-${kind}" title="${title}" onclick="${onclick}">${ICONS[kind]}</button>`}
+function iconBtn(kind,title,onclick){
+  // Map icon kinds to permission classes so per-row action buttons are
+  // hidden when the user lacks the underlying capability. Server still
+  // validates every request — these classes are pure UX.
+  const PERM_FOR = {
+    del:    'needs-delete',         // delete single record
+    revert: 'needs-invoice-revert', // revert single invoice
+    edit:   '', // edit allowed for anyone with the corresponding write capability;
+                // would over-hide if blanket-applied. Specific edit-buttons can
+                // pass the perm class via custom render if needed.
+  };
+  const permCls = PERM_FOR[kind] || '';
+  return `<button class="icon-btn i-${kind} ${permCls}" title="${title}" onclick="${onclick}">${ICONS[kind]}</button>`;
+}
 
 // ══════════════════════════════════════════════════════════
 // DataTable — reusable table component
@@ -2753,18 +2849,77 @@ const DataTable = (function(){
 })();
 
 // ── Auth ──────────────────────────────────────────────────
+// ── Permissions ─────────────────────────────────────────────
+// Server returns the current user's capability list at login + /api/me.
+// We cache it here so client code can call can('lot_write') instead
+// of stringly comparing roles. Server still validates every request —
+// these checks are purely UX (hide useless buttons).
+window._userRole = null;
+window._userPerms = new Set();
+
+function can(capability){
+  return window._userPerms.has(capability);
+}
+
+// Apply per-permission visibility classes on body so CSS can hide
+// buttons in bulk. Each capability becomes a body attribute like
+// data-perm-lot-write="1". Buttons opt in by setting a class
+// like .needs-lot-write — see styles below.
+function applyPermissionAttributes(){
+  const body = document.body;
+  // Clear all old perm-* attributes
+  for (const attr of Array.from(body.attributes)) {
+    if (attr.name.startsWith('data-perm-')) body.removeAttribute(attr.name);
+  }
+  // Set fresh attributes for current permissions
+  for (const cap of window._userPerms) {
+    body.setAttribute('data-perm-' + cap.replace(/_/g,'-'), '1');
+  }
+  // Update the role badge in the topbar with role-themed colors
+  const badge = document.getElementById('user-role-badge');
+  if (badge && window._userRole) {
+    const role = window._userRole;
+    const themes = {
+      admin:    { bg:'var(--spice-chili-lt)',    fg:'var(--spice-chili-dk)' },
+      manager:  { bg:'var(--spice-cardamom-lt)', fg:'var(--spice-cardamom-dk)' },
+      operator: { bg:'var(--spice-saffron-lt)',  fg:'var(--spice-saffron-dk)' },
+      viewer:   { bg:'#f1f5f9',                  fg:'#64748b' },
+      user:     { bg:'#f1f5f9',                  fg:'#64748b' }, // legacy
+    };
+    const t = themes[role] || themes.viewer;
+    badge.style.background = t.bg;
+    badge.style.color = t.fg;
+    badge.textContent = role === 'user' ? 'viewer' : role;
+    badge.style.display = 'inline-block';
+  }
+}
+
 async function login(){
   const e=document.getElementById('login-err');e.style.display='none';
   try{const d=await j('/api/login',{method:'POST',body:JSON.stringify({username:document.getElementById('inp-u').value,password:document.getElementById('inp-p').value})});
   T=d.token;localStorage.setItem('t',T);document.getElementById('user-lbl').textContent=d.username;
+  // Cache role + permissions for client-side button visibility
+  window._userRole  = d.role || 'viewer';
+  window._userPerms = new Set(d.permissions || []);
+  applyPermissionAttributes();
   document.getElementById('login').style.display='none';document.getElementById('app').style.display='block';
   loadSettings();  // fire-and-forget: populates _sdata so mode-aware UI works across all tabs
   go('dash');}
   catch(x){e.textContent='Invalid credentials';e.style.display='block'}}
 function logout(){h('/api/logout',{method:'POST'});T='';localStorage.removeItem('t');
+  window._userRole=null;window._userPerms=new Set();
+  // Hide role badge + clear perm attributes (or stale hides persist on next login)
+  const badge=document.getElementById('user-role-badge');if(badge)badge.style.display='none';
+  for (const attr of Array.from(document.body.attributes)) {
+    if (attr.name.startsWith('data-perm-')) document.body.removeAttribute(attr.name);
+  }
   document.getElementById('app').style.display='none';document.getElementById('login').style.display='flex'}
 (async()=>{const t=localStorage.getItem('t');if(!t)return;try{const d=await j('/api/me');T=t;
-  document.getElementById('user-lbl').textContent=d.username;document.getElementById('login').style.display='none';
+  document.getElementById('user-lbl').textContent=d.username;
+  window._userRole  = d.role || 'viewer';
+  window._userPerms = new Set(d.permissions || []);
+  applyPermissionAttributes();
+  document.getElementById('login').style.display='none';
   document.getElementById('app').style.display='block';
   loadSettings();  // fire-and-forget: populates _sdata so mode-aware UI works across all tabs
   go('dash');}catch(e){localStorage.removeItem('t')}})();
@@ -3197,7 +3352,21 @@ async function loadUsers(){
             const isMe = u.username === uname;
             return `<strong>${esc(u.username)}</strong>${isMe?' <span style="font-size:11px;color:var(--spice-saffron);font-weight:600">(you)</span>':''}`;
           } },
-        { key:'role', label:'Role', sort:'text', render:(u)=>`<span class="pill pill-warn">${esc(u.role)}</span>` },
+        { key:'role', label:'Role', sort:'text', render:(u)=>{
+            // Color-coded pill: admin red (powerful), manager cardamom (oversight),
+            // operator saffron (daily work), viewer grey (read-only).
+            // Mapping intentionally matches the visual hierarchy of the role.
+            const ROLE_PILL = {
+              admin:    { bg:'var(--spice-chili-lt)',    fg:'var(--spice-chili-dk)',    label:'Admin' },
+              manager:  { bg:'var(--spice-cardamom-lt)', fg:'var(--spice-cardamom-dk)', label:'Manager' },
+              operator: { bg:'var(--spice-saffron-lt)',  fg:'var(--spice-saffron-dk)',  label:'Operator' },
+              viewer:   { bg:'#f1f5f9',                  fg:'#64748b',                  label:'Viewer' },
+              // Legacy 'user' role from before the role tier system — display as Viewer
+              user:     { bg:'#f1f5f9',                  fg:'#64748b',                  label:'Viewer' },
+            };
+            const r = ROLE_PILL[String(u.role||'').toLowerCase()] || ROLE_PILL.viewer;
+            return `<span style="display:inline-block;padding:3px 10px;border-radius:10px;background:${r.bg};color:${r.fg};font-weight:700;font-size:11.5px;letter-spacing:.3px">${r.label}</span>`;
+          } },
         { key:'active_sessions', label:'Status', sort:'number', render:(u)=>
             u.active_sessions>0
               ? `<span class="pill pill-local"><span class="pill-dot"></span>${u.active_sessions} online</span>`
@@ -3206,7 +3375,10 @@ async function loadUsers(){
         { key:'created_at',  label:'Created', sort:'date', render:(u)=>u.created_at?fmtD(u.created_at.substring(0,10)):'—' },
         { key:'_actions', label:'Actions', sortable:false, searchable:false, render:(u)=>{
             const isMe = u.username === uname;
-            return `<button class="btn btn-o" style="height:32px;font-size:12px;padding:0 10px" onclick="openResetPwModal(${u.id},'${esc(u.username)}')">Reset PW</button>`
+            // Three actions: Change Role, Reset PW, Delete (delete hidden for self).
+            // Compact buttons sized 32px tall for tight vertical density.
+            return `<button class="btn btn-o" style="height:32px;font-size:12px;padding:0 10px" onclick="openChangeRoleModal(${u.id},'${esc(u.username)}','${esc(u.role||'viewer')}')" title="Promote or demote this user">Role</button>`
+              + ` <button class="btn btn-o" style="height:32px;font-size:12px;padding:0 10px;margin-left:4px" onclick="openResetPwModal(${u.id},'${esc(u.username)}')">Reset PW</button>`
               + (isMe ? '' : ` <button class="btn btn-r" style="height:32px;font-size:12px;padding:0 10px;margin-left:4px" onclick="deleteUser(${u.id},'${esc(u.username)}')">Delete</button>`);
           } }
       ]
@@ -3244,16 +3416,37 @@ function detectDevice(ua){
 function openAddUserModal(){
   document.getElementById('nu-user').value='';
   document.getElementById('nu-pw').value='';
+  document.getElementById('nu-role').value='operator'; // sensible default
+  updateRoleDescription();
   showModal('add-user-modal');
   setTimeout(()=>document.getElementById('nu-user').focus(),100);
 }
+
+// ── Role descriptions ─────────────────────────────────────
+// Map of role → user-facing description shown below the dropdown.
+// Wording focuses on what the user CAN do, with a brief note on
+// what they can't (so the picker understands the trade-offs).
+const ROLE_DESCRIPTIONS = {
+  viewer:   'Can view all data and download reports/exports. Cannot create, edit, or delete anything.',
+  operator: 'Can create/edit lots, generate invoices, and manage buyers/traders. Cannot delete records or change settings.',
+  manager:  'Everything Operator can do, plus: create auctions, revert invoices, and edit company settings. Still cannot delete records or manage users.',
+  admin:    'Full control: everything Manager can do, plus: delete records, bulk delete, manage users, and toggle business state.'
+};
+function updateRoleDescription(){
+  const sel = document.getElementById('nu-role');
+  const desc = document.getElementById('nu-role-desc');
+  if (!sel || !desc) return;
+  desc.textContent = ROLE_DESCRIPTIONS[sel.value] || '';
+}
+
 async function createUser(){
   const username=document.getElementById('nu-user').value.trim();
   const password=document.getElementById('nu-pw').value;
+  const role=document.getElementById('nu-role')?.value || 'operator';
   if(!username||!password){alert('Username and password are required');return}
   try{
-    await j('/api/users',{method:'POST',body:JSON.stringify({username,password})});
-    toast(`User "${username}" created`);
+    await j('/api/users',{method:'POST',body:JSON.stringify({username,password,role})});
+    toast(`User "${username}" created with role: ${role}`);
     hideModal('add-user-modal');
     loadUsers();
   }catch(e){showError(e)}
@@ -3273,6 +3466,35 @@ async function doResetPassword(){
     await j(`/api/users/${id}/password`,{method:'PUT',body:JSON.stringify({password:pw})});
     toast('Password reset — user must sign in again');
     hideModal('reset-pw-modal');
+    loadUsers();
+  }catch(e){showError(e)}
+}
+
+// ── Change Role ───────────────────────────────────────────
+// Promote/demote users without recreating them. Server enforces that
+// the last admin can't be demoted (would lock everyone out).
+function openChangeRoleModal(id, username, currentRole){
+  document.getElementById('change-role-id').value = id;
+  document.getElementById('change-role-username').textContent = username;
+  // Map legacy 'user' role to 'viewer' in the dropdown
+  const r = (currentRole === 'user') ? 'viewer' : (currentRole || 'viewer');
+  document.getElementById('change-role-select').value = r;
+  updateChangeRoleDescription();
+  showModal('change-role-modal');
+}
+function updateChangeRoleDescription(){
+  const sel = document.getElementById('change-role-select');
+  const desc = document.getElementById('change-role-desc');
+  if (!sel || !desc) return;
+  desc.textContent = ROLE_DESCRIPTIONS[sel.value] || '';
+}
+async function doChangeRole(){
+  const id   = document.getElementById('change-role-id').value;
+  const role = document.getElementById('change-role-select').value;
+  try{
+    const r = await j(`/api/users/${id}/role`, { method:'PUT', body:JSON.stringify({ role }) });
+    toast(`Role updated to ${r.role || role}`);
+    hideModal('change-role-modal');
     loadUsers();
   }catch(e){showError(e)}
 }
