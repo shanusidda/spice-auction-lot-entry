@@ -217,7 +217,7 @@ async function lotSlipCodePdf(db, auctionId) {
   const pageW = doc.page.width;
   const pageH = doc.page.height;
   const m = 18;
-  const gutter = 8;
+  const gutter = 40;
   const halfW = (pageW - m * 2 - gutter) / 2;
 
   // 6 cols per half: Lot | Bags | Kilos | Price | Bidder | Lot
@@ -334,6 +334,18 @@ async function lotSlipCodePdf(db, auctionId) {
     // Right half (carbon copy)
     drawHalfHeader(m + halfW + gutter, i + 1);
     drawHalfRows(m + halfW + gutter, slice, isLast);
+
+    // Vertical dashed cut-line down the middle so the page can be torn into
+    // two physical copies.
+    const cutX = m + halfW + gutter / 2;
+    doc.save();
+    doc.dash(3, { space: 3 });
+    doc.moveTo(cutX, m).lineTo(cutX, pageH - m)
+       .lineWidth(0.5).strokeColor('#888').stroke();
+    doc.undash();
+    doc.restore();
+    doc.font('Helvetica').fontSize(10).fillColor('#888')
+       .text('✂', cutX - 4, m - 12, { lineBreak: false });
   }
 
   return new Promise(resolve => {

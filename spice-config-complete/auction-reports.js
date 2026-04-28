@@ -133,7 +133,10 @@ async function lotSlipPdf(db, auctionId, _cfg, extra) {
   doc.on('data', b => buffers.push(b));
 
   const m = 18;
-  const gutter = 8;
+  // Wide gutter between the two halves so the page can be torn or cut down
+  // the middle to give two physical copies (one for the auction office, one
+  // for the seller). A dashed cut-line is drawn in the gutter as a guide.
+  const gutter = 40;
   const pageW = doc.page.width;
   const pageH = doc.page.height;
   const halfW = (pageW - m * 2 - gutter) / 2;
@@ -248,6 +251,19 @@ async function lotSlipPdf(db, auctionId, _cfg, extra) {
     drawHalfRows(m, slice, isLast);
     drawHalfHeader(m + halfW + gutter, i + 1);
     drawHalfRows(m + halfW + gutter, slice, isLast);
+
+    // Vertical dashed cut-line down the middle of the gutter — a tearing
+    // guide so the page can be split into two copies. A small "✂" hint at
+    // the top makes the intent obvious at a glance.
+    const cutX = m + halfW + gutter / 2;
+    doc.save();
+    doc.dash(3, { space: 3 });
+    doc.moveTo(cutX, m).lineTo(cutX, pageH - m)
+       .lineWidth(0.5).strokeColor('#888').stroke();
+    doc.undash();
+    doc.restore();
+    doc.font('Helvetica').fontSize(10).fillColor('#888')
+       .text('✂', cutX - 4, m - 12, { lineBreak: false });
   }
 
   return new Promise(resolve => {
