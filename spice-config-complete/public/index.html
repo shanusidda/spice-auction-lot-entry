@@ -1214,6 +1214,10 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
           <svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
           Journals
         </button>
+        <button class="side-item" data-tab="tally" onclick="go('tally')">
+          <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
+          To Tally
+        </button>
       </div>
     </aside>
 
@@ -1805,6 +1809,91 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
         <div style="margin-top:14px;padding:10px 12px;background:var(--spice-saffron-lt);border-radius:8px;font-size:12px;color:var(--text2);line-height:1.5">
           <strong>Note:</strong> All three reports pull live data from the selected auction's lots and the buyers master.
           The Buyer Lot Lorry report classifies buyers as <strong>Intra-state</strong> when the buyer's state matches the auction state, otherwise <strong>Inter-state</strong>.
+        </div>
+      </div>
+    </div>
+
+    <!-- TO TALLY -->
+    <div class="tc" id="tc-tally">
+      <div class="card">
+        <h2>To Tally
+          <span style="font-weight:400;font-size:12px;color:var(--text3)">Generate Tally-importable XML files from your auction data</span>
+        </h2>
+
+        <div class="fg" style="max-width:360px"><label>Select Auction</label>
+          <select id="tally-auction" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px"></select>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;margin-top:14px">
+          <div style="padding:14px;border:1px solid var(--border);border-radius:10px;background:#fff">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+              <span style="width:32px;height:32px;border-radius:8px;background:var(--green-bg);display:inline-flex;align-items:center;justify-content:center;font-size:18px">💰</span>
+              <div>
+                <div style="font-weight:700;color:var(--text);font-size:14px">Sales Vouchers</div>
+                <div style="font-size:11px;color:var(--text3)">Registered dealer sales — output GST, party ledgers, inventory</div>
+              </div>
+            </div>
+            <div id="tally-preview-sales" style="font-size:11px;color:var(--text3);min-height:18px;margin:6px 0"></div>
+            <div style="display:flex;gap:6px;margin-top:8px">
+              <button class="btn btn-a" onclick="tallyPreview('sales')" style="flex:1;padding:7px;font-size:12px">Preview</button>
+              <button class="btn btn-g" onclick="tallyDownload('sales')" style="flex:1;padding:7px;font-size:12px">Download XML</button>
+            </div>
+          </div>
+
+          <div style="padding:14px;border:1px solid var(--border);border-radius:10px;background:#fff">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+              <span style="width:32px;height:32px;border-radius:8px;background:var(--spice-saffron-lt);display:inline-flex;align-items:center;justify-content:center;font-size:18px">📥</span>
+              <div>
+                <div style="font-weight:700;color:var(--text);font-size:14px">RD Purchase Vouchers</div>
+                <div style="font-size:11px;color:var(--text3)">Registered dealers — input GST, TDS 194Q, batch tracking</div>
+              </div>
+            </div>
+            <div id="tally-preview-rd_purchase" style="font-size:11px;color:var(--text3);min-height:18px;margin:6px 0"></div>
+            <div style="display:flex;gap:6px;margin-top:8px">
+              <button class="btn btn-a" onclick="tallyPreview('rd_purchase')" style="flex:1;padding:7px;font-size:12px">Preview</button>
+              <button class="btn btn-g" onclick="tallyDownload('rd_purchase')" style="flex:1;padding:7px;font-size:12px">Download XML</button>
+            </div>
+          </div>
+
+          <div style="padding:14px;border:1px solid var(--border);border-radius:10px;background:#fff">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+              <span style="width:32px;height:32px;border-radius:8px;background:var(--spice-cardamom-lt);display:inline-flex;align-items:center;justify-content:center;font-size:18px">🌾</span>
+              <div>
+                <div style="font-weight:700;color:var(--text);font-size:14px">URD Purchase Vouchers</div>
+                <div style="font-size:11px;color:var(--text3)">Agriculturist / unregistered — Nil Rated, no GST input</div>
+              </div>
+            </div>
+            <div id="tally-preview-urd_purchase" style="font-size:11px;color:var(--text3);min-height:18px;margin:6px 0"></div>
+            <div style="display:flex;gap:6px;margin-top:8px">
+              <button class="btn btn-a" onclick="tallyPreview('urd_purchase')" style="flex:1;padding:7px;font-size:12px">Preview</button>
+              <button class="btn btn-g" onclick="tallyDownload('urd_purchase')" style="flex:1;padding:7px;font-size:12px">Download XML</button>
+            </div>
+          </div>
+
+          <div style="padding:14px;border:1px solid var(--border);border-radius:10px;background:#fff">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+              <span style="width:32px;height:32px;border-radius:8px;background:#FCEBEB;display:inline-flex;align-items:center;justify-content:center;font-size:18px">📝</span>
+              <div>
+                <div style="font-weight:700;color:var(--text);font-size:14px">Debit Notes</div>
+                <div style="font-size:11px;color:var(--text3)">Discount received from suppliers — 18% GST credit</div>
+              </div>
+            </div>
+            <div id="tally-preview-debit_note" style="font-size:11px;color:var(--text3);min-height:18px;margin:6px 0"></div>
+            <div style="display:flex;gap:6px;margin-top:8px">
+              <button class="btn btn-a" onclick="tallyPreview('debit_note')" style="flex:1;padding:7px;font-size:12px">Preview</button>
+              <button class="btn btn-g" onclick="tallyDownload('debit_note')" style="flex:1;padding:7px;font-size:12px">Download XML</button>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top:16px;padding:12px 14px;background:var(--spice-saffron-lt);border-radius:8px;font-size:12px;color:var(--text2);line-height:1.6">
+          <strong style="color:var(--text)">How to import into Tally:</strong>
+          <ol style="margin:6px 0 0 18px;padding:0">
+            <li>Open your Tally company (must match the name in <a href="javascript:go('settings');setTimeout(()=>selectCat('tally'),100)" style="color:var(--green)">Settings → To Tally</a>).</li>
+            <li>Press <code style="background:#fff;padding:1px 5px;border-radius:3px">Alt+O</code> → <strong>Import</strong> → <strong>Vouchers</strong>.</li>
+            <li>Select the downloaded <code style="background:#fff;padding:1px 5px;border-radius:3px">.xml</code> file and confirm.</li>
+            <li>Tally rejects the import if any ledger name in the XML doesn't exist in your company — make sure the ledgers in <a href="javascript:go('settings');setTimeout(()=>selectCat('tally'),100)" style="color:var(--green)">Settings → To Tally</a> match your Tally setup exactly.</li>
+          </ol>
         </div>
       </div>
     </div>
@@ -3077,7 +3166,7 @@ function go(tab){
   const loaders={dash:loadStats,settings:loadSettings,users:loadUsers,traders:()=>searchTraders(''),buyers:()=>searchBuyers(''),
     auctions:loadAuctions,lots:loadLotAuctions,invoices:loadInvAuctions,purchases:loadPurAuctions,
     payments:loadPayAuctions,exports:loadExpAuctions,tds:()=>{},lorry:loadLorryAuctions,
-    bills:loadBillAuctions,debit:loadDebitNotes,journals:loadJournalDefault};
+    bills:loadBillAuctions,debit:loadDebitNotes,journals:loadJournalDefault,tally:loadTallyAuctions};
   if(loaders[tab]){
     try{
       const r=loaders[tab]();
@@ -5252,6 +5341,65 @@ async function downloadLorry(type,format){
     const a=document.createElement('a');a.href=URL.createObjectURL(blob);
     a.download=`${type}_${aid}.${format}`;a.click();
     URL.revokeObjectURL(a.href);
+  });
+}
+
+// ── To Tally ──────────────────────────────────────────────
+const TALLY_LABELS={sales:'Sales',rd_purchase:'RD Purchase',urd_purchase:'URD Purchase',debit_note:'Debit Note'};
+function loadTallyAuctions(){
+  fillAucSelect('tally-auction');
+  // Clear preview text when auction changes
+  const sel=document.getElementById('tally-auction');
+  if(sel&&!sel.dataset.tallyBound){
+    sel.addEventListener('change',()=>{
+      ['sales','rd_purchase','urd_purchase','debit_note'].forEach(t=>{
+        const el=document.getElementById('tally-preview-'+t);if(el)el.textContent='';
+      });
+    });
+    sel.dataset.tallyBound='1';
+  }
+}
+async function tallyPreview(type){
+  const aid=document.getElementById('tally-auction')?.value;
+  if(!aid){alert('Select an auction first');return}
+  const target=document.getElementById('tally-preview-'+type);
+  if(target)target.textContent='Loading…';
+  try{
+    const r=await fetch(B+`/api/tally/preview/${type}/${aid}`,{headers:{'Authorization':'Bearer '+T}});
+    if(!r.ok){
+      let msg='Preview failed';
+      try{const e=await r.json();if(e.error)msg=e.error}catch(x){}
+      if(target)target.textContent=msg;
+      return;
+    }
+    const data=await r.json();
+    if(target){
+      if(data.voucherCount===0){
+        target.innerHTML=`<span style="color:#C62828">No data found for this auction</span>`;
+      }else{
+        target.innerHTML=`<strong style="color:var(--green)">${data.voucherCount}</strong> voucher${data.voucherCount===1?'':'s'} · <strong>${data.lotCount}</strong> lot${data.lotCount===1?'':'s'}`;
+      }
+    }
+  }catch(e){
+    if(target)target.textContent='Preview failed: '+e.message;
+  }
+}
+async function tallyDownload(type){
+  const aid=document.getElementById('tally-auction')?.value;
+  if(!aid){alert('Select an auction first');return}
+  const label=TALLY_LABELS[type]||type;
+  await withOverlay(`Generating Tally ${label} XML…`, async () => {
+    const r=await fetch(B+`/api/tally/export/${type}/${aid}`,{headers:{'Authorization':'Bearer '+T}});
+    if(!r.ok){
+      let msg='Tally export failed';
+      try{const e=await r.json();if(e.error)msg=e.error}catch(x){}
+      toast(msg);return;
+    }
+    const blob=await r.blob();
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+    a.download=`Tally_${label.replace(/\s/g,'')}_${aid}.xml`;a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+    toast(`Downloaded Tally ${label} XML`);
   });
 }
 

@@ -13,6 +13,10 @@ const { EXPORT_TYPES } = require('./exports');
 const { exportPdf: exportAnyPdf } = require('./exports-pdf');
 const { DBF_EXPORTS } = require('./dbf-exports');
 const { REPORTS: LORRY_REPORTS } = require('./lorry-reports');
+const {
+  generSalesXML, generRDPurchaseXML, generURDPurchaseXML, generDebitNoteXML,
+  buildSalesRows, buildRDPurchaseRows, buildURDPurchaseRows, buildDebitNoteRows,
+} = require('./tally-xml');
 
 const app = express();
 app.use(express.json({ limit: '50mb' }));
@@ -2871,6 +2875,77 @@ app.get('/api/dbf-exports/:type', requireExport, async (req, res) => {
   } catch(e) {
     console.error('DBF export error:', e);
     res.status(500).json({ error: 'DBF export failed: ' + e.message });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════
+// TO TALLY — XML exports for Tally accounting software
+// ══════════════════════════════════════════════════════════════
+
+// Definitions of available Tally exports — keep in sync with frontend
+const TALLY_EXPORTS = {
+  sales:        { label: 'Sales Vouchers',       name: 'Sales',        builder: buildSalesRows,        generator: generSalesXML },
+  rd_purchase:  { label: 'RD Purchase Vouchers', name: 'RDPurchase',   builder: buildRDPurchaseRows,   generator: generRDPurchaseXML },
+  urd_purchase: { label: 'URD Purchase Vouchers (Agriculturist)', name: 'URDPurchase', builder: buildURDPurchaseRows, generator: generURDPurchaseXML },
+  debit_note:   { label: 'Debit Notes (Discount)', name: 'DebitNote',  builder: buildDebitNoteRows,    generator: generDebitNoteXML },
+};
+
+// List endpoint — used by the To Tally tab to render export buttons
+app.get('/api/tally/list', requireExport, (req, res) => {
+  const list = {};
+  for (const [key, def] of Object.entries(TALLY_EXPORTS)) {
+    list[key] = { label: def.label, name: def.name };
+  }
+  res.json(list);
+});
+
+// Preview endpoint — returns row counts so the user knows how many vouchers
+// will be in the XML before downloading
+app.get('/api/tally/preview/:type/:auctionId', requireExport, (req, res) => {
+  const { type, auctionId } = req.params;
+  const def = TALLY_EXPORTS[type];
+  if (!def) return res.status(400).json({ error: 'Unknown Tally export', available: Object.keys(TALLY_EXPORTS) });
+  try {
+    const db = getDb();
+    const cfg = getSettingsFlat(db);
+    const rows = def.builder(db, auctionId, cfg);
+    const totalLots = rows.reduce((s, r) => s + (Array.isArray(r.lots) ? r.lots.length : 0), 0);
+    res.json({
+      type, auctionId,
+      voucherCount: rows.length,
+      lotCount: totalLots,
+      sample: rows.slice(0, 3).map(r => ({
+        ano: r.ano, date: r.date, name: r.partyName || r.name,
+        voucher: r.voucherNum || r.invo,
+        amount: r.total,
+      })),
+    });
+  } catch (e) {
+    console.error('tally preview error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// XML download endpoint — the main thing
+app.get('/api/tally/export/:type/:auctionId', requireExport, (req, res) => {
+  const { type, auctionId } = req.params;
+  const def = TALLY_EXPORTS[type];
+  if (!def) return res.status(400).json({ error: 'Unknown Tally export', available: Object.keys(TALLY_EXPORTS) });
+  try {
+    const db = getDb();
+    const cfg = getSettingsFlat(db);
+    const rows = def.builder(db, auctionId, cfg);
+    if (rows.length === 0) {
+      return res.status(404).json({ error: `No ${def.label.toLowerCase()} found for auction ${auctionId}` });
+    }
+    const xml = def.generator(rows, cfg, {});
+    const filename = `${def.name}_${auctionId}.xml`;
+    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(xml);
+  } catch (e) {
+    console.error('tally export error:', e);
+    res.status(500).json({ error: e.message });
   }
 });
 

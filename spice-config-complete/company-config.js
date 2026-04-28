@@ -148,6 +148,67 @@ const DEFAULTS = [
 
   // ── INTEGRATIONS ───────────────────────────────────────────
   { key: 'gst_api_key',     value: '',               category: 'integrations', label: 'GST Lookup API Key (gstincheck.co.in)', type: 'text' },
+
+  // ── TALLY EXPORT ──────────────────────────────────────────
+  // Identity & defaults
+  { key: 'tally_company_name',    value: 'IDEAL SPICES PRIVATE LIMITED', category: 'tally', label: 'Tally Company Name (must match company in Tally exactly)', type: 'text' },
+  { key: 'tally_season',          value: '2026-27',        category: 'tally', label: 'Season Suffix',                  type: 'text' },
+  { key: 'tally_separator',       value: '/',              category: 'tally', label: 'Voucher Separator',              type: 'text' },
+  { key: 'tally_inv_prefix',      value: 'ISP/',           category: 'tally', label: 'ISP Voucher Prefix',             type: 'text' },
+  { key: 'tally_ainv_prefix',     value: 'ASP/',           category: 'tally', label: 'ASP Voucher Prefix',             type: 'text' },
+  { key: 'tally_state_code',      value: '33',             category: 'tally', label: 'Home GSTIN State Code (intra)',  type: 'text' },
+  { key: 'tally_state_code_amazing', value: '32',          category: 'tally', label: 'ASP Home GSTIN State Code',      type: 'text' },
+  { key: 'tally_home_state',      value: 'Tamil Nadu',     category: 'tally', label: 'Home Place of Supply',           type: 'text' },
+  { key: 'tally_urd_state',       value: 'Kerala',         category: 'tally', label: 'URD Purchase State (agriculturist)', type: 'text' },
+  // Mode toggles
+  { key: 'tally_amazing_mode',    value: 'false',          category: 'tally', label: 'Generate as ASP (sister company)',          type: 'boolean' },
+  { key: 'tally_detailed',        value: 'true',           category: 'tally', label: 'Detailed Invoice (one inventory entry per lot)', type: 'boolean' },
+  { key: 'tally_dispatch_from',   value: 'true',           category: 'tally', label: 'Include Dispatch-From block on Sales',      type: 'boolean' },
+  { key: 'tally_round_enabled',   value: 'true',           category: 'tally', label: 'Enable Round Off ledger',                   type: 'boolean' },
+  { key: 'tally_tcs_enabled',     value: 'false',          category: 'tally', label: 'Include TCS on Sales (when applicable)',    type: 'boolean' },
+  { key: 'tally_tds_enabled',     value: 'false',          category: 'tally', label: 'Include TDS 194Q on RD Purchases',          type: 'boolean' },
+  { key: 'tally_optional',        value: 'false',          category: 'tally', label: 'Mark vouchers as Optional',                 type: 'boolean' },
+  { key: 'tally_dn_exempt',       value: 'false',          category: 'tally', label: 'Debit Note: GST Exempt (skip tax ledgers)', type: 'boolean' },
+  { key: 'tally_dn_gst_rate',     value: '18',             category: 'tally', label: 'Debit Note GST Rate %',                     type: 'number' },
+  // Sales ledgers
+  { key: 'tally_sales_inter',     value: 'Cardamom Sales 5%',         category: 'tally', label: 'Sales — Inter-state Ledger',  type: 'text' },
+  { key: 'tally_sales_intra',     value: 'Cardamom Sales 5% - Local', category: 'tally', label: 'Sales — Intra-state Ledger',  type: 'text' },
+  { key: 'tally_sales_export',    value: 'Cardamom Sales - Export',   category: 'tally', label: 'Sales — Export Ledger',       type: 'text' },
+  { key: 'tally_gunny_inter',     value: 'Gunny Sales 5%',            category: 'tally', label: 'Gunny Sales — Inter-state',   type: 'text' },
+  { key: 'tally_gunny_intra',     value: 'Gunny Sales 5% - Local',    category: 'tally', label: 'Gunny Sales — Intra-state',   type: 'text' },
+  // Purchase ledgers
+  { key: 'tally_purchase_dealer', value: 'Trade Purchase from Dealer',category: 'tally', label: 'RD Purchase — Base Ledger (suffix -Local / -Inter_State)', type: 'text' },
+  { key: 'tally_purchase_auction',value: 'Auction Purchase Account',  category: 'tally', label: 'URD Purchase — Auction Ledger', type: 'text' },
+  // Tax ledgers — Sales (output)
+  { key: 'tally_cgst',            value: 'OUTPUT CGST 2.5%',          category: 'tally', label: 'OUTPUT CGST',  type: 'text' },
+  { key: 'tally_sgst',            value: 'OUTPUT SGST 2.5%',          category: 'tally', label: 'OUTPUT SGST',  type: 'text' },
+  { key: 'tally_igst',            value: 'OUTPUT IGST 5%',            category: 'tally', label: 'OUTPUT IGST',  type: 'text' },
+  { key: 'tally_tcs',             value: 'TCS on Sale of Goods',      category: 'tally', label: 'TCS Ledger',   type: 'text' },
+  // Tax ledgers — Purchase (input)
+  { key: 'tally_cgst_input',      value: 'INPUT CGST 2.5%',           category: 'tally', label: 'INPUT CGST',   type: 'text' },
+  { key: 'tally_sgst_input',      value: 'INPUT SGST 2.5%',           category: 'tally', label: 'INPUT SGST',   type: 'text' },
+  { key: 'tally_igst_input',      value: 'INPUT IGST 5%',             category: 'tally', label: 'INPUT IGST',   type: 'text' },
+  { key: 'tally_tds_ledger',      value: 'TDS on Purchase of Goods 194Q', category: 'tally', label: 'TDS Ledger',           type: 'text' },
+  // Debit Note ledgers
+  { key: 'tally_dn_discount',     value: 'Discount Received',         category: 'tally', label: 'Debit Note — Discount Ledger', type: 'text' },
+  { key: 'tally_dn_cgst',         value: 'OUTPUT CGST 9%',            category: 'tally', label: 'Debit Note — CGST',            type: 'text' },
+  { key: 'tally_dn_sgst',         value: 'OUTPUT SGST 9%',            category: 'tally', label: 'Debit Note — SGST',            type: 'text' },
+  { key: 'tally_dn_igst',         value: 'OUTPUT IGST 18%',           category: 'tally', label: 'Debit Note — IGST',            type: 'text' },
+  // Stock items / HSN
+  { key: 'tally_item_cardamom',   value: 'Cardamom',                  category: 'tally', label: 'Stock Item — Cardamom',        type: 'text' },
+  { key: 'tally_item_gunny',      value: 'Gunny Bag',                 category: 'tally', label: 'Stock Item — Gunny',           type: 'text' },
+  { key: 'tally_hsn_cardamom',    value: '09083110',                  category: 'tally', label: 'HSN — Cardamom',               type: 'text' },
+  { key: 'tally_hsn_gunny',       value: '63053200',                  category: 'tally', label: 'HSN — Gunny',                  type: 'text' },
+  { key: 'tally_hsn_service',     value: '996111',                    category: 'tally', label: 'SAC — Service / Discount',     type: 'text' },
+  // Other ledgers
+  { key: 'tally_round',           value: 'Round Off',                 category: 'tally', label: 'Round Off Ledger',             type: 'text' },
+  // Dispatch-from address (optional override; defaults to Sister Company config)
+  { key: 'tally_dispatch_company',value: '',                          category: 'tally', label: 'Dispatch-From Company (blank = use sister)',     type: 'text' },
+  { key: 'tally_dispatch_address',value: '',                          category: 'tally', label: 'Dispatch-From Address (blank = use sister)',     type: 'text' },
+  { key: 'tally_dispatch_place',  value: '',                          category: 'tally', label: 'Dispatch-From Place (blank = use sister)',       type: 'text' },
+  { key: 'tally_dispatch_pin',    value: '',                          category: 'tally', label: 'Dispatch-From PIN (blank = use sister)',         type: 'text' },
+  { key: 'tally_dispatch_state',  value: '',                          category: 'tally', label: 'Dispatch-From State (blank = use sister)',       type: 'text' },
+  { key: 'tally_dispatch_gstin',  value: '',                          category: 'tally', label: 'Dispatch-From GSTIN (blank = use sister)',       type: 'text' },
 ];
 
 const CATEGORIES = {
@@ -164,6 +225,7 @@ const CATEGORIES = {
   invoice:    { order: 10, title: 'Invoice Settings',     icon: '📄' },
   flags:      { order: 11, title: 'Feature Flags',        icon: '🔧' },
   integrations: { order: 12, title: 'Integrations',       icon: '🔌', description: 'Optional third-party services. The GST API key enables auto-fetching trade name and address when you enter a GSTIN. Get a free key at gstincheck.co.in — sign up, copy the key from your dashboard, paste here.' },
+  tally:      { order: 13, title: 'To Tally (XML Export)', icon: '📤', description: 'Configure ledger names, HSN codes, and toggles used by the To Tally XML exports. Ledger names here MUST match exactly what exists in your Tally company — Tally rejects imports if a ledger name is misspelled or absent.' },
 };
 
 function initCompanySettings(db) {
