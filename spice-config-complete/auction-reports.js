@@ -407,25 +407,25 @@ async function collectionPdf(db, auctionId) {
   const rows = getCollectionRows(db, auctionId);
   const groups = classifyByState(rows, auction.state);
 
-  const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: 28 });
+  const doc = new PDFDocument({ size: 'A4', layout: 'portrait', margin: 24 });
   const buffers = [];
   doc.on('data', b => buffers.push(b));
 
-  const m = 28;
+  const m = 24;
   const pageW = doc.page.width;
   const pageH = doc.page.height;
   const usableW = pageW - m * 2;
 
   // Cols: INVO | TRADE NAME | NAME | QTY | VALUE
-  // Landscape gives ~786pt usable width — generous enough that even long
-  // firm names like "PERFECT CARDAMOM AND SPICES MARKETING COMPANY PVT LTD"
-  // fit on one line in the NAME column.
+  // Portrait A4 → ~547pt usable. Long firm names like "PERFECT CARDAMOM AND
+  // SPICES MARKETING COMPANY PVT LTD" wrap to multiple lines via wrapText
+  // (drawDataRow grows the row height to fit the tallest cell).
   const colW = [
-    Math.floor(usableW * 0.08),  // INVO
-    Math.floor(usableW * 0.32),  // TRADE NAME
-    Math.floor(usableW * 0.36),  // NAME
-    Math.floor(usableW * 0.10),  // QUANTITY
-    0,                           // VALUE absorbs rounding
+    Math.floor(usableW * 0.10),  // INVO
+    Math.floor(usableW * 0.30),  // TRADE NAME
+    Math.floor(usableW * 0.30),  // NAME
+    Math.floor(usableW * 0.13),  // QUANTITY
+    0,                           // VALUE absorbs rounding (~17%)
   ];
   colW[4] = usableW - colW[0] - colW[1] - colW[2] - colW[3];
   const colX = [m];
@@ -473,7 +473,9 @@ async function collectionPdf(db, auctionId) {
     const heads = ['INVO', 'TRADE NAME', 'NAME', 'QUANTITY', 'VALUE'];
     heads.forEach((h, i) => {
       const align = (i === 0) ? 'center' : (i <= 2 ? 'left' : 'right');
-      doc.text(h, colX[i] + 4, y + 5, { width: colW[i] - 8, align, lineBreak: false });
+      doc.text(fitText(doc, h, colW[i] - 8), colX[i] + 4, y + 5, {
+        width: colW[i] - 8, align, lineBreak: false,
+      });
     });
     y += HEAD_H;
     curSegStart = headTop;  // header strip + following data rows = one segment
@@ -852,31 +854,31 @@ async function tradeReportXlsx(db, auctionId) {
 async function tradeReportPdf(db, auctionId) {
   const { auction, sortedStates, stats } = getTradeReportData(db, auctionId);
 
-  const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: 24 });
+  const doc = new PDFDocument({ size: 'A4', layout: 'portrait', margin: 18 });
   const buffers = [];
   doc.on('data', b => buffers.push(b));
 
-  const m = 24;
+  const m = 18;
   const pageW = doc.page.width;
   const pageH = doc.page.height;
   const usableW = pageW - m * 2;
 
-  // Cols: SALE | BIDDER | TRADE NAME | BAG | QTY | AMOUNT | INV.AMOUNT | CODE
-  // BIDDER and TRADE NAME hold long firm/person names in real-world data — give
-  // them generous widths so multi-word names like "EMPEROR SPICES PRIVATE
-  // LIMITED" fit on one line. Numeric columns are held to what their values
-  // actually need.
+  // Cols: SL.NO | SALE | BIDDER | TRADE NAME | BAG | QTY | AMOUNT | INV.AMOUNT | CODE
+  // Portrait A4 → ~559pt usable. Long firm/person names wrap to multiple
+  // lines via wrapText (drawDataRow grows the row height to fit). Numeric
+  // columns are sized to fit Indian-format money values without truncation.
   const colW = [
-    Math.floor(usableW * 0.04),  // SALE  (just I/L)
-    Math.floor(usableW * 0.21),  // BIDDER
-    Math.floor(usableW * 0.25),  // TRADE NAME
+    Math.floor(usableW * 0.06),  // SL.NO
+    Math.floor(usableW * 0.06),  // SALE
+    Math.floor(usableW * 0.16),  // BIDDER
+    Math.floor(usableW * 0.18),  // TRADE NAME
     Math.floor(usableW * 0.05),  // BAG
-    Math.floor(usableW * 0.09),  // QTY
-    Math.floor(usableW * 0.13),  // AMOUNT
-    Math.floor(usableW * 0.13),  // INV.AMOUNT
+    Math.floor(usableW * 0.11),  // QTY
+    Math.floor(usableW * 0.16),  // AMOUNT
+    Math.floor(usableW * 0.16),  // INV.AMOUNT
     0,                           // CODE absorbs rounding
   ];
-  colW[7] = usableW - colW.slice(0, 7).reduce((s, w) => s + w, 0);
+  colW[8] = usableW - colW.slice(0, 8).reduce((s, w) => s + w, 0);
   const colX = [m];
   for (let i = 0; i < colW.length - 1; i++) colX.push(colX[i] + colW[i]);
 
@@ -922,13 +924,14 @@ async function tradeReportPdf(db, auctionId) {
     const headTop = y;
     doc.rect(m, y, usableW, HEAD_H).fillAndStroke('#E8E4DD', '#444');
     doc.fillColor('#000').font('Helvetica-Bold').fontSize(8.5);
-    const heads = ['SALE', 'BIDDER', 'TRADE NAME', 'BAG', 'QUANTITY', 'AMOUNT', 'INV.AMOUNT', 'CODE'];
-    const aligns = ['center', 'left', 'left', 'center', 'right', 'right', 'right', 'center'];
+    const heads = ['S.NO', 'SALE', 'BIDDER', 'TRADE NAME', 'BAG', 'QUANTITY', 'AMOUNT', 'INV.AMOUNT', 'CODE'];
+    const aligns = ['center', 'center', 'left', 'left', 'center', 'right', 'right', 'right', 'center'];
     heads.forEach((h, i) => {
-      doc.text(h, colX[i] + 4, y + 5, { width: colW[i] - 8, align: aligns[i], lineBreak: false });
+      doc.text(fitText(doc, h, colW[i] - 8), colX[i] + 4, y + 5, {
+        width: colW[i] - 8, align: aligns[i], lineBreak: false,
+      });
     });
     y += HEAD_H;
-    // Column header + data rows that follow form one contiguous segment
     curSegStart = headTop;
   }
 
@@ -968,6 +971,7 @@ async function tradeReportPdf(db, auctionId) {
   function drawDataRow(r, idx) {
     doc.font('Helvetica').fontSize(8.5);
     const cells = [
+      String(idx + 1),         // SL.NO
       r.sale,
       r.bidder || '',
       r.trade_name || '',
@@ -977,7 +981,7 @@ async function tradeReportPdf(db, auctionId) {
       fmtMoney(r.inv_amount),
       r.code || '',
     ];
-    const aligns = ['center', 'left', 'left', 'center', 'right', 'right', 'right', 'center'];
+    const aligns = ['center', 'center', 'left', 'left', 'center', 'right', 'right', 'right', 'center'];
 
     // Wrap each cell text into lines that fit its column width. Use the
     // tallest cell to set this row's height so nothing overflows.
@@ -1011,13 +1015,14 @@ async function tradeReportPdf(db, auctionId) {
     doc.rect(m, y, usableW, ROW_H + 2).fillAndStroke(color || '#E6F4EA', '#5A8F62');
     doc.fillColor('#000').font('Helvetica-Bold').fontSize(9);
     const sum = k => items.reduce((s, r) => s + (Number(r[k]) || 0), 0);
-    // The subtotal label spans BIDDER+TRADE_NAME columns
-    doc.text(label, colX[1] + 4, y + 4, {
-      width: colW[1] + colW[2] - 8, align: 'left', lineBreak: false,
+    // Label spans SL.NO + SALE + BIDDER + TRADE NAME (cols 0..3)
+    const labelW = colW[0] + colW[1] + colW[2] + colW[3] - 8;
+    doc.text(fitText(doc, label, labelW), colX[0] + 4, y + 4, {
+      width: labelW, align: 'left', lineBreak: false,
     });
-    doc.text(String(sum('bag')),     colX[3] + 4, y + 4, { width: colW[3] - 8, align: 'center', lineBreak: false });
-    doc.text(fmtQty(sum('qty')),     colX[4] + 4, y + 4, { width: colW[4] - 8, align: 'right',  lineBreak: false });
-    doc.text(fmtMoney(sum('amount')),colX[5] + 4, y + 4, { width: colW[5] - 8, align: 'right',  lineBreak: false });
+    doc.text(fitText(doc, String(sum('bag')),      colW[4] - 8), colX[4] + 4, y + 4, { width: colW[4] - 8, align: 'center', lineBreak: false });
+    doc.text(fitText(doc, fmtQty(sum('qty')),      colW[5] - 8), colX[5] + 4, y + 4, { width: colW[5] - 8, align: 'right',  lineBreak: false });
+    doc.text(fitText(doc, fmtMoney(sum('amount')), colW[6] - 8), colX[6] + 4, y + 4, { width: colW[6] - 8, align: 'right',  lineBreak: false });
     y += ROW_H + 2;
     return { bag: sum('bag'), qty: sum('qty'), amount: sum('amount') };
   }
@@ -1026,9 +1031,11 @@ async function tradeReportPdf(db, auctionId) {
   drawColHeader();
 
   let gBag = 0, gQty = 0, gAmt = 0;
-  let rowIdx = 0;
   sortedStates.forEach(([state, group]) => {
     drawStateRow(state);
+    // Serial number (and zebra striping) restart at the beginning of each
+    // state so the rows count Tamil Nadu 1..N independently of Kerala 1..M.
+    let rowIdx = 0;
     let stBag = 0, stQty = 0, stAmt = 0;
     if (group.inter.length) {
       group.inter.forEach(r => drawDataRow(r, rowIdx++));
@@ -1046,12 +1053,13 @@ async function tradeReportPdf(db, auctionId) {
     closeSegment();
     doc.rect(m, y, usableW, ROW_H + 2).fillAndStroke('#FFF3CD', '#9A6700');
     doc.fillColor('#000').font('Helvetica-Bold').fontSize(9);
-    doc.text(`${state} STATE TOTAL`, colX[1] + 4, y + 4, {
-      width: colW[1] + colW[2] - 8, align: 'left', lineBreak: false,
+    const stLabelW = colW[0] + colW[1] + colW[2] + colW[3] - 8;
+    doc.text(fitText(doc, `${state} STATE TOTAL`, stLabelW), colX[0] + 4, y + 4, {
+      width: stLabelW, align: 'left', lineBreak: false,
     });
-    doc.text(String(stBag),       colX[3] + 4, y + 4, { width: colW[3] - 8, align: 'center', lineBreak: false });
-    doc.text(fmtQty(stQty),       colX[4] + 4, y + 4, { width: colW[4] - 8, align: 'right',  lineBreak: false });
-    doc.text(fmtMoney(stAmt),     colX[5] + 4, y + 4, { width: colW[5] - 8, align: 'right',  lineBreak: false });
+    doc.text(fitText(doc, String(stBag),       colW[4] - 8), colX[4] + 4, y + 4, { width: colW[4] - 8, align: 'center', lineBreak: false });
+    doc.text(fitText(doc, fmtQty(stQty),       colW[5] - 8), colX[5] + 4, y + 4, { width: colW[5] - 8, align: 'right',  lineBreak: false });
+    doc.text(fitText(doc, fmtMoney(stAmt),     colW[6] - 8), colX[6] + 4, y + 4, { width: colW[6] - 8, align: 'right',  lineBreak: false });
     y += ROW_H + 2;
     gBag += stBag; gQty += stQty; gAmt += stAmt;
   });
@@ -1061,12 +1069,13 @@ async function tradeReportPdf(db, auctionId) {
   closeSegment();
   doc.rect(m, y, usableW, ROW_H + 4).fillAndStroke('#FFF3CD', '#7A4400');
   doc.fillColor('#000').font('Helvetica-Bold').fontSize(10);
-  doc.text('GRAND TOTAL', colX[1] + 4, y + 5, {
-    width: colW[1] + colW[2] - 8, align: 'left', lineBreak: false,
+  const gtLabelW = colW[0] + colW[1] + colW[2] + colW[3] - 8;
+  doc.text(fitText(doc, 'GRAND TOTAL', gtLabelW), colX[0] + 4, y + 5, {
+    width: gtLabelW, align: 'left', lineBreak: false,
   });
-  doc.text(String(gBag),         colX[3] + 4, y + 5, { width: colW[3] - 8, align: 'center', lineBreak: false });
-  doc.text(fmtQty(gQty),         colX[4] + 4, y + 5, { width: colW[4] - 8, align: 'right',  lineBreak: false });
-  doc.text(fmtMoney(gAmt),       colX[5] + 4, y + 5, { width: colW[5] - 8, align: 'right',  lineBreak: false });
+  doc.text(fitText(doc, String(gBag),         colW[4] - 8), colX[4] + 4, y + 5, { width: colW[4] - 8, align: 'center', lineBreak: false });
+  doc.text(fitText(doc, fmtQty(gQty),         colW[5] - 8), colX[5] + 4, y + 5, { width: colW[5] - 8, align: 'right',  lineBreak: false });
+  doc.text(fitText(doc, fmtMoney(gAmt),       colW[6] - 8), colX[6] + 4, y + 5, { width: colW[6] - 8, align: 'right',  lineBreak: false });
   y += ROW_H + 4;
 
   finishPage();

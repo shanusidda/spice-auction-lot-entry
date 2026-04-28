@@ -64,9 +64,71 @@ function wrapText(doc, text, maxWidth) {
   return lines.length ? lines : [''];
 }
 
+// Preprocess rows for the table renderer.
+// Options:
+//   serialKey:    column key under which the per-row serial number should be
+//                 stored. If set, every data row gets a sequential number.
+//   groupByKey:   if set, rows are grouped by this field (preserving the
+//                 caller's existing order *within* each group — caller is
+//                 responsible for sorting beforehand if a particular group
+//                 order is desired). Each group gets:
+//                   - serials restart from 1 within the group
+//                   - a subtotal row (sumKeys, marked _isSubtotal) appended
+//                     after the last row of the group
+//   subtotalKeys: list of numeric keys to sum into the subtotal row
+//   subtotalLabelKey: key under which to put the subtotal label
+//                     (e.g. "ABUDUL BASITH SUBTOTAL")
+function preprocessRows(rows, opts) {
+  const { serialKey, groupByKey, subtotalKeys = [], subtotalLabelKey } = opts || {};
+  if (!groupByKey) {
+    // Simple serial numbering, no grouping.
+    if (!serialKey) return rows.slice();
+    return rows.map((r, i) => ({ ...r, [serialKey]: String(i + 1) }));
+  }
+  // Group while preserving caller's order. Caller should sort by groupByKey
+  // first if they want all rows of one name to appear together.
+  // Serial numbering: each unique group gets ONE serial number, placed on
+  // the subtotal row. Individual lot rows have a blank serial column.
+  const out = [];
+  let curKey = null;
+  let curGroup = [];
+  let groupNo = 0;
+  function flushSubtotal() {
+    if (!curGroup.length) return;
+    const sub = { _isSubtotal: true };
+    subtotalKeys.forEach(k => {
+      sub[k] = curGroup.reduce((s, r) => s + (Number(r[k]) || 0), 0);
+    });
+    if (subtotalLabelKey) {
+      sub[subtotalLabelKey] = `${curKey || ''} TOTAL`;
+    }
+    if (serialKey) sub[serialKey] = String(groupNo);
+    out.push(sub);
+  }
+  rows.forEach((r) => {
+    const k = r[groupByKey] || '';
+    if (k !== curKey) {
+      if (curKey !== null) flushSubtotal();
+      curKey = k;
+      curGroup = [];
+      groupNo += 1;
+    }
+    curGroup.push(r);
+    const stamped = { ...r };
+    if (serialKey) stamped[serialKey] = '';   // blank on per-row entries
+    out.push(stamped);
+  });
+  if (curKey !== null) flushSubtotal();
+  return out;
+}
+
 // ── Generic table-to-PDF renderer ───────────────────────────
-function renderTablePdf({ title, subtitle, columns, rows, totals }) {
-  const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: 24 });
+function renderTablePdf({ title, subtitle, columns, rows, totals, layout }) {
+  // layout: 'portrait' (default) or 'landscape'. All exports default to
+  // portrait per user preference. Override per-type via PDF_LAYOUT below
+  // if a specific report ever needs landscape (e.g. very wide column sets).
+  const pageLayout = layout === 'landscape' ? 'landscape' : 'portrait';
+  const doc = new PDFDocument({ size: 'A4', layout: pageLayout, margin: 24 });
   const buffers = [];
   doc.on('data', b => buffers.push(b));
 
@@ -198,6 +260,25 @@ function renderTablePdf({ title, subtitle, columns, rows, totals }) {
   }
 
   function drawRow(row, i, rowH, wrapped) {
+    if (row._isSubtotal) {
+      // Subtotal row — full-width yellow strip styled like the grand total.
+      doc.rect(m, y, usableW, rowH).fillAndStroke('#FFF3CD', '#E0B020');
+      doc.fillColor('#000').font('Helvetica-Bold').fontSize(7.5);
+      const LINE_H = 10;
+      const PAD_TOP = 3;
+      columns.forEach((c, ci) => {
+        const lines = wrapped[ci];
+        lines.forEach((line, li) => {
+          doc.text(line, colX[ci] + 3, y + PAD_TOP + li * LINE_H, {
+            width: colWidths[ci] - 6,
+            align: isNumericCol(c) ? 'right' : 'left',
+            lineBreak: false,
+          });
+        });
+      });
+      y += rowH;
+      return;
+    }
     if (i % 2 === 1) doc.rect(m, y, usableW, rowH).fill('#F7F5F2');
     doc.fillColor('#000').font('Helvetica').fontSize(7.5);
     const LINE_H = 10;
@@ -317,30 +398,34 @@ const COLS = {
     { header: 'BIDDER', key: 'bidder', width: 20 },
   ],
   bank_payment: [
-    // PDF-only display headers — shorter so they fit. The XLSX export in
-    // exports.js still uses the bank's required RTGS/NEFT field names
-    // (TransactionType, BeneIFSCode, BeneAcctNo, BeneAddLine1/2/3, etc.).
-    { header: 'TYPE',     key: 'transactionType', width: 8  },
-    { header: 'IFSC',     key: 'ifsc',            width: 14 },
-    { header: 'A/C NO',   key: 'accountNo',       width: 18 },
-    { header: 'NAME',     key: 'beneficiaryName', width: 24 },
-    { header: 'ADDRESS',  key: 'address1',        width: 22 },
-    { header: 'CITY',     key: 'address2',        width: 14 },
-    { header: 'PIN',      key: 'pin',             width: 8  },
-    { header: 'AMOUNT',   key: 'amount',          width: 14 },
-    { header: 'REMARKS',  key: 'remarks',         width: 30 },
+    // PDF-only display columns — restructured for portrait so all data fits
+    // without wrapping single-token values like "HDFC0001234" or 6-digit
+    // PINs. The XLSX export in exports.js still has the full 9-column
+    // bank-required schema (TransactionType, BeneIFSCode, BeneAcctNo,
+    // BeneName, BeneAddLine1, BeneAddLine2, BeneAddLine3, Amount,
+    // SendertoRcvrInfo) — only PDF combines address+city+pin for display.
+    { header: 'SL.NO',    key: '_sn',              width: 6  },
+    { header: 'TYPE',     key: 'transactionType',  width: 10 },
+    { header: 'IFSC',     key: 'ifsc',             width: 18 },
+    { header: 'A/C NO',   key: 'accountNo',        width: 22 },
+    { header: 'NAME',     key: 'beneficiaryName',  width: 24 },
+    { header: 'ADDRESS',  key: 'address_combined', width: 32 },
+    { header: 'AMOUNT',   key: 'amount',           width: 16 },
+    { header: 'REMARKS',  key: 'remarks',          width: 26 },
   ],
   pooler_register: [
-    { header: 'STATE', key: 'state', width: 12 },
-    { header: 'NAME', key: 'poolername', width: 30 },
-    { header: 'BRANCH', key: 'br', width: 15 },
-    { header: 'LOT', key: 'lot', width: 8 },
-    { header: 'QTY', key: 'qty', width: 12 },
-    { header: 'PRICE', key: 'price', width: 10 },
-    { header: 'AMOUNT', key: 'amount', width: 14 },
-    { header: 'PQTY', key: 'pqty', width: 12 },
-    { header: 'PRATE', key: 'prate', width: 10 },
-    { header: 'PURAMT', key: 'puramt', width: 14 },
+    // STATE column dropped per user request; serial number shown per-name
+    // (resets within each name group), with a subtotal row for each name.
+    { header: 'SL.NO',  key: '_sn',         width: 6  },
+    { header: 'NAME',   key: 'poolername',  width: 30 },
+    { header: 'BRANCH', key: 'br',          width: 14 },
+    { header: 'LOT',    key: 'lot',         width: 8  },
+    { header: 'QTY',    key: 'qty',         width: 12 },
+    { header: 'PRICE',  key: 'price',       width: 10 },
+    { header: 'AMOUNT', key: 'amount',      width: 14 },
+    { header: 'PQTY',   key: 'pqty',        width: 12 },
+    { header: 'PRATE',  key: 'prate',       width: 10 },
+    { header: 'PURAMT', key: 'puramt',      width: 14 },
   ],
   full_file: [
     { header: 'STATE', key: 'state', width: 10 }, { header: 'LOT', key: 'lot_no', width: 8 },
@@ -368,12 +453,13 @@ const COLS = {
     { header: 'GRADE', key: 'grade', width: 8 },
   ],
   dealer_list: [
-    { header: 'STATE', key: 'state', width: 12 },
-    { header: 'NAME', key: 'name', width: 30 },
+    // STATE column dropped per user request; simple sequential serial number.
+    { header: 'SL.NO', key: '_sn',   width: 6  },
+    { header: 'NAME',  key: 'name',  width: 30 },
     { header: 'GSTIN', key: 'gstin', width: 18 },
-    { header: 'LOTS', key: 'lots', width: 6 },
-    { header: 'BAGS', key: 'bags', width: 6 },
-    { header: 'QTY', key: 'qty', width: 12 },
+    { header: 'LOTS',  key: 'lots',  width: 6  },
+    { header: 'BAGS',  key: 'bags',  width: 6  },
+    { header: 'QTY',   key: 'qty',   width: 12 },
   ],
   sales_taxes: [
     { header: 'STATE', key: 'state', width: 10 }, { header: 'SALE', key: 'sale', width: 6 },
@@ -388,13 +474,19 @@ const COLS = {
     { header: 'TOTAL', key: 'total', width: 12 },
   ],
   payment: [
-    { header: 'POOLERNAME', key: 'poolername', width: 28 },
-    { header: 'LOT', key: 'lot', width: 8 }, { header: 'BAG', key: 'bag', width: 6 },
-    { header: 'QTY', key: 'qty', width: 10 }, { header: 'PRICE', key: 'price', width: 10 },
-    { header: 'AMOUNT', key: 'amount', width: 12 }, { header: 'PQTY', key: 'pqty', width: 10 },
-    { header: 'PRATE', key: 'prate', width: 10 }, { header: 'PURAMT', key: 'puramt', width: 12 },
-    { header: 'DISCOUNT', key: 'discount', width: 10 },
-    { header: 'PAYABLE', key: 'payable', width: 12 },
+    // Serial number resets per pooler; each pooler gets a subtotal row.
+    { header: 'SL.NO',      key: '_sn',         width: 6 },
+    { header: 'POOLERNAME', key: 'poolername',  width: 26 },
+    { header: 'LOT',        key: 'lot',         width: 8 },
+    { header: 'BAG',        key: 'bag',         width: 6 },
+    { header: 'QTY',        key: 'qty',         width: 10 },
+    { header: 'PRICE',      key: 'price',       width: 10 },
+    { header: 'AMOUNT',     key: 'amount',      width: 12 },
+    { header: 'PQTY',       key: 'pqty',        width: 10 },
+    { header: 'PRATE',      key: 'prate',       width: 10 },
+    { header: 'PURAMT',     key: 'puramt',      width: 12 },
+    { header: 'DISCOUNT',   key: 'discount',    width: 10 },
+    { header: 'PAYABLE',    key: 'payable',     width: 12 },
   ],
   tally_purchase: [
     { header: 'NAME', key: 'name', width: 24 }, { header: 'ADD', key: 'add', width: 24 },
@@ -446,6 +538,48 @@ const TITLES = {
   tds_return:      'TDS Return',
 };
 
+// Per-type page orientation override. Portrait is the default (set in
+// renderTablePdf). Add a type here only if a specific report needs landscape
+// because its column count is too high to fit comfortably in portrait.
+const PDF_LAYOUT = {
+  // Full file is a 28-column raw export (STATE, LOT, CROP, GRADE, CRPT,
+  // BRANCH, NAME, CR, PAN, TEL, BAG, QTY, PRICE, AMOUNT, CODE, BUYER,
+  // BUYER1, SALE, INVO, PQTY, PRATE, PURAMT, COM, CGST, SGST, IGST,
+  // ADVANCE, BALANCE). Portrait is impossible — stays landscape.
+  full_file: 'landscape',
+};
+
+// Per-type row preprocessing: add a serial-number column, optionally group
+// rows by a name field with a subtotal row inserted after each group. Keys
+// here line up with the COLS definitions (e.g. `_sn` for the SL.NO column,
+// `poolername` for group-by). See `preprocessRows` for semantics.
+const ROW_PREPROCESS = {
+  // Bank payment — flat sequential serial.
+  bank_payment: {
+    serialKey: '_sn',
+  },
+  // Pooler register — serial restarts per pooler name; subtotal of qty,
+  // amount, pqty, puramt at the end of each pooler's rows.
+  pooler_register: {
+    serialKey: '_sn',
+    groupByKey: 'poolername',
+    subtotalKeys: ['qty', 'amount', 'pqty', 'puramt'],
+    subtotalLabelKey: 'poolername',
+  },
+  // Dealer list — flat sequential serial (no grouping).
+  dealer_list: {
+    serialKey: '_sn',
+  },
+  // Payment summary — serial restarts per pooler name; subtotal of bag, qty,
+  // amount, pqty, puramt, discount, payable at the end of each pooler's rows.
+  payment: {
+    serialKey: '_sn',
+    groupByKey: 'poolername',
+    subtotalKeys: ['bag', 'qty', 'amount', 'pqty', 'puramt', 'discount', 'payable'],
+    subtotalLabelKey: 'poolername',
+  },
+};
+
 async function getRowsForType(db, type, auctionId, cfg, extra) {
   switch (type) {
     case 'lot_slip':
@@ -467,7 +601,15 @@ async function getRowsForType(db, type, auctionId, cfg, extra) {
 
     case 'bank_payment': {
       const { getBankPaymentData } = require('./calculations');
-      return getBankPaymentData(db, auctionId, cfg);
+      const rows = getBankPaymentData(db, auctionId, cfg);
+      // For PDF display, combine address1 + address2 (city) + pin into a
+      // single ADDRESS column. The underlying data still has the original
+      // separate fields (used by XLSX export for the bank-required format).
+      return rows.map(r => ({
+        ...r,
+        address_combined: [r.address1, r.address2, r.pin]
+          .filter(s => s != null && String(s).trim() !== '').join(', '),
+      }));
     }
 
     case 'pooler_register':
@@ -488,7 +630,7 @@ async function getRowsForType(db, type, auctionId, cfg, extra) {
         `SELECT state, name, SUBSTR(cr, 7, 15) as gstin,
           COUNT(lot_no) as lots, SUM(bags) as bags, SUM(qty) as qty
          FROM lots WHERE auction_id = ? AND cr LIKE '%GST%' AND amount > 0
-         GROUP BY state, name, cr ORDER BY state, name`, [auctionId]);
+         GROUP BY state, name, cr ORDER BY name`, [auctionId]);
 
     case 'sales_taxes':
       return db.all(
@@ -549,12 +691,21 @@ async function exportPdf(db, type, auctionId, cfg, extra = {}) {
   const columns = COLS[type];
   if (!columns) throw new Error(`No PDF column def for type: ${type}`);
 
-  const rows = await getRowsForType(db, type, auctionId, cfg, extra);
+  let rows = await getRowsForType(db, type, auctionId, cfg, extra);
+
+  // Per-type row preprocessing: serial numbers + group-by-name subtotals.
+  const ppCfg = ROW_PREPROCESS[type];
+  if (ppCfg) {
+    rows = preprocessRows(rows, ppCfg);
+  }
 
   const totalKeys = TOTAL_KEYS[type] || [];
   const totals = totalKeys.length && rows.length ? (() => {
-    const t = sumKeys(rows, totalKeys);
-    t[columns[0].key] = 'TOTAL';
+    const t = sumKeys(rows.filter(r => !r._isSubtotal), totalKeys);
+    // Place "TOTAL" in the first non-serial column so the label is visible.
+    // If column[0] is the SL.NO column, the label goes in column[1] instead.
+    const labelCol = (columns[0] && columns[0].key === '_sn') ? columns[1] : columns[0];
+    if (labelCol) t[labelCol.key] = 'TOTAL';
     return t;
   })() : null;
 
@@ -576,6 +727,7 @@ async function exportPdf(db, type, auctionId, cfg, extra = {}) {
     columns,
     rows,
     totals,
+    layout: PDF_LAYOUT[type],
   });
 }
 

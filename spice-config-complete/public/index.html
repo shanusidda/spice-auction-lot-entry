@@ -681,6 +681,57 @@ tr:hover td{background:var(--spice-cream)}
 .sw input:checked+.sl{background:var(--green)}
 .sw input:checked+.sl::before{transform:translateX(14px)}
 
+/* ── To Tally settings panel — macro-style grouped form ──── */
+.tally-banner{
+  background:var(--spice-cream);border:1px solid var(--spice-saffron-lt);
+  padding:10px 14px;border-radius:8px;margin-bottom:12px;font-size:12px;
+  color:var(--text2);line-height:1.5
+}
+.tally-banner strong{color:var(--text)}
+.tally-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+@media (max-width:1100px){.tally-grid{grid-template-columns:1fr}}
+.tally-col{display:flex;flex-direction:column;gap:12px}
+.tally-box{
+  border:1px solid var(--border);border-radius:8px;padding:8px 12px 12px;
+  background:#fff;margin:0
+}
+.tally-box legend{
+  font-size:13px;font-weight:700;color:var(--text);
+  padding:0 6px;background:#fff
+}
+.tally-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;align-items:center}
+.tally-row > *{flex:1;min-width:0}
+.tally-in{
+  border:1px solid var(--border);border-radius:6px;padding:6px 8px;
+  font-size:12px;color:var(--text);background:#fff;width:100%;
+  font-family:inherit
+}
+.tally-in:focus{outline:none;border-color:var(--green);box-shadow:0 0 0 2px var(--green-bg)}
+.tally-in.tally-ro{background:#F8FAFC;color:var(--text3);cursor:not-allowed}
+.tally-chk{
+  display:inline-flex;align-items:center;gap:6px;padding:6px 8px;
+  font-size:12px;font-weight:600;color:var(--text);
+  background:var(--bg);border:1px solid var(--border);border-radius:6px;
+  cursor:pointer;flex:0 0 auto;white-space:nowrap
+}
+.tally-chk input[type=checkbox]{margin:0;cursor:pointer}
+.tally-sep{color:var(--text3);padding:0 4px;font-weight:600}
+.tally-viewbar{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  padding:8px 10px;margin-bottom:10px;
+  background:var(--bg);border:1px solid var(--border);border-radius:8px
+}
+.tally-viewbar .btn-sm{
+  padding:5px 12px;font-size:12px;font-weight:600;
+  background:#fff;color:var(--text2);border:1px solid var(--border);
+  border-radius:6px;cursor:pointer
+}
+.tally-viewbar .btn-sm:hover{background:var(--bg)}
+.tally-viewbar .btn-sm.is-active{
+  background:var(--green);color:#fff;border-color:var(--green)
+}
+.tally-viewbar-hint{font-size:11px;color:var(--text3);margin-left:6px;flex:1;min-width:200px}
+
 /* ── Loading spinner + button-busy state ──────────────── */
 @keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
 .btn.is-busy{position:relative;pointer-events:none;opacity:.75}
@@ -1824,7 +1875,27 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
           <select id="tally-auction" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px"></select>
         </div>
 
+        <div style="margin-top:12px;padding:10px 14px;background:var(--green-bg);border-radius:8px;border:1px solid var(--green);font-size:12px;color:var(--text2);line-height:1.5">
+          <strong style="color:var(--green)">Recommended workflow:</strong>
+          Import <strong>Ledger Masters first</strong> (creates all party / sales / purchase / tax ledgers in Tally), then import Sales / Purchase / Debit Note vouchers. Tally rejects voucher imports if any referenced ledger is missing.
+        </div>
+
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;margin-top:14px">
+          <div style="padding:14px;border:2px solid var(--green);border-radius:10px;background:var(--green-bg)">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+              <span style="width:32px;height:32px;border-radius:8px;background:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:18px">📚</span>
+              <div>
+                <div style="font-weight:700;color:var(--text);font-size:14px">Ledger Masters <span style="background:var(--green);color:#fff;font-size:10px;padding:1px 6px;border-radius:4px;margin-left:4px">DO FIRST</span></div>
+                <div style="font-size:11px;color:var(--text3)">Party ledgers (buyers + traders) + sales + purchase + tax + service ledgers</div>
+              </div>
+            </div>
+            <div id="tally-preview-ledger" style="font-size:11px;color:var(--text3);min-height:18px;margin:6px 0"></div>
+            <div style="display:flex;gap:6px;margin-top:8px">
+              <button class="btn btn-a" onclick="tallyPreview('ledger')" style="flex:1;padding:7px;font-size:12px">Preview</button>
+              <button class="btn btn-g" onclick="tallyDownload('ledger')" style="flex:1;padding:7px;font-size:12px">Download XML</button>
+            </div>
+          </div>
+
           <div style="padding:14px;border:1px solid var(--border);border-radius:10px;background:#fff">
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
               <span style="width:32px;height:32px;border-radius:8px;background:var(--green-bg);display:inline-flex;align-items:center;justify-content:center;font-size:18px">💰</span>
@@ -4088,6 +4159,8 @@ function renderSettingsPanel(){
       else html+=fld(f);
     }
     html+='</div>';
+  }else if(ck==='tally'){
+    html+=renderTallyPanel(fields);
   }else{
     // Company and Sister Company categories get a logo upload widget on top
     if (ck === 'company') {
@@ -4357,6 +4430,273 @@ function fld(f){
   const t = f.field_type === 'number' ? 'number' : f.field_type === 'date' ? 'date' : 'text';
   const tip = FIELD_HELP[f.key] ? helpTip(FIELD_HELP[f.key]) : '';
   return `<div class="fg"><label>${esc(f.label)}${tip}</label><input type="${t}" data-key="${f.key}" value="${esc(f.value)}"${t==='number'?' step="any"':''}></div>`;
+}
+
+// ── To Tally settings panel ───────────────────────────────
+// Two views: macro-form layout (default) and a classic flat field list
+// (toggled by the dad if he wants to see every key in one column).
+// The classic view uses the standard `fld()` renderer so booleans show
+// as toggle switches like Flags. Both views share the same data-key
+// inputs, so captureCurrentPanel() picks edits up identically.
+let _tallyClassic = false;
+function setTallyView(classic){
+  captureCurrentPanel();
+  _tallyClassic = !!classic;
+  renderSettingsPanel();
+}
+
+function renderTallyPanel(fields){
+  // Toggle bar — appears at the top of either view
+  const toggleBar = `
+    <div class="tally-viewbar">
+      <button class="btn btn-sm ${_tallyClassic?'':'is-active'}" onclick="setTallyView(false)">📋 Form Layout</button>
+      <button class="btn btn-sm ${_tallyClassic?'is-active':''}" onclick="setTallyView(true)">🗂 Classic List</button>
+      <span class="tally-viewbar-hint">Form Layout matches the macro's Configration window. Classic List shows every field individually.</span>
+    </div>`;
+
+  if (_tallyClassic) {
+    // Classic flat list: use the standard fld() renderer; booleans get toggle switches
+    let body = '<div class="sgrid">';
+    for (const f of fields) {
+      if (f.field_type === 'boolean') {
+        const ck2 = (f.value === 'true') ? 'checked' : '';
+        body += `<div class="flag-row" style="border:1px solid var(--border);border-radius:6px;padding:8px 12px"><label>${esc(f.label)}</label><label class="sw"><input type="checkbox" data-key="${f.key}" data-type="boolean" ${ck2}><span class="sl"></span></label></div>`;
+      } else {
+        body += fld(f);
+      }
+    }
+    body += '</div>';
+    return toggleBar + body;
+  }
+
+  // Index fields by key for direct lookup
+  const map = {};
+  for (const f of fields) map[f.key] = f;
+  const v  = (k) => map[k] ? (map[k].value || '') : '';
+  const lab= (k) => map[k] ? (map[k].label || k) : k;
+
+  // Text input — placeholder doubles as label (macro form has no labels, only placeholders)
+  const ti = (k, ph, opts={}) => {
+    if (!map[k]) return '';
+    const placeholder = ph || lab(k);
+    const style = opts.style || '';
+    return `<input type="text" data-key="${k}" value="${esc(v(k))}" placeholder="${esc(placeholder)}" title="${esc(lab(k))}" class="tally-in" style="${style}">`;
+  };
+
+  // Number input
+  const ni = (k, ph, opts={}) => {
+    if (!map[k]) return '';
+    const placeholder = ph || lab(k);
+    const style = opts.style || '';
+    return `<input type="number" step="any" data-key="${k}" value="${esc(v(k))}" placeholder="${esc(placeholder)}" title="${esc(lab(k))}" class="tally-in" style="${style}">`;
+  };
+
+  // Boolean checkbox — inline label
+  const bi = (k, lblOverride) => {
+    if (!map[k]) return '';
+    const checked = (v(k) === 'true') ? 'checked' : '';
+    const lbl = lblOverride || lab(k).replace(/\s*\(.*?\)\s*/g, '').trim();
+    return `<label class="tally-chk"><input type="checkbox" data-key="${k}" data-type="boolean" ${checked}> <span>${esc(lbl)}</span></label>`;
+  };
+
+  // Group/section wrapper
+  const box = (title, body) => `
+    <fieldset class="tally-box">
+      <legend>${esc(title)}</legend>
+      ${body}
+    </fieldset>`;
+
+  // Row of inline fields
+  const row = (...cells) => `<div class="tally-row">${cells.join('')}</div>`;
+
+  // ── COMPANY PROFILE ────────────────────────────────────────
+  const cp = readGlobalSettings();
+  const ce = (k, ph, opts={}) => `<input type="text" value="${esc(cp[k]||'')}" placeholder="${esc(ph)}" disabled class="tally-in tally-ro" title="From Settings → ${opts.from||'Company'} (read-only here)" style="${opts.style||''}">`;
+
+  const companyProfile = box('Company Profile',
+    row(`<input type="text" data-key="tally_company_name" value="${esc(v('tally_company_name'))}" placeholder="Tally Company Name" title="${esc(lab('tally_company_name'))}" class="tally-in" style="flex:1">`) +
+    row(
+      ce('short_name','ISP — Trade Name',{from:'Company'}),
+      ce('s_short_name','ASP — Trade Name',{from:'Sister Company'})
+    ) +
+    row(
+      ce('tn_address1','TN — Address Line 1',{from:'Address (Tamil Nadu)'}),
+      ce('s_address1','ASP — Address Line 1',{from:'Sister Company'})
+    ) +
+    row(
+      ce('tn_address2','TN — Address Line 2',{from:'Address (Tamil Nadu)'}),
+      ce('s_address2','ASP — Address Line 2',{from:'Sister Company'})
+    ) +
+    row(
+      ce('tn_branch','TN — Branch',{from:'Address (Tamil Nadu)'}),
+      ce('kl_branch','KL — Branch',{from:'Address (Kerala)'})
+    ) +
+    row(
+      `<input type="text" value="Tamil Nadu" disabled class="tally-in tally-ro">`,
+      `<input type="text" data-key="tally_state_code" value="${esc(v('tally_state_code'))}" placeholder="Code (e.g. 33)" title="${esc(lab('tally_state_code'))}" class="tally-in">`,
+      `<input type="text" value="Kerala" disabled class="tally-in tally-ro">`,
+      `<input type="text" data-key="tally_state_code_amazing" value="${esc(v('tally_state_code_amazing'))}" placeholder="Code (e.g. 32)" title="${esc(lab('tally_state_code_amazing'))}" class="tally-in">`
+    ) +
+    row(
+      ce('tn_gstin','TN GSTIN',{from:'Address (Tamil Nadu)'}),
+      ce('s_gstin','ASP GSTIN',{from:'Sister Company'})
+    ) +
+    row(
+      ce('tn_phone','TN — Phone',{from:'Address (Tamil Nadu)'}),
+      ce('s_phone','ASP — Phone',{from:'Sister Company'})
+    ) +
+    row(
+      ce('tn_email','TN — Email',{from:'Address (Tamil Nadu)'}),
+      ce('s_email','ASP — Email',{from:'Sister Company'})
+    )
+  );
+
+  // ── ACCOUNT LEDGER NAMES ────────────────────────────────────
+  // Each row in the macro form pairs ledger + HSN + checkbox where
+  // applicable. We mirror that 1:1.
+  const ledgerBox = box('Account Ledger Names',
+    row(ti('tally_sales_inter','Cardamom Inter-State Sales',{style:'flex:2'})) +
+    row(
+      ti('tally_sales_intra','Cardamom Local Sales'),
+      ti('tally_sales_export','Cardamom Export Sales (Deemed)')
+    ) +
+    row(
+      ti('tally_gunny_inter','Gunny Interstate Sales'),
+      ti('tally_dealer_sale_inter','Interstate Dealer-Purch'),
+      ti('tally_dealer_sale_intra','Local Dealer-Purcha')
+    ) +
+    row(
+      ti('tally_gunny_intra','Gunny Local Sales'),
+      ti('tally_gunny_export','Gunny Export Sales')
+    ) +
+    row(
+      ti('tally_purchase_auction','Purchase From Agriculturist'),
+      ti('tally_tds_paid_sales','TDS Paid on Sales')
+    ) +
+    row(
+      ti('tally_purchase_dealer','Trade Purchase From Dealer'),
+      ti('tally_purchase_dealer_inter','Interstate Dealer'),
+      ti('tally_purchase_dealer_intra','Local Dealer')
+    ) +
+    row(
+      ti('tally_dn_discount','Discount on Purch'),
+      ti('tally_commission','Commission-Planter'),
+      ti('tally_hsn_service','SAC (e.g. 996111)',{style:'max-width:120px'}),
+      bi('tally_dn_exempt','Exempted')
+    ) +
+    row(
+      ti('tally_cash_handling','Cash Handling Charges'),
+      ti('tally_cash_handling_planter','Cash Handling Charges-Planter')
+    ) +
+    row(
+      ti('tally_sample_planter','Sample Refund to Planter'),
+      bi('tally_sample_stock','Stock'),
+      ti('tally_sample_dealer','Sample Refund to Dealer')
+    ) +
+    row(
+      ti('tally_round','Round On/Off'),
+      bi('tally_round_enabled','Round'),
+      ti('tally_chc_planter','CHC From Planter')
+    ) +
+    // ── Transport row: ledger + rate + HSN + Local toggle ──
+    row(
+      ti('tally_transport','Transport (e.g. Transport Rs.2.50/per Kg)',{style:'flex:2'}),
+      ni('tally_transport_rate','Rate ₹/Kg',{style:'max-width:90px'}),
+      ti('tally_hsn_transport','HSN/SAC (e.g. 996791)',{style:'max-width:140px'}),
+      bi('tally_local_transport','Local Transport')
+    ) +
+    // ── Insurance row: ledger + rate + HSN + Local toggle ──
+    row(
+      ti('tally_insurance','Insurance (e.g. Insurance Rs.0.75/per Thousand)',{style:'flex:2'}),
+      ni('tally_insurance_rate','Rate ₹/₹1000',{style:'max-width:90px'}),
+      ti('tally_hsn_insurance','HSN/SAC (e.g. 997136)',{style:'max-width:140px'}),
+      bi('tally_local_insurance','Local Insurance')
+    )
+  );
+
+  // ── TAX LEDGER NAMES ────────────────────────────────────────
+  const taxLedgerBox = box('Tax Ledger Names',
+    row(ti('tally_cgst','CGST 2.5%'), ti('tally_dn_cgst','CGST 9%')) +
+    row(ti('tally_sgst','SGST 2.5%'), ti('tally_dn_sgst','SGST 9%')) +
+    row(ti('tally_igst','IGST 5%'),   ti('tally_dn_igst','IGST 18%')) +
+    row(ti('tally_tds_ledger','TDS on Purchase of Goods')) +
+    row(ti('tally_tcs','TCS on Sale of Goods'))
+  );
+
+  // ── TAX RATE ────────────────────────────────────────────────
+  const taxRateBox = box('Tax Rate',
+    row(ni('tally_gst_rate','5'),       bi('tally_amazing_mode','Amazing')) +
+    row(ni('tally_service_rate','18'),  bi('tally_optional','Optional')) +
+    row(ni('tally_tcs_rate','0.1'),     bi('tally_detailed','Detailed Inv')) +
+    row(ni('tally_sample_kgs','1.900'), `<span class="tally-sep">—</span>`, ni('tally_unit_rate','0.1'))
+  );
+
+  // ── BANK ACCOUNT DETAILS ──────────────────────────────────
+  const bankBox = box('Bank Account Details',
+    row(
+      ce('bank_tn_name','Bank Name',{from:'Bank Details'}),
+      ce('tn_branch','Branch',{from:'Address (Tamil Nadu)'}),
+      ce('bank_tn_acct','Account No.',{from:'Bank Details'}),
+      ce('bank_tn_ifsc','IFSC Code',{from:'Bank Details'})
+    )
+  );
+
+  // ── STOCK ITEM NAMES + HSN ───────────────────────────────
+  const stockBox = box('Stock Item Names',
+    row(ti('tally_item_cardamom','Cardamom'), ti('tally_hsn_cardamom','HSN (e.g. 09083120)')) +
+    row(ti('tally_item_gunny','Gunny Bag'),    ti('tally_hsn_gunny','HSN (e.g. 63051040)')) +
+    row(
+      bi('tally_dispatch_from','Dispatch'),
+      bi('tally_tcs_enabled','TCS')
+    ) +
+    row(
+      bi('tally_ship_to','Ship To'),
+      bi('tally_tds_enabled','TDS')
+    )
+  );
+
+  // ── ITEM RATES (gunny + local rates that aren't shown elsewhere) ──
+  const itemRatesBox = box('Item Rates',
+    row(ni('tally_gunny_rate','Gunny ₹/bag (e.g. 165)')) +
+    row(ni('tally_local_trans_rate','Local Transport ₹/Kg')) +
+    row(ni('tally_local_ins_rate','Local Insurance ₹/₹1000'))
+  );
+
+  // ── HEADER NOTE ──────────────────────────────────────────
+  const note = `
+    <div class="tally-banner">
+      <strong>Layout matches the macro's Configration form.</strong>
+      Greyed-out fields are pulled live from other Settings categories (Company, Sister, Address, Bank). To change them, go to that category. Editable fields here are Tally-specific: ledger names, HSN/SAC codes, rates, and toggles.
+    </div>`;
+
+  // ── TWO-COLUMN GRID ──────────────────────────────────────
+  return toggleBar + note + `
+    <div class="tally-grid">
+      <div class="tally-col">
+        ${companyProfile}
+        ${taxLedgerBox}
+        ${bankBox}
+      </div>
+      <div class="tally-col">
+        ${ledgerBox}
+        <div class="tally-row" style="gap:12px">
+          <div style="flex:1">${taxRateBox}</div>
+          <div style="flex:1">${stockBox}</div>
+          <div style="flex:1">${itemRatesBox}</div>
+        </div>
+      </div>
+    </div>`;
+}
+
+// Read the global settings flat map so the Tally panel can echo company,
+// address, sister, and bank values as read-only context fields.
+function readGlobalSettings(){
+  const out = {};
+  if (!_sdata) return out;
+  for (const cat of Object.keys(_sdata)) {
+    for (const f of (_sdata[cat] || [])) out[f.key] = f.value;
+  }
+  return out;
 }
 
 // ── Company identity presets (ISP / ASP) ────────────────────────────
@@ -5345,14 +5685,15 @@ async function downloadLorry(type,format){
 }
 
 // ── To Tally ──────────────────────────────────────────────
-const TALLY_LABELS={sales:'Sales',rd_purchase:'RD Purchase',urd_purchase:'URD Purchase',debit_note:'Debit Note'};
+const TALLY_LABELS={ledger:'Ledgers',sales:'Sales',rd_purchase:'RD Purchase',urd_purchase:'URD Purchase',debit_note:'Debit Note'};
+const TALLY_TYPES=['ledger','sales','rd_purchase','urd_purchase','debit_note'];
 function loadTallyAuctions(){
   fillAucSelect('tally-auction');
   // Clear preview text when auction changes
   const sel=document.getElementById('tally-auction');
   if(sel&&!sel.dataset.tallyBound){
     sel.addEventListener('change',()=>{
-      ['sales','rd_purchase','urd_purchase','debit_note'].forEach(t=>{
+      TALLY_TYPES.forEach(t=>{
         const el=document.getElementById('tally-preview-'+t);if(el)el.textContent='';
       });
     });
@@ -5374,7 +5715,18 @@ async function tallyPreview(type){
     }
     const data=await r.json();
     if(target){
-      if(data.voucherCount===0){
+      if(type==='ledger'){
+        // Ledger preview returns { ledgerCount, byKind: {party,sales,purchase,tax,...} }
+        if(data.ledgerCount===0){
+          target.innerHTML=`<span style="color:#C62828">No ledgers to create — empty auction?</span>`;
+        }else{
+          const k=data.byKind||{};
+          const breakdown=['party','sales','purchase','tax']
+            .filter(x=>k[x])
+            .map(x=>`<strong>${k[x]}</strong> ${x}`).join(' · ');
+          target.innerHTML=`<strong style="color:var(--green)">${data.ledgerCount}</strong> ledger${data.ledgerCount===1?'':'s'}` + (breakdown?` · ${breakdown}`:'');
+        }
+      }else if(data.voucherCount===0){
         target.innerHTML=`<span style="color:#C62828">No data found for this auction</span>`;
       }else{
         target.innerHTML=`<strong style="color:var(--green)">${data.voucherCount}</strong> voucher${data.voucherCount===1?'':'s'} · <strong>${data.lotCount}</strong> lot${data.lotCount===1?'':'s'}`;

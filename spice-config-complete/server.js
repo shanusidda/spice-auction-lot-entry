@@ -14,8 +14,8 @@ const { exportPdf: exportAnyPdf } = require('./exports-pdf');
 const { DBF_EXPORTS } = require('./dbf-exports');
 const { REPORTS: LORRY_REPORTS } = require('./lorry-reports');
 const {
-  generSalesXML, generRDPurchaseXML, generURDPurchaseXML, generDebitNoteXML,
-  buildSalesRows, buildRDPurchaseRows, buildURDPurchaseRows, buildDebitNoteRows,
+  generSalesXML, generRDPurchaseXML, generURDPurchaseXML, generDebitNoteXML, generLedgerXML,
+  buildSalesRows, buildRDPurchaseRows, buildURDPurchaseRows, buildDebitNoteRows, buildLedgerRows,
 } = require('./tally-xml');
 
 const app = express();
@@ -2884,6 +2884,7 @@ app.get('/api/dbf-exports/:type', requireExport, async (req, res) => {
 
 // Definitions of available Tally exports — keep in sync with frontend
 const TALLY_EXPORTS = {
+  ledger:       { label: 'Ledger Masters (parties + tax + sales + purchase)', name: 'Ledgers', builder: buildLedgerRows, generator: generLedgerXML },
   sales:        { label: 'Sales Vouchers',       name: 'Sales',        builder: buildSalesRows,        generator: generSalesXML },
   rd_purchase:  { label: 'RD Purchase Vouchers', name: 'RDPurchase',   builder: buildRDPurchaseRows,   generator: generRDPurchaseXML },
   urd_purchase: { label: 'URD Purchase Vouchers (Agriculturist)', name: 'URDPurchase', builder: buildURDPurchaseRows, generator: generURDPurchaseXML },
@@ -2909,6 +2910,20 @@ app.get('/api/tally/preview/:type/:auctionId', requireExport, (req, res) => {
     const db = getDb();
     const cfg = getSettingsFlat(db);
     const rows = def.builder(db, auctionId, cfg);
+    if (type === 'ledger') {
+      // Ledger rows have a different shape — count by kind
+      const byKind = rows.reduce((acc, r) => {
+        const k = r.kind || 'other';
+        acc[k] = (acc[k] || 0) + 1;
+        return acc;
+      }, {});
+      return res.json({
+        type, auctionId,
+        ledgerCount: rows.length,
+        byKind,
+        sample: rows.slice(0, 6).map(r => ({ kind: r.kind, name: r.name, parent: r.parent, gstin: r.gstin || '' })),
+      });
+    }
     const totalLots = rows.reduce((s, r) => s + (Array.isArray(r.lots) ? r.lots.length : 0), 0);
     res.json({
       type, auctionId,
@@ -2936,7 +2951,8 @@ app.get('/api/tally/export/:type/:auctionId', requireExport, (req, res) => {
     const cfg = getSettingsFlat(db);
     const rows = def.builder(db, auctionId, cfg);
     if (rows.length === 0) {
-      return res.status(404).json({ error: `No ${def.label.toLowerCase()} found for auction ${auctionId}` });
+      const what = type === 'ledger' ? 'ledger masters' : `${def.label.toLowerCase()}`;
+      return res.status(404).json({ error: `No ${what} found for auction ${auctionId}` });
     }
     const xml = def.generator(rows, cfg, {});
     const filename = `${def.name}_${auctionId}.xml`;

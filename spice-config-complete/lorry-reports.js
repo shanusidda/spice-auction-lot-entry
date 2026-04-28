@@ -453,13 +453,14 @@ async function truckListPdf(db, auctionId) {
   const m = 36;
   const usableW = doc.page.width - m * 2;
   const colW = [
+    Math.floor(usableW * 0.08),  // SL.NO
     Math.floor(usableW * 0.10),  // LOT
     Math.floor(usableW * 0.10),  // BAG
-    Math.floor(usableW * 0.20),  // CODE
-    Math.floor(usableW * 0.22),  // QTY
-    0,                           // AMOUNT (filled below)
+    Math.floor(usableW * 0.18),  // CODE
+    Math.floor(usableW * 0.20),  // QTY
+    0,                           // AMOUNT
   ];
-  colW[4] = usableW - colW[0] - colW[1] - colW[2] - colW[3];
+  colW[5] = usableW - colW[0] - colW[1] - colW[2] - colW[3] - colW[4];
   const colX = [m];
   for (let i = 0; i < colW.length - 1; i++) colX.push(colX[i] + colW[i]);
 
@@ -485,23 +486,24 @@ async function truckListPdf(db, auctionId) {
     pageStarts.push({ page: doc.bufferedPageRange().count - 1, top: y });
     doc.rect(m, y, usableW, HEAD_H).fillAndStroke('#E8E4DD', '#444');
     doc.fillColor('#000').font('Helvetica-Bold').fontSize(10);
-    const heads = ['LOT', 'BAG', 'CODE', 'QTY', 'AMOUNT'];
+    const heads = ['SL.NO', 'LOT', 'BAG', 'CODE', 'QTY', 'AMOUNT'];
+    const aligns = ['center', 'center', 'center', 'center', 'right', 'right'];
     heads.forEach((h, i) => {
-      const align = (i === 2) ? 'center' : (i === 0 || i === 1 ? 'center' : 'right');
-      doc.text(h, colX[i] + 4, y + 5, { width: colW[i] - 8, align, lineBreak: false });
+      doc.text(h, colX[i] + 4, y + 5, { width: colW[i] - 8, align: aligns[i], lineBreak: false });
     });
     y += HEAD_H;
   }
   function drawRow(r, idx) {
     if (idx % 2 === 1) doc.rect(m, y, usableW, ROW_H).fill('#F7F5F2');
     doc.fillColor('#000').font('Helvetica').fontSize(10);
-    doc.text(String(r.lot_count), colX[0] + 4, y + 5, { width: colW[0] - 8, align: 'center', lineBreak: false });
-    doc.text(String(r.bag),       colX[1] + 4, y + 5, { width: colW[1] - 8, align: 'center', lineBreak: false });
+    doc.text(String(idx + 1),     colX[0] + 4, y + 5, { width: colW[0] - 8, align: 'center', lineBreak: false });
+    doc.text(String(r.lot_count), colX[1] + 4, y + 5, { width: colW[1] - 8, align: 'center', lineBreak: false });
+    doc.text(String(r.bag),       colX[2] + 4, y + 5, { width: colW[2] - 8, align: 'center', lineBreak: false });
     doc.font('Helvetica-Bold');
-    doc.text(String(r.code || ''),colX[2] + 4, y + 5, { width: colW[2] - 8, align: 'center', lineBreak: false });
+    doc.text(String(r.code || ''),colX[3] + 4, y + 5, { width: colW[3] - 8, align: 'center', lineBreak: false });
     doc.font('Helvetica');
-    doc.text(fmtQty(r.qty),       colX[3] + 4, y + 5, { width: colW[3] - 8, align: 'right',  lineBreak: false });
-    doc.text(fmtMoney(r.amount),  colX[4] + 4, y + 5, { width: colW[4] - 8, align: 'right',  lineBreak: false });
+    doc.text(fmtQty(r.qty),       colX[4] + 4, y + 5, { width: colW[4] - 8, align: 'right',  lineBreak: false });
+    doc.text(fmtMoney(r.amount),  colX[5] + 4, y + 5, { width: colW[5] - 8, align: 'right',  lineBreak: false });
     doc.moveTo(m, y + ROW_H).lineTo(m + usableW, y + ROW_H).lineWidth(0.25).strokeColor('#BBB').stroke();
     y += ROW_H;
   }
@@ -545,11 +547,12 @@ async function truckListPdf(db, auctionId) {
   }
   doc.rect(m, y, usableW, ROW_H + 4).fillAndStroke('#FFF3CD', '#E0B020');
   doc.fillColor('#000').font('Helvetica-Bold').fontSize(10.5);
-  doc.text(String(tLot), colX[0] + 4, y + 6, { width: colW[0] - 8, align: 'center', lineBreak: false });
-  doc.text(String(tBag), colX[1] + 4, y + 6, { width: colW[1] - 8, align: 'center', lineBreak: false });
-  doc.text('TOTAL',      colX[2] + 4, y + 6, { width: colW[2] - 8, align: 'center', lineBreak: false });
-  doc.text(fmtQty(tQty), colX[3] + 4, y + 6, { width: colW[3] - 8, align: 'right',  lineBreak: false });
-  doc.text(fmtMoney(tAmt), colX[4] + 4, y + 6, { width: colW[4] - 8, align: 'right', lineBreak: false });
+  // SL.NO column blank in total row
+  doc.text(String(tLot),    colX[1] + 4, y + 6, { width: colW[1] - 8, align: 'center', lineBreak: false });
+  doc.text(String(tBag),    colX[2] + 4, y + 6, { width: colW[2] - 8, align: 'center', lineBreak: false });
+  doc.text('TOTAL',         colX[3] + 4, y + 6, { width: colW[3] - 8, align: 'center', lineBreak: false });
+  doc.text(fmtQty(tQty),    colX[4] + 4, y + 6, { width: colW[4] - 8, align: 'right',  lineBreak: false });
+  doc.text(fmtMoney(tAmt),  colX[5] + 4, y + 6, { width: colW[5] - 8, align: 'right',  lineBreak: false });
   y += ROW_H + 4;
 
   // Vertical column separators on the final page + outer border
@@ -779,15 +782,17 @@ async function buyerLotLorryPdf(db, auctionId) {
   const pageH = doc.page.height;
   const usableW = pageW - m * 2;
 
-  // Cols: LOT | BAG | QTY | RATE | AMOUNT
+  // Cols: SL.NO | LOT | BAG | QTY | RATE | AMOUNT
+  // Serial restarts within each buyer's block.
   const colW = [
+    Math.floor(usableW * 0.08),  // SL.NO
     Math.floor(usableW * 0.10),  // LOT
     Math.floor(usableW * 0.10),  // BAG
-    Math.floor(usableW * 0.20),  // QTY
-    Math.floor(usableW * 0.20),  // RATE
-    0,
+    Math.floor(usableW * 0.18),  // QTY
+    Math.floor(usableW * 0.18),  // RATE
+    0,                           // AMOUNT
   ];
-  colW[4] = usableW - colW[0] - colW[1] - colW[2] - colW[3];
+  colW[5] = usableW - colW[0] - colW[1] - colW[2] - colW[3] - colW[4];
   const colX = [m];
   for (let i = 0; i < colW.length - 1; i++) colX.push(colX[i] + colW[i]);
 
@@ -836,16 +841,21 @@ async function buyerLotLorryPdf(db, auctionId) {
     y += SECT_H + 4;
   }
 
-  function drawBuyerHeader(g) {
+  function drawBuyerHeader(g, sn) {
     // Two lines of buyer info: name+code, then firm-name+GSTIN.
-    // Long names wrap to multiple lines instead of being truncated.
+    // Long names wrap to multiple lines instead of being truncated. The
+    // buyer serial number (one per unique buyer) is prefixed onto the
+    // firm name like "1. EMPEROR SPICES PRIVATE LIMITED".
     const nameW = usableW * 0.7;
     const codeW = usableW * 0.3;
     const sblW  = usableW * 0.6;
     const gstW  = usableW * 0.4;
 
+    const firmRaw = g.buyer1 || g.sbl || g.buyer || '';
+    const firmTxt = sn != null ? `${sn}. ${firmRaw}` : firmRaw;
+
     doc.fillColor('#7A4400').font('Helvetica-Bold').fontSize(10);
-    const nameLines = wrapText(doc, g.buyer1 || g.sbl || g.buyer || '', nameW - 4);
+    const nameLines = wrapText(doc, firmTxt, nameW - 4);
     nameLines.forEach((ln, i) => {
       doc.text(ln, m, y + i * 12, { width: nameW, align: 'left', lineBreak: false });
     });
@@ -876,10 +886,10 @@ async function buyerLotLorryPdf(db, auctionId) {
     blockTop = y;  // remember where this block's table begins
     doc.rect(m, y, usableW, HEAD_H).fillAndStroke('#E8E4DD', '#444');
     doc.fillColor('#000').font('Helvetica-Bold').fontSize(8.5);
-    const heads = ['LOT', 'BAG', 'QTY', 'RATE', 'AMOUNT'];
+    const heads = ['SL.NO', 'LOT', 'BAG', 'QTY', 'RATE', 'AMOUNT'];
+    const aligns = ['center', 'center', 'center', 'right', 'right', 'right'];
     heads.forEach((h, i) => {
-      const align = (i === 0 || i === 1) ? 'center' : 'right';
-      doc.text(h, colX[i] + 4, y + 4, { width: colW[i] - 8, align, lineBreak: false });
+      doc.text(h, colX[i] + 4, y + 4, { width: colW[i] - 8, align: aligns[i], lineBreak: false });
     });
     y += HEAD_H;
   }
@@ -888,15 +898,18 @@ async function buyerLotLorryPdf(db, auctionId) {
     if (idx % 2 === 1) doc.rect(m, y, usableW, ROW_H).fill('#F7F5F2');
     doc.fillColor('#000').font('Helvetica').fontSize(8.5);
     const cells = [
+      String(idx + 1),         // SL.NO — restarts at 1 within each buyer
+                                // block (idx is the lot index inside the
+                                // current buyer's lots loop).
       String(lt.lot),
       String(lt.bag),
       fmtQty(lt.qty),
       fmtPrice(lt.rate),
       fmtMoney(lt.amount),
     ];
+    const aligns = ['center', 'center', 'center', 'right', 'right', 'right'];
     cells.forEach((v, ci) => {
-      const align = (ci === 0 || ci === 1) ? 'center' : 'right';
-      doc.text(v, colX[ci] + 4, y + 3, { width: colW[ci] - 8, align, lineBreak: false });
+      doc.text(v, colX[ci] + 4, y + 3, { width: colW[ci] - 8, align: aligns[ci], lineBreak: false });
     });
     doc.moveTo(m, y + ROW_H).lineTo(m + usableW, y + ROW_H).lineWidth(0.25).strokeColor('#CCC').stroke();
     y += ROW_H;
@@ -906,15 +919,17 @@ async function buyerLotLorryPdf(db, auctionId) {
     doc.rect(m, y, usableW, ROW_H + 2).fillAndStroke('#FFF3CD', '#E0B020');
     doc.fillColor('#000').font('Helvetica-Bold').fontSize(8.5);
     const cells = [
+      '',                          // SL.NO blank — the buyer serial number
+                                    // appears in the buyer header above.
       String(g.totalLotCount),
       String(g.totalBag),
       fmtQty(g.totalQty),
       '',
       fmtMoney(g.totalAmount),
     ];
+    const aligns = ['center', 'center', 'center', 'right', 'right', 'right'];
     cells.forEach((v, ci) => {
-      const align = (ci === 0 || ci === 1) ? 'center' : 'right';
-      doc.text(v, colX[ci] + 4, y + 5, { width: colW[ci] - 8, align, lineBreak: false });
+      doc.text(v, colX[ci] + 4, y + 5, { width: colW[ci] - 8, align: aligns[ci], lineBreak: false });
     });
     const blockBottom = y + ROW_H + 2;
     // Vertical column separators from the top of this buyer's column-header
@@ -936,6 +951,10 @@ async function buyerLotLorryPdf(db, auctionId) {
   drawTopHeader();
 
   let gLot = 0, gBag = 0, gQty = 0, gAmt = 0;
+  // Counter for the per-unique-buyer serial number. Increments once per
+  // buyer block (across both INTER-STATE and INTRA-STATE sections so the
+  // serials run continuously through the report).
+  let buyerSerial = 0;
 
   function emitSection(label, groups) {
     if (!groups.length) return;
@@ -943,7 +962,8 @@ async function buyerLotLorryPdf(db, auctionId) {
     groups.forEach(g => {
       // Reserve enough room for header + at least one row + subtotal
       ensureRoom(BUYER_H + HEAD_H + ROW_H * 2 + 8);
-      drawBuyerHeader(g);
+      buyerSerial += 1;
+      drawBuyerHeader(g, buyerSerial);
       drawColHeader();
       g.lots.sort((a, b) => {
         const na = parseInt(a.lot, 10), nb = parseInt(b.lot, 10);
@@ -994,10 +1014,12 @@ async function buyerLotLorryPdf(db, auctionId) {
   const grandTop = y;
   doc.rect(m, y, usableW, ROW_H + 6).fillAndStroke('#FFF3CD', '#9A6700');
   doc.fillColor('#000').font('Helvetica-Bold').fontSize(10);
-  const gcells = [String(gLot), String(gBag), fmtQty(gQty), 'GRAND TOTAL', fmtMoney(gAmt)];
+  // 6 cols: SL.NO | LOT | BAG | QTY | RATE | AMOUNT
+  // Put count totals in LOT/BAG, "GRAND TOTAL" label in RATE column, amount in AMOUNT.
+  const gcells = ['', String(gLot), String(gBag), fmtQty(gQty), 'GRAND TOTAL', fmtMoney(gAmt)];
+  const galigns = ['center', 'center', 'center', 'right', 'center', 'right'];
   gcells.forEach((v, ci) => {
-    const align = (ci === 0 || ci === 1) ? 'center' : (ci === 3 ? 'center' : 'right');
-    doc.text(v, colX[ci] + 4, y + 6, { width: colW[ci] - 8, align, lineBreak: false });
+    doc.text(v, colX[ci] + 4, y + 6, { width: colW[ci] - 8, align: galigns[ci], lineBreak: false });
   });
   // Vertical separators inside the grand total strip
   for (let ci = 0; ci < colW.length - 1; ci++) {
