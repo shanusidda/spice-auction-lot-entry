@@ -1202,6 +1202,10 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
           <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
           Exports
         </button>
+        <button class="side-item" data-tab="lorry" onclick="go('lorry')">
+          <svg viewBox="0 0 24 24"><path d="M1 3h15v13H1zM16 8h4l3 3v5h-7zM5.5 18.5a2 2 0 1 1-4 0 2 2 0 0 1 4 0zM18.5 18.5a2 2 0 1 1-4 0 2 2 0 0 1 4 0z"/></svg>
+          Lorry
+        </button>
         <button class="side-item" data-tab="tds" onclick="go('tds')">
           <svg viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
           TDS Returns
@@ -1740,6 +1744,67 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px">
           <button class="btn btn-a" onclick="downloadDbf('traders')">Sellers (NAM.DBF)</button>
           <button class="btn btn-a" onclick="downloadDbf('buyers')">Buyers (SBL.DBF)</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- LORRY REPORTS -->
+    <div class="tc" id="tc-lorry">
+      <div class="card">
+        <h2>Lorry Reports
+          <span style="font-weight:400;font-size:12px;color:var(--text3)">Auction-floor reports for the day's trade</span>
+        </h2>
+        <div class="fg" style="max-width:360px"><label>Select Auction</label>
+          <select id="lorry-auction" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px"></select>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin-top:14px">
+          <div style="padding:14px;border:1px solid var(--border);border-radius:10px;background:#fff">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+              <span style="width:32px;height:32px;border-radius:8px;background:var(--spice-saffron-lt);display:inline-flex;align-items:center;justify-content:center;font-size:18px">📜</span>
+              <div>
+                <div style="font-weight:700;color:var(--text);font-size:14px">Lot Slip (Code)</div>
+                <div style="font-size:11px;color:var(--text3)">Per-lot list with bidder code · carbon-copy in PDF</div>
+              </div>
+            </div>
+            <div style="display:flex;gap:6px;margin-top:10px">
+              <button class="btn btn-a" onclick="downloadLorry('lot_slip_code','xlsx')" style="flex:1;padding:7px;font-size:12px">XLSX</button>
+              <button class="btn btn-orange" onclick="downloadLorry('lot_slip_code','pdf')" style="flex:1;padding:7px;font-size:12px">PDF</button>
+            </div>
+          </div>
+
+          <div style="padding:14px;border:1px solid var(--border);border-radius:10px;background:#fff">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+              <span style="width:32px;height:32px;border-radius:8px;background:var(--spice-saffron-lt);display:inline-flex;align-items:center;justify-content:center;font-size:18px">🚚</span>
+              <div>
+                <div style="font-weight:700;color:var(--text);font-size:14px">Truck List</div>
+                <div style="font-size:11px;color:var(--text3)">Buyer-code summary with totals</div>
+              </div>
+            </div>
+            <div style="display:flex;gap:6px;margin-top:10px">
+              <button class="btn btn-a" onclick="downloadLorry('truck_list','xlsx')" style="flex:1;padding:7px;font-size:12px">XLSX</button>
+              <button class="btn btn-orange" onclick="downloadLorry('truck_list','pdf')" style="flex:1;padding:7px;font-size:12px">PDF</button>
+            </div>
+          </div>
+
+          <div style="padding:14px;border:1px solid var(--border);border-radius:10px;background:#fff">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+              <span style="width:32px;height:32px;border-radius:8px;background:var(--spice-saffron-lt);display:inline-flex;align-items:center;justify-content:center;font-size:18px">📋</span>
+              <div>
+                <div style="font-weight:700;color:var(--text);font-size:14px">Buyer Lot Lorry</div>
+                <div style="font-size:11px;color:var(--text3)">Inter/Intra-state grouped buyer detail</div>
+              </div>
+            </div>
+            <div style="display:flex;gap:6px;margin-top:10px">
+              <button class="btn btn-a" onclick="downloadLorry('buyer_lot_lorry','xlsx')" style="flex:1;padding:7px;font-size:12px">XLSX</button>
+              <button class="btn btn-orange" onclick="downloadLorry('buyer_lot_lorry','pdf')" style="flex:1;padding:7px;font-size:12px">PDF</button>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top:14px;padding:10px 12px;background:var(--spice-saffron-lt);border-radius:8px;font-size:12px;color:var(--text2);line-height:1.5">
+          <strong>Note:</strong> All three reports pull live data from the selected auction's lots and the buyers master.
+          The Buyer Lot Lorry report classifies buyers as <strong>Intra-state</strong> when the buyer's state matches the auction state, otherwise <strong>Inter-state</strong>.
         </div>
       </div>
     </div>
@@ -3011,7 +3076,7 @@ function go(tab){
   const el=document.getElementById('tc-'+tab);if(el)el.classList.add('active');
   const loaders={dash:loadStats,settings:loadSettings,users:loadUsers,traders:()=>searchTraders(''),buyers:()=>searchBuyers(''),
     auctions:loadAuctions,lots:loadLotAuctions,invoices:loadInvAuctions,purchases:loadPurAuctions,
-    payments:loadPayAuctions,exports:loadExpAuctions,tds:()=>{},
+    payments:loadPayAuctions,exports:loadExpAuctions,tds:()=>{},lorry:loadLorryAuctions,
     bills:loadBillAuctions,debit:loadDebitNotes,journals:loadJournalDefault};
   if(loaders[tab]){
     try{
@@ -5166,6 +5231,30 @@ function loadExpAuctions(){
   if(dt&&!dt.value)dt.value=today;
 }
 
+// ── Lorry Reports ─────────────────────────────────────────
+function loadLorryAuctions(){
+  fillAucSelect('lorry-auction');
+}
+const LORRY_LABELS={lot_slip_code:'Lot Slip (Code)',truck_list:'Truck List',buyer_lot_lorry:'Buyer Lot Lorry'};
+async function downloadLorry(type,format){
+  format=format||'xlsx';
+  const aid=document.getElementById('lorry-auction')?.value;
+  if(!aid){alert('Select an auction first');return}
+  const label=LORRY_LABELS[type]||type;
+  await withOverlay(`Generating ${label} (${format.toUpperCase()})…`, async () => {
+    const r=await fetch(B+`/api/lorry-reports/${type}/${aid}?format=${format}`,{headers:{'Authorization':'Bearer '+T}});
+    if(!r.ok){
+      let msg='Lorry report failed';
+      try{const e=await r.json();if(e.error)msg=e.error}catch(x){}
+      toast(msg);return;
+    }
+    const blob=await r.blob();
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+    a.download=`${type}_${aid}.${format}`;a.click();
+    URL.revokeObjectURL(a.href);
+  });
+}
+
 // ── DBF Export Helpers ────────────────────────────────────
 async function downloadDbf(type, extraParams={}){
   const qs=new URLSearchParams(extraParams).toString();
@@ -6284,17 +6373,27 @@ async function loadPayments(){
 
 // ── Exports ───────────────────────────────────────────────
 const EXP_LABELS={lot_slip:'Lot Slip',lot_slip_after:'Lot Slip (After)',praman_csv:'e-Trade CSV (Praman)',price_list:'Price List',bank_payment:'Bank Payment (RTGS/NEFT)',
-  pooler_register:'Pooler Register',full_file:'Full File',collection:'Collection/Lorry',dealer_list:'Dealer List',
+  pooler_register:'Pooler Register',full_file:'Full File',collection:'Collection',trade_report:'Trade Report',dealer_list:'Dealer List',
   sales_taxes:'Sales & Taxes',payment:'Payment Summary',tally_purchase:'Tally Purchase'};
 // Export types that only support a specific format (no XLSX/PDF choice).
 // e.g., Praman is a CSV-only upload format for the Praman auction platform.
 const EXP_CSV_ONLY = new Set(['praman_csv']);
+// Full File has too many columns to fit any printable PDF page — only XLSX.
+const EXP_XLSX_ONLY = new Set(['full_file']);
 function renderExportBtns(){document.getElementById('export-btns').innerHTML=Object.entries(EXP_LABELS).map(([k,v])=>{
   if (EXP_CSV_ONLY.has(k)) {
     return `<div style="display:flex;flex-direction:column;gap:4px;padding:8px;border:1px solid var(--border);border-radius:6px;background:#fff">
       <div style="font-weight:600;font-size:13px;color:var(--text)">${v}</div>
       <div style="display:flex;gap:4px">
         <button class="btn btn-a" onclick="exportType('${k}','csv')" style="flex:1;padding:6px 8px;font-size:12px">CSV</button>
+      </div>
+    </div>`;
+  }
+  if (EXP_XLSX_ONLY.has(k)) {
+    return `<div style="display:flex;flex-direction:column;gap:4px;padding:8px;border:1px solid var(--border);border-radius:6px;background:#fff">
+      <div style="font-weight:600;font-size:13px;color:var(--text)">${v}</div>
+      <div style="display:flex;gap:4px">
+        <button class="btn btn-a" onclick="exportType('${k}','xlsx')" style="flex:1;padding:6px 8px;font-size:12px">XLSX</button>
       </div>
     </div>`;
   }

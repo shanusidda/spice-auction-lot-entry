@@ -1,9 +1,68 @@
 /**
  * exports-pdf.js — PDF versions of all XLSX exports
  * Column structures match exports.js exactly, rendered as landscape A4 tables
+ *
+ * Three exports use specialized renderers (in auction-reports.js) instead of
+ * the generic table renderer because their layouts don't fit a flat grid:
+ *   - lot_slip      → carbon-copy slip with empty PRICE column
+ *   - collection    → invoice register grouped by buyer state
+ *   - trade_report  → BUYERS LIST FOR VERIFICATION with state subtotals
+ *
+ * Full File is too wide (27 columns) to render usably in PDF — that one is
+ * XLSX-only. The dispatcher returns null for full_file PDFs; callers should
+ * not request that combination, but if they do, the server returns an error.
  */
 
 const PDFDocument = require('pdfkit');
+const auctionReports = require('./auction-reports');
+
+// Manually truncate `text` to fit `maxWidth` using doc.widthOfString. PDFKit
+// 0.15's `lineBreak: false` + `ellipsis: true` is unreliable for long single
+// tokens — we ellipsize ourselves so multi-word names don't wrap into next row.
+function fitText(doc, text, maxWidth) {
+  const s = String(text == null ? '' : text);
+  if (!s) return '';
+  if (doc.widthOfString(s) <= maxWidth) return s;
+  const ell = '…';
+  const ellW = doc.widthOfString(ell);
+  if (ellW >= maxWidth) return '';
+  let lo = 0, hi = s.length;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (doc.widthOfString(s.slice(0, mid)) + ellW <= maxWidth) lo = mid;
+    else hi = mid - 1;
+  }
+  return s.slice(0, lo).trimEnd() + ell;
+}
+
+// Wrap `text` into one or more lines fitting maxWidth. Breaks on word
+// boundaries; falls back to character-level break for tokens wider than the
+// column. Returns at least one line. Caller must set font/size on doc first.
+function wrapText(doc, text, maxWidth) {
+  const s = String(text == null ? '' : text).trim();
+  if (!s) return [''];
+  if (doc.widthOfString(s) <= maxWidth) return [s];
+  const words = s.split(/\s+/);
+  const lines = [];
+  let cur = '';
+  for (const w of words) {
+    const probe = cur ? cur + ' ' + w : w;
+    if (doc.widthOfString(probe) <= maxWidth) { cur = probe; continue; }
+    if (cur) { lines.push(cur); cur = ''; }
+    if (doc.widthOfString(w) > maxWidth) {
+      let chunk = '';
+      for (const ch of w) {
+        if (doc.widthOfString(chunk + ch) <= maxWidth) chunk += ch;
+        else { if (chunk) lines.push(chunk); chunk = ch; }
+      }
+      cur = chunk;
+    } else {
+      cur = w;
+    }
+  }
+  if (cur) lines.push(cur);
+  return lines.length ? lines : [''];
+}
 
 // ── Generic table-to-PDF renderer ───────────────────────────
 function renderTablePdf({ title, subtitle, columns, rows, totals }) {
@@ -63,6 +122,40 @@ function renderTablePdf({ title, subtitle, columns, rows, totals }) {
     return String(val);
   }
 
+  // Track the top-Y of the table on each page so we can draw vertical column
+  // separators (only inside data-row regions) and an outer border (around the
+  // whole table including the totals strip) once the body section closes.
+  // Without verticals, columns with right-aligned numbers next to left-aligned
+  // text columns look jammed (e.g. PRICE 2163 right-edge sitting next to CODE
+  // RSH left-edge). Without borders the table edges look ragged.
+  let pageTableTop = null;
+
+  // Draw verticals through the data-row region only (header + rows), without
+  // closing the outer border. Caller must still draw the outer border later.
+  function drawDataVerticals() {
+    if (pageTableTop === null) return;
+    const top = pageTableTop, bottom = y;
+    for (let ci = 0; ci < colWidths.length - 1; ci++) {
+      const vx = colX[ci] + colWidths[ci];
+      doc.moveTo(vx, top).lineTo(vx, bottom).lineWidth(0.3).strokeColor('#888').stroke();
+    }
+  }
+
+  // Draw verticals + outer border for the whole table on this page. Used at
+  // page breaks and at the very end of the report (after the totals strip).
+  function closePageBorders(extraBottomY) {
+    if (pageTableTop === null) return;
+    const top = pageTableTop;
+    const bottom = (extraBottomY !== undefined) ? extraBottomY : y;
+    drawDataVerticals();
+    doc.rect(m, top, usableW, bottom - top).lineWidth(0.5).strokeColor('#444').stroke();
+    pageTableTop = null;
+  }
+
+  // Track where the data section ends on the current page so verticals stop
+  // there but the outer border can extend to include the totals strip.
+  let dataBottomY = null;
+
   function drawHeader(firstPage) {
     if (firstPage) {
       doc.font('Helvetica-Bold').fontSize(13).fillColor('#000')
@@ -80,60 +173,102 @@ function renderTablePdf({ title, subtitle, columns, rows, totals }) {
       y = TOP + 20;
     }
 
-    doc.rect(m, y, usableW, HEAD_H).fillAndStroke('#E8E4DD', '#999');
+    // Compute header height by wrapping each header label
+    const HEAD_LINE_H = 10;
+    const HEAD_PAD = 4;
+    doc.font('Helvetica-Bold').fontSize(8);
+    const headerWrapped = columns.map((c, i) => wrapText(doc, c.header, colWidths[i] - 6));
+    const headerLines = Math.max(1, ...headerWrapped.map(ls => ls.length));
+    const headH = headerLines * HEAD_LINE_H + HEAD_PAD * 2;
+
+    pageTableTop = y;  // remember where this page's column-strip starts
+    doc.rect(m, y, usableW, headH).fillAndStroke('#E8E4DD', '#999');
     doc.fillColor('#000').font('Helvetica-Bold').fontSize(8);
     columns.forEach((c, i) => {
-      doc.text(c.header, colX[i] + 3, y + 4, {
-        width: colWidths[i] - 6,
-        align: isNumericCol(c) ? 'right' : 'left',
-        lineBreak: false,
-        ellipsis: true,
+      const lines = headerWrapped[i];
+      lines.forEach((line, li) => {
+        doc.text(line, colX[i] + 3, y + HEAD_PAD + li * HEAD_LINE_H, {
+          width: colWidths[i] - 6,
+          align: isNumericCol(c) ? 'right' : 'left',
+          lineBreak: false,
+        });
       });
     });
-    y += HEAD_H;
+    y += headH;
   }
 
-  function drawRow(row, i) {
-    if (i % 2 === 1) doc.rect(m, y, usableW, ROW_H).fill('#F7F5F2');
+  function drawRow(row, i, rowH, wrapped) {
+    if (i % 2 === 1) doc.rect(m, y, usableW, rowH).fill('#F7F5F2');
     doc.fillColor('#000').font('Helvetica').fontSize(7.5);
+    const LINE_H = 10;
+    const PAD_TOP = 3;
     columns.forEach((c, ci) => {
-      doc.text(fmtCell(row[c.key], c), colX[ci] + 3, y + 3, {
-        width: colWidths[ci] - 6,
-        align: isNumericCol(c) ? 'right' : 'left',
-        lineBreak: false,
-        ellipsis: true,
+      const lines = wrapped[ci];
+      lines.forEach((line, li) => {
+        doc.text(line, colX[ci] + 3, y + PAD_TOP + li * LINE_H, {
+          width: colWidths[ci] - 6,
+          align: isNumericCol(c) ? 'right' : 'left',
+          lineBreak: false,
+        });
       });
     });
-    doc.moveTo(m, y + ROW_H).lineTo(m + usableW, y + ROW_H).lineWidth(0.25).strokeColor('#DDD').stroke();
-    y += ROW_H;
+    doc.moveTo(m, y + rowH).lineTo(m + usableW, y + rowH).lineWidth(0.25).strokeColor('#DDD').stroke();
+    y += rowH;
+  }
+
+  // Pre-measure a row's required height by wrapping each cell.
+  function measureRow(row) {
+    doc.font('Helvetica').fontSize(7.5);
+    const LINE_H = 10;
+    const PAD_TOP = 3, PAD_BOT = 3;
+    const MIN_ROW = 14;
+    const wrapped = columns.map((c, ci) => wrapText(doc, fmtCell(row[c.key], c), colWidths[ci] - 6));
+    const maxLines = Math.max(1, ...wrapped.map(ls => ls.length));
+    const rowH = Math.max(MIN_ROW, maxLines * LINE_H + PAD_TOP + PAD_BOT);
+    return { rowH, wrapped };
   }
 
   drawHeader(true);
 
   rows.forEach((row, i) => {
-    if (y + ROW_H > pageH - m - (totals ? ROW_H + 12 : 12)) {
+    const { rowH, wrapped } = measureRow(row);
+    if (y + rowH > pageH - m - (totals ? 28 : 12)) {
+      closePageBorders();
       doc.addPage();
       drawHeader(false);
     }
-    drawRow(row, i);
+    drawRow(row, i, rowH, wrapped);
   });
 
   if (totals) {
-    if (y + ROW_H + 12 > pageH - m) { doc.addPage(); drawHeader(false); }
+    if (y + 28 > pageH - m) { closePageBorders(); doc.addPage(); drawHeader(false); }
+    // Draw verticals through the data-row region only — they must stop before
+    // the totals strip so column dividers don't cut through it.
+    drawDataVerticals();
     y += 2;
     doc.rect(m, y, usableW, ROW_H + 2).fillAndStroke('#FFF3CD', '#E0B020');
     doc.fillColor('#000').font('Helvetica-Bold').fontSize(8);
     columns.forEach((c, ci) => {
       const val = totals[c.key];
       if (val === undefined || val === null || val === '') return;
-      doc.text(fmtCell(val, c), colX[ci] + 3, y + 4, {
+      const fitted = fitText(doc, fmtCell(val, c), colWidths[ci] - 6);
+      doc.text(fitted, colX[ci] + 3, y + 4, {
         width: colWidths[ci] - 6,
         align: isNumericCol(c) ? 'right' : 'left',
         lineBreak: false,
-        ellipsis: true,
       });
     });
     y += ROW_H + 2;
+    // Outer border now encloses data + totals; the verticals were drawn
+    // already so closePageBorders should not draw them again. Inline the
+    // outer border draw and reset pageTableTop.
+    if (pageTableTop !== null) {
+      doc.rect(m, pageTableTop, usableW, y - pageTableTop).lineWidth(0.5).strokeColor('#444').stroke();
+      pageTableTop = null;
+    }
+  } else {
+    // No totals — close verticals + outer border in one go on the final page
+    closePageBorders();
   }
 
   doc.fillColor('#888').font('Helvetica').fontSize(7)
@@ -182,15 +317,18 @@ const COLS = {
     { header: 'BIDDER', key: 'bidder', width: 20 },
   ],
   bank_payment: [
-    { header: 'TransactionType', key: 'transactionType', width: 16 },
-    { header: 'BeneIFSCode', key: 'ifsc', width: 14 },
-    { header: 'BeneAcctNo', key: 'accountNo', width: 20 },
-    { header: 'BeneName', key: 'beneficiaryName', width: 30 },
-    { header: 'BeneAddLine1', key: 'address1', width: 30 },
-    { header: 'BeneAddLine2', key: 'address2', width: 20 },
-    { header: 'BeneAddLine3', key: 'pin', width: 10 },
-    { header: 'Amount', key: 'amount', width: 14 },
-    { header: 'SendertoRcvrInfo', key: 'remarks', width: 50 },
+    // PDF-only display headers — shorter so they fit. The XLSX export in
+    // exports.js still uses the bank's required RTGS/NEFT field names
+    // (TransactionType, BeneIFSCode, BeneAcctNo, BeneAddLine1/2/3, etc.).
+    { header: 'TYPE',     key: 'transactionType', width: 8  },
+    { header: 'IFSC',     key: 'ifsc',            width: 14 },
+    { header: 'A/C NO',   key: 'accountNo',       width: 18 },
+    { header: 'NAME',     key: 'beneficiaryName', width: 24 },
+    { header: 'ADDRESS',  key: 'address1',        width: 22 },
+    { header: 'CITY',     key: 'address2',        width: 14 },
+    { header: 'PIN',      key: 'pin',             width: 8  },
+    { header: 'AMOUNT',   key: 'amount',          width: 14 },
+    { header: 'REMARKS',  key: 'remarks',         width: 30 },
   ],
   pooler_register: [
     { header: 'STATE', key: 'state', width: 12 },
@@ -394,6 +532,20 @@ async function getRowsForType(db, type, auctionId, cfg, extra) {
 }
 
 async function exportPdf(db, type, auctionId, cfg, extra = {}) {
+  // Specialized renderers — these don't use the generic table layout.
+  if (type === 'lot_slip') {
+    return auctionReports.lotSlipPdf(db, auctionId, cfg, extra);
+  }
+  if (type === 'collection') {
+    return auctionReports.collectionPdf(db, auctionId);
+  }
+  if (type === 'trade_report') {
+    return auctionReports.tradeReportPdf(db, auctionId);
+  }
+  if (type === 'full_file') {
+    throw new Error('Full File is XLSX-only — PDF version is not supported (too many columns to fit on a page).');
+  }
+
   const columns = COLS[type];
   if (!columns) throw new Error(`No PDF column def for type: ${type}`);
 

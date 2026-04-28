@@ -12,6 +12,7 @@ const { generatePurchaseInvoicePDF, generateCropReceiptPDF, generateAgriBillPDF,
 const { EXPORT_TYPES } = require('./exports');
 const { exportPdf: exportAnyPdf } = require('./exports-pdf');
 const { DBF_EXPORTS } = require('./dbf-exports');
+const { REPORTS: LORRY_REPORTS } = require('./lorry-reports');
 
 const app = express();
 app.use(express.json({ limit: '50mb' }));
@@ -2788,6 +2789,32 @@ app.get('/api/exports/tds-return', requireExport, async (req, res) => {
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.setHeader('Content-Disposition', 'attachment; filename="TDSReturn.xlsx"');
   res.send(Buffer.from(buffer));
+});
+
+// ══════════════════════════════════════════════════════════════
+// LORRY REPORTS (Lot Slip Code / Truck List / Buyer Lot Lorry)
+// ══════════════════════════════════════════════════════════════
+app.get('/api/lorry-reports/:type/:auctionId', requireExport, async (req, res) => {
+  const { type, auctionId } = req.params;
+  const format = (req.query.format || 'xlsx').toLowerCase();
+  const def = LORRY_REPORTS[type];
+  if (!def) return res.status(400).json({ error: 'Unknown lorry report', available: Object.keys(LORRY_REPORTS) });
+  try {
+    const db = getDb();
+    if (format === 'pdf') {
+      const buf = await def.pdf(db, auctionId);
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${def.name}_${auctionId}.pdf"`);
+      return res.send(buf);
+    }
+    const buf = await def.xlsx(db, auctionId);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${def.name}_${auctionId}.xlsx"`);
+    return res.send(Buffer.from(buf));
+  } catch (e) {
+    console.error('lorry-reports error:', e);
+    return res.status(500).json({ error: e.message });
+  }
 });
 
 // ══════════════════════════════════════════════════════════════
