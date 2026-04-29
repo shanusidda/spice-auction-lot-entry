@@ -149,6 +149,18 @@ const cfgNum = (cfg, key, def = 0) => {
   return isFinite(v) ? v : def;
 };
 
+// SQL fragments for filtering lot rows by whether the seller has a GSTIN.
+// The `cr` column may carry either format:
+//   • Legacy UI:  "GSTIN.<15-char-gstin>"  → starts with "GSTIN" (uppercase)
+//   • Bulk import: bare 15-char GSTIN     → starts with 2 digits
+// Both need to be classified the same way; use these fragments everywhere
+// instead of bare LIKE clauses to keep the rules consistent.
+//
+//   HAS_GSTIN_SQL — match registered-dealer rows (RD vouchers, RD ledgers)
+//   NO_GSTIN_SQL  — match agriculturist rows  (URD vouchers, URD ledgers)
+const HAS_GSTIN_SQL = `(UPPER(COALESCE(cr,'')) LIKE 'GSTIN%' OR cr GLOB '[0-9][0-9]*')`;
+const NO_GSTIN_SQL  = `(cr IS NULL OR cr = '' OR (UPPER(cr) NOT LIKE 'GSTIN%' AND cr NOT GLOB '[0-9][0-9]*'))`;
+
 // =====================================================================
 // 1. SALES (registered dealer sales — VBA generXML)
 // =====================================================================
@@ -1065,12 +1077,14 @@ function buildSalesRows(db, auctionId, cfg) {
  * RD = gstin starts with "GSTIN." marker (matches the macro convention).
  */
 function buildRDPurchaseRows(db, auctionId, cfg) {
-  // Pull from purchases table (one row per voucher already aggregated)
+  // Pull from purchases table (one row per voucher already aggregated).
+  // Accept both "GSTIN.<gstin>" (legacy UI) and bare 15-char GSTIN (Excel
+  // import) — both forms identify a registered dealer.
   const stmt = db.prepare(`
     SELECT p.*
     FROM purchases p
     WHERE p.auction_id = ?
-      AND UPPER(p.gstin) LIKE 'GSTIN.%'
+      AND (UPPER(COALESCE(p.gstin,'')) LIKE 'GSTIN%' OR p.gstin GLOB '[0-9][0-9]*')
     ORDER BY p.invo, p.id
   `);
   const raw = stmt.all(auctionId);
@@ -1132,6 +1146,8 @@ function buildURDPurchaseRows(db, auctionId, cfg) {
   // gets the right view without recomputing or flipping settings.
   // Falls back to the legacy active-view columns for any rows that
   // pre-date the dual-storage migration (isp_puramt = 0).
+  // The exclusion uses NO_GSTIN_SQL so we accept both prefixed ("GSTIN.<gstin>")
+  // and bare 15-char GSTINs as registered dealers (and exclude both from URD).
   const lotsStmt = db.prepare(`
     SELECT lot_no AS lot, bags AS bag,
            CASE WHEN isp_puramt > 0 THEN isp_pqty   ELSE pqty   END AS qty,
@@ -1141,7 +1157,7 @@ function buildURDPurchaseRows(db, auctionId, cfg) {
     FROM lots
     WHERE auction_id = ? AND name = ?
       AND (isp_puramt > 0 OR puramt > 0)
-      AND (cr = '' OR cr IS NULL OR cr NOT LIKE 'GSTIN.%')
+      AND ${NO_GSTIN_SQL}
     ORDER BY lot_no
   `);
 
@@ -1471,7 +1487,8 @@ function buildSalesPartyLedgerRows(db, auctionId, cfg, opts = {}) {
 
 /**
  * Build RD-purchase party ledger rows (mirrors generLEDGERD).
- * One row per distinct trader with `cr LIKE 'GSTIN.%'` in the auction's lots.
+ * One row per distinct trader with a GSTIN (either "GSTIN.<gstin>" or
+ * bare 15-char) in the auction's lots.
  */
 function buildRDPartyLedgerRows(db, auctionId, cfg, opts = {}) {
   const todayDate = toTallyDate(new Date());
@@ -1487,7 +1504,7 @@ function buildRDPartyLedgerRows(db, auctionId, cfg, opts = {}) {
   let sql = `
     SELECT DISTINCT name, padd, ppla, ppin, pstate, cr, pan
     FROM lots
-    WHERE auction_id = ? AND UPPER(cr) LIKE 'GSTIN.%'
+    WHERE auction_id = ? AND ${HAS_GSTIN_SQL}
   `;
   const params = [auctionId];
   if (opts.partyName) {
@@ -1511,7 +1528,7 @@ function buildURDPartyLedgerRows(db, auctionId, cfg, opts = {}) {
   let sql = `
     SELECT DISTINCT name, padd, ppla, ppin, pstate, pan
     FROM lots
-    WHERE auction_id = ? AND (cr = '' OR cr IS NULL OR UPPER(cr) NOT LIKE 'GSTIN.%')
+    WHERE auction_id = ? AND ${NO_GSTIN_SQL}
       AND name != ''
   `;
   const params = [auctionId];
@@ -1547,24 +1564,26 @@ function listAuctionParties(db, auctionId) {
     out.push({ kind: 'sales', name: b.name || '', gstin: b.gstin || '', place: b.place || '' });
   }
 
-  // RD purchase parties — traders with GSTIN in lots
+  // RD purchase parties — traders with GSTIN in lots (either format)
   const rd = db.prepare(`
     SELECT DISTINCT name, ppla AS place, cr
     FROM lots
-    WHERE auction_id = ? AND UPPER(cr) LIKE 'GSTIN.%' AND name != ''
+    WHERE auction_id = ? AND ${HAS_GSTIN_SQL} AND name != ''
     ORDER BY name
   `).all(auctionId);
   for (const t of rd) {
-    const fullGstin = String(t.cr || '');
-    const gstin = fullGstin.toUpperCase().startsWith('GST') ? fullGstin.slice(6, 21) : fullGstin;
+    // Strip "GSTIN." prefix if present, otherwise the value already IS the
+    // bare 15-char GSTIN. Handles both formats produced by UI vs Excel import.
+    const raw = String(t.cr || '').trim();
+    const gstin = raw.toUpperCase().startsWith('GSTIN.') ? raw.slice(6) : raw;
     out.push({ kind: 'rd_purchase', name: t.name || '', gstin, place: t.place || '' });
   }
 
-  // URD purchase parties — agriculturists
+  // URD purchase parties — agriculturists (no GSTIN, either form)
   const urd = db.prepare(`
     SELECT DISTINCT name, ppla AS place
     FROM lots
-    WHERE auction_id = ? AND (cr = '' OR cr IS NULL OR UPPER(cr) NOT LIKE 'GSTIN.%') AND name != ''
+    WHERE auction_id = ? AND ${NO_GSTIN_SQL} AND name != ''
     ORDER BY name
   `).all(auctionId);
   for (const t of urd) {

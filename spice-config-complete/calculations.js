@@ -6,6 +6,39 @@
 const { getSettingsFlat, getGSTRates } = require('./company-config');
 
 /**
+ * Extract the 2-digit state code from a seller's `cr` field.
+ *
+ * The `cr` column historically stored "GSTIN.<15-char-gstin>" (where the
+ * "GSTIN." prefix was added by the UI for sellers). Some import paths
+ * (Excel seller import, GST portal lookup, edge-case manual entry) end up
+ * with a bare GSTIN without the prefix. Both forms should be supported,
+ * because the state code only depends on the first 2 chars of the GSTIN
+ * itself, not on the prefix.
+ *
+ * Logic:
+ *   "GSTIN.32AAACG1234F1Z2" → strip "GSTIN." prefix → first 2 chars → "32"
+ *   "32AAACG1234F1Z2"       → already bare         → first 2 chars → "32"
+ *   ""  / null / undefined  → ""                                    (no GSTIN)
+ *   "CR.001" or other       → ""                                    (not a GSTIN)
+ *
+ * Only a value that looks like a valid 15-char GSTIN starting with 2 digits
+ * yields a state code; anything else returns "" (which means no intra-match,
+ * so IGST applies — safe default for non-GSTIN sellers).
+ */
+function gstinStateCode(cr) {
+  if (!cr) return '';
+  let s = String(cr).trim().toUpperCase();
+  if (s.startsWith('GSTIN.')) s = s.substring(6);
+  else if (s.startsWith('GSTIN')) s = s.substring(5);  // e.g. "GSTIN<no-dot>33AAA..."
+  // GSTIN format: 2 digits + 5 letters + 4 digits + 1 letter + 1 digit + Z + 1 alphanumeric
+  // We only need the first 2 chars, but verify they're digits.
+  if (s.length < 2) return '';
+  const head = s.substring(0, 2);
+  if (!/^\d{2}$/.test(head)) return '';
+  return head;
+}
+
+/**
  * Calculate purchase amounts for a lot (after trade)
  * This is what GENERATE.PRG does — fills pqty, prate, puramt, com, gst, etc.
  */
@@ -110,8 +143,9 @@ function calculateLot(lot, cfg) {
   }
 
   // Intra/inter-state detection (shared between both modes):
-  //   Seller's GSTIN state code (chars 6-7 of lot.cr "GSTIN XX...") vs company's state code
-  const sellerGstState = lot.cr ? lot.cr.substring(6, 8) : '';
+  //   Seller's GSTIN state code (first 2 digits) vs company's state code.
+  //   Uses gstinStateCode() to handle both "GSTIN.<gstin>" and bare "<gstin>".
+  const sellerGstState = gstinStateCode(lot.cr);
   const companyGstState = cfg.business_state === 'KERALA' ? '32' : '33';
   const isIntra = (sellerGstState === companyGstState);
 
@@ -346,8 +380,14 @@ function buildSalesInvoice(db, auctionId, buyerCode, saleType, cfg) {
  * Aggregates lots by seller for a given auction (registered dealers only)
  */
 function buildPurchaseInvoice(db, auctionId, sellerName, cfg) {
+  // A lot qualifies for a Purchase Invoice if it has a GSTIN-bearing seller —
+  // i.e. cr is either "GSTIN.<15-char>" (legacy UI format) or a bare 15-char
+  // GSTIN starting with 2 digits (Excel import format). We accept both.
   const lots = db.all(
-    `SELECT * FROM lots WHERE auction_id = ? AND name = ? AND cr LIKE 'GSTIN%' AND amount > 0 ORDER BY lot_no`,
+    `SELECT * FROM lots
+     WHERE auction_id = ? AND name = ? AND amount > 0
+       AND (UPPER(cr) LIKE 'GSTIN%' OR cr GLOB '[0-9][0-9]*')
+     ORDER BY lot_no`,
     [auctionId, sellerName]
   );
   
@@ -360,7 +400,7 @@ function buildPurchaseInvoice(db, auctionId, sellerName, cfg) {
   const lineItems = [];
 
   for (const lot of lots) {
-    const sellerState = lot.cr ? lot.cr.substring(6, 8) : '';
+    const sellerState = gstinStateCode(lot.cr);
     const isInter = sellerState !== companyState;
     const puramt = lot.puramt || 0;
 
@@ -383,7 +423,7 @@ function buildPurchaseInvoice(db, auctionId, sellerName, cfg) {
   }
 
   const firstLot = lots[0];
-  const sellerState = firstLot.cr ? firstLot.cr.substring(6, 8) : '';
+  const sellerState = gstinStateCode(firstLot.cr);
   const isInter = sellerState !== companyState;
 
   let totalCgst = 0, totalSgst = 0, totalIgst = 0;
@@ -394,9 +434,17 @@ function buildPurchaseInvoice(db, auctionId, sellerName, cfg) {
   const grandTotal = Math.round(totalBeforeRound);
 
   // TDS calculation
+  // The purchases table stores the bare GSTIN under `gstin`, so we strip the
+  // "GSTIN." prefix from cr before comparing. gstinBare() handles both
+  // prefixed ("GSTIN.32...") and bare ("32...") inputs.
+  const sellerGstinBare = (() => {
+    if (!firstLot.cr) return '';
+    const s = String(firstLot.cr).trim().toUpperCase();
+    return s.startsWith('GSTIN.') ? s.substring(6) : s;
+  })();
   const priorPurchases = db.get(
     `SELECT COALESCE(SUM(total),0) as total FROM purchases WHERE gstin = ? AND date >= ?`,
-    [firstLot.cr ? firstLot.cr.substring(6) : '', cfg.season_start || '2026-04-01']
+    [sellerGstinBare, cfg.season_start || '2026-04-01']
   );
   const tdsAmount = cfg.flag_tds_purchase 
     ? calculateTDS(cfg.flag_wgst ? grandTotal : totalPuramt, priorPurchases ? priorPurchases.total : 0, cfg)
@@ -486,7 +534,8 @@ function getBankPaymentData(db, auctionId, cfg) {
     FROM lots l
     LEFT JOIN traders t ON t.name = l.name AND t.cr = l.cr
     WHERE l.auction_id = ? AND l.amount > 0 
-      AND l.cr NOT LIKE 'GSTIN.%'
+      AND UPPER(COALESCE(l.cr,'')) NOT LIKE 'GSTIN%'
+      AND l.cr NOT GLOB '[0-9][0-9]*'
       AND (l.paid IS NULL OR l.paid = '')
     GROUP BY l.name, l.cr
     ORDER BY l.state, l.name`,
@@ -612,11 +661,15 @@ function buildAgriBill(db, auctionId, sellerName, cfg) {
  * (sellers without GSTIN who have lots with amount > 0)
  */
 function listAgriSellers(db, auctionId) {
+  // An "agri seller" is one without a GSTIN. Reject both prefixed
+  // ("GSTIN.<gstin>") and bare ("<gstin>") forms — anything else (empty,
+  // CR codes, plain text) qualifies.
   return db.all(
     `SELECT name, COUNT(*) as lot_count, SUM(qty) as total_qty, SUM(amount) as total_amount
      FROM lots 
      WHERE auction_id = ? 
-       AND (cr IS NULL OR cr = '' OR UPPER(cr) NOT LIKE 'GSTIN%')
+       AND (cr IS NULL OR cr = ''
+            OR (UPPER(cr) NOT LIKE 'GSTIN%' AND cr NOT GLOB '[0-9][0-9]*'))
        AND amount > 0
      GROUP BY name
      ORDER BY name`,
@@ -713,4 +766,5 @@ module.exports = {
   getTDSReturnData,
   getSalesJournal,
   getPurchaseJournal,
+  gstinStateCode,
 };
