@@ -404,6 +404,23 @@ async function initDb() {
     // the ISP invoice number, but `lots.asp_invo` keeps the original ASP
     // ref. This lets the sales list show both numbers side-by-side.
     "ALTER TABLE lots ADD COLUMN asp_invo TEXT DEFAULT ''",
+    // ── Dual-view planter calculation columns ─────────────────
+    // calculateLot() chooses ISP vs ASP rules based on cfg.business_state,
+    // then writes the active view into pqty/prate/puramt. The Tally URD
+    // voucher needs ISP values regardless of which mode dad is currently in,
+    // so we now ALWAYS persist BOTH calculations on every save:
+    //   isp_pqty/isp_prate/isp_puramt → planter side as ISP would compute
+    //   asp_pqty/asp_prate/asp_puramt → planter side as ASP would compute
+    // The legacy pqty/prate/puramt columns continue to mirror whichever
+    // matches the current business_state, so the existing UI / reports /
+    // exports keep working unchanged. Reports that need a specific view
+    // (like the URD Tally voucher) read the prefixed columns directly.
+    'ALTER TABLE lots ADD COLUMN isp_pqty REAL DEFAULT 0',
+    'ALTER TABLE lots ADD COLUMN isp_prate REAL DEFAULT 0',
+    'ALTER TABLE lots ADD COLUMN isp_puramt REAL DEFAULT 0',
+    'ALTER TABLE lots ADD COLUMN asp_pqty REAL DEFAULT 0',
+    'ALTER TABLE lots ADD COLUMN asp_prate REAL DEFAULT 0',
+    'ALTER TABLE lots ADD COLUMN asp_puramt REAL DEFAULT 0',
   ];
   for (const m of migrations) {
     try { wrapped.exec(m); console.log('Migration applied:', m); }

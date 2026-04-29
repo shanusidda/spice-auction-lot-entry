@@ -21,13 +21,73 @@ function calculateLot(lot, cfg) {
   const sampleRefundKg = (cfg.refund != null && cfg.refund !== '') ? Number(cfg.refund) : (lot.refud || 0);
   result.pqty = (lot.qty || 0) + (Number(sampleRefundKg) || 0);
 
-  // Purchase rate based on business mode
+  // ── Compute planter-side numbers for BOTH ISP and ASP views ────────
+  // Refer to lot fields directly; doesn't depend on cfg.business_state.
+  // Returns { pqty, prate, puramt } — the legacy active-view trio.
+  // Used both to populate the active-view columns (legacy compat) and
+  // the new isp_*/asp_* columns (Option B dual-storage).
+  function planterCalc(stateName) {
+    const isKerala = stateName === 'KERALA';
+    const pqty = (lot.qty || 0) + (Number(sampleRefundKg) || 0);
+    const gradeStr = String(lot.grade || '').trim();
+    let prate, puramt;
+    if (cfg.business_mode === 'e-Auction') {
+      // e-Auction: rate = lot.price; puramt = lot.amount - commission - handling.
+      // These numbers are state-agnostic by design (commission and handling
+      // are computed once in the main flow below). For dual-view storage
+      // both ISP and ASP currently get the same values; if rules ever
+      // diverge per state in e-Auction mode, fork here.
+      const sbRefund  = Number(cfg.sb_refund) || 0;
+      const commPct   = Number(cfg.commission) || 0;
+      const handlingPct = Number(cfg.hpc) || 0;
+      const refundAmt = Math.round((lot.price || 0) * sbRefund * 100) / 100;
+      const commAmt   = Math.round((((lot.amount || 0) + refundAmt) * commPct / 100) * 100) / 100;
+      const handling  = Math.round(commAmt * handlingPct / 100 * 100) / 100;
+      prate = lot.price || 0;
+      puramt = (lot.amount || 0) - commAmt - handling;
+    } else {
+      // e-Trade: deduction-based, with different deduction sources per state.
+      //   ISP (TN)  → cfg.deduction1 / cfg.deduction2
+      //   ASP (KL)  → cfg.isp_profit_pooler / cfg.isp_profit_dealer
+      //              (margin ISP earns on the ASP→ISP internal transfer)
+      let deduction;
+      if (isKerala) {
+        deduction = (gradeStr === '2')
+          ? Number(cfg.isp_profit_dealer || 0)
+          : Number(cfg.isp_profit_pooler || 0);
+      } else {
+        deduction = (gradeStr === '2')
+          ? Number(cfg.deduction2 || 0)
+          : Number(cfg.deduction1 || 0);
+      }
+      const rawRate = (lot.price || 0) * (1 - deduction / 100);
+      prate = Math.round(rawRate);
+      // PurAmt formula:
+      //   ASP (Kerala) → Qty × P_Rate    (sample refund EXCLUDED — inter-company transfer)
+      //   ISP (TN)     → P_Qty × P_Rate  (sample refund INCLUDED — direct purchase)
+      const puramtQty = isKerala ? (lot.qty || 0) : pqty;
+      puramt = Math.round(puramtQty * prate * 100) / 100;
+    }
+    return { pqty, prate, puramt };
+  }
+
+  // Compute both views and stash them in the result for callers to persist.
+  // The dual-storage columns let the URD voucher (and future ISP-only or
+  // ASP-only reports) read the right values without flipping business_state.
+  const ispView = planterCalc('TAMIL NADU');
+  const aspView = planterCalc('KERALA');
+  result.isp_pqty = ispView.pqty;
+  result.isp_prate = ispView.prate;
+  result.isp_puramt = ispView.puramt;
+  result.asp_pqty = aspView.pqty;
+  result.asp_prate = aspView.prate;
+  result.asp_puramt = aspView.puramt;
+
+  // Active-view legacy fields: pqty/prate/puramt mirror whichever set
+  // matches the current cfg.business_state, so existing readers (Lots tab,
+  // reports, e-Trade calculations downstream) keep working unchanged.
   if (cfg.business_mode === 'e-Auction') {
-    // e-Auction (new spec — commission agent model):
-    //   Refund     = Price × SB Sample Refund (Kgs)        [stored in `refund` column]
-    //   Commission = (Amount + Refund) × commission%        [stored in `com` column]
-    //   Handling   = Commission × hpc%  (Handling % from Rates & Charges) [stored in `sertax`]
-    //   GST (CGST+SGST intra, IGST inter) on (Commission + Handling) using Service Rate
+    // e-Auction: same values for both views currently
     const sbRefund  = Number(cfg.sb_refund) || 0;
     const commPct   = Number(cfg.commission) || 0;
     const handlingPct = Number(cfg.hpc) || 0;
@@ -37,38 +97,14 @@ function calculateLot(lot, cfg) {
     result.refund = refundAmt;
     result.com    = commAmt;
     result.sertax = handling;
-    result.prate  = lot.price;
-    result.puramt = lot.amount - result.com - result.sertax;
+    result.prate  = ispView.prate;       // same as aspView.prate in e-Auction
+    result.puramt = ispView.puramt;
   } else {
-    // e-Trade: deduction-based
-    //   grade 1 (pooler)  → deduction1  (ISPL / TN flow)
-    //   grade 2 (dealer)  → deduction2
-    //
-    // KERALA + e-Trade special case: invoices are issued by ASP (sister
-    // company in Kerala). P_Rate here uses ISP Profit Ratio (Pooler/Dealer),
-    // which represent the margin ISP earns on the ASP→ISP internal transfer.
-    // Additionally, PurAmt for ASP uses QTY (not P_Qty) because Sample Refund
-    // doesn't apply to inter-company transfers.
-    const gradeStr = String(lot.grade || '').trim();
+    // e-Trade: pick whichever view matches active business_state
     const isKerala = (String(cfg.business_state || '').toUpperCase() === 'KERALA');
-    let deduction;
-    if (isKerala) {
-      deduction = (gradeStr === '2')
-        ? Number(cfg.isp_profit_dealer || 0)
-        : Number(cfg.isp_profit_pooler || 0);
-    } else {
-      deduction = (gradeStr === '2')
-        ? Number(cfg.deduction2 || 0)
-        : Number(cfg.deduction1 || 0);
-    }
-    const rawRate = (lot.price || 0) * (1 - deduction / 100);
-    // Round to nearest rupee (half-up)
-    result.prate = Math.round(rawRate);
-    // PurAmt:
-    //   ASP (Kerala) → Qty × P_Rate         (sample refund excluded)
-    //   ISP (TN)     → P_Qty × P_Rate       (P_Qty = Qty + Sample Refund)
-    const puramtQty = isKerala ? (lot.qty || 0) : result.pqty;
-    result.puramt = Math.round(puramtQty * result.prate * 100) / 100;
+    const active = isKerala ? aspView : ispView;
+    result.prate = active.prate;
+    result.puramt = active.puramt;
     result.com = 0;
     result.sertax = 0;
   }

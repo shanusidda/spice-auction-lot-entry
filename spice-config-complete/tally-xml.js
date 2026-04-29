@@ -1124,19 +1124,30 @@ function buildURDPurchaseRows(db, auctionId, cfg) {
   `);
   const raw = stmt.all(auctionId);
 
-  // Lots for each bill — match by name + auction
+  // Read ISP planter values directly from the dedicated columns. These are
+  // populated by calculateLot() on every save (regardless of which
+  // business_state mode dad is currently in), so the URD voucher always
+  // gets the right view without recomputing or flipping settings.
+  // Falls back to the legacy active-view columns for any rows that
+  // pre-date the dual-storage migration (isp_puramt = 0).
   const lotsStmt = db.prepare(`
-    SELECT lot_no AS lot, bags AS bag, pqty AS qty, prate AS rate,
-           puramt AS amount, bilamt
+    SELECT lot_no AS lot, bags AS bag,
+           CASE WHEN isp_puramt > 0 THEN isp_pqty   ELSE pqty   END AS qty,
+           CASE WHEN isp_puramt > 0 THEN isp_prate  ELSE prate  END AS rate,
+           CASE WHEN isp_puramt > 0 THEN isp_puramt ELSE puramt END AS amount,
+           bilamt
     FROM lots
-    WHERE auction_id = ? AND name = ? AND puramt > 0 AND (cr = '' OR cr IS NULL OR cr NOT LIKE 'GSTIN.%')
+    WHERE auction_id = ? AND name = ?
+      AND (isp_puramt > 0 OR puramt > 0)
+      AND (cr = '' OR cr IS NULL OR cr NOT LIKE 'GSTIN.%')
     ORDER BY lot_no
   `);
 
   return raw.map((b) => {
     const lots = lotsStmt.all(auctionId, b.name).map(l => ({
-      lot: l.lot, bag: l.bag, qty: l.qty, rate: l.rate,
-      amount: l.amount, bilamt: l.bilamt || l.amount,
+      lot: l.lot, bag: l.bag,
+      qty: r2(l.qty), rate: r2(l.rate), amount: r2(l.amount),
+      bilamt: r2(l.bilamt || l.amount),
     }));
     const qtytot = lots.reduce((s, l) => s + Number(l.qty || 0), 0);
     const amounttot = lots.reduce((s, l) => s + Number(l.amount || 0), 0);
@@ -1151,8 +1162,11 @@ function buildURDPurchaseRows(db, auctionId, cfg) {
       lots,
       qtytot: r2(qtytot),
       amounttot: r2(amounttot),
-      bilamttot: r2(bilamttot || b.net),
-      total: b.net,
+      bilamttot: r2(bilamttot),
+      // Voucher total = sum(isp_puramt). Refunds and commissions get
+      // emitted as separate ledger entries inside the voucher, so they
+      // are NOT subtracted from the voucher total. Matches the macro.
+      total: r2(amounttot),
       voucherNum: String(b.bil),
     };
   });
