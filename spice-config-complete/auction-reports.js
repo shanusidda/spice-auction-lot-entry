@@ -13,22 +13,14 @@
 
 const ExcelJS = require('exceljs');
 const PDFDocument = require('pdfkit');
+const {
+  fmtMoney, fmtQty, fmtPrice,
+  getCompanyHeader, drawCompanyHeader,
+} = require('./report-formatters');
 
 // ── Number formatting ────────────────────────────────────────
-function fmtMoney(n) {
-  const num = Number(n) || 0;
-  const fixed = num.toFixed(2);
-  const [intPart, decPart] = fixed.split('.');
-  const sign = intPart.startsWith('-') ? '-' : '';
-  const digits = sign ? intPart.slice(1) : intPart;
-  if (digits.length <= 3) return `${sign}${digits}.${decPart}`;
-  const last3 = digits.slice(-3);
-  const rest  = digits.slice(0, -3);
-  const restGrouped = rest.replace(/\B(?=(\d{2})+(?!\d))/g, ',');
-  return `${sign}${restGrouped},${last3}.${decPart}`;
-}
-function fmtQty(n)  { return (Number(n) || 0).toFixed(3); }
-function fmtPrice(n){ return (Number(n) || 0).toFixed(2); }
+// fmtMoney / fmtQty / fmtPrice come from report-formatters.js (Indian comma
+// grouping; 2 decimals for rupees, 3 for kilos).
 function fmtDateDMY(iso) {
   if (!iso) return '';
   const s = String(iso);
@@ -158,14 +150,23 @@ async function lotSlipPdf(db, auctionId, _cfg, extra) {
   const ROWS_PER_HALF = Math.floor((BODY_MAX_Y - BODY_TOP - HEAD_H) / ROW_H);
   const totalPages = Math.max(1, Math.ceil(rows.length / ROWS_PER_HALF));
 
+  // Resolve company branding once. The lot-slip carbon-copy halves are
+  // narrow, so the brand band uses a small (22pt) logo and skips the
+  // multi-line address — only the company name fits.
+  const companyHeader = getCompanyHeader(db);
+
   function drawHalfHeader(xOrigin, page) {
-    doc.font('Helvetica-Bold').fontSize(11).fillColor('#000')
-       .text('IDEAL SPICES PRIVATE LIMITED', xOrigin, m, { width: halfW, align: 'center' });
+    // Compact company brand band (no title/meta — too narrow for three cols).
+    const afterY = drawCompanyHeader(doc, companyHeader, {
+      x: xOrigin, y: m, width: halfW,
+      logoH: 22, logoW: 22, showAddress: false,
+    });
+    // Page / e-TRADE / Date metadata stacks beneath the brand band.
     doc.font('Helvetica').fontSize(8)
-       .text(`Page: ${page}`, xOrigin, m + 14, { width: halfW, align: 'right' });
+       .text(`Page: ${page}`, xOrigin, afterY, { width: halfW, align: 'right' });
     doc.font('Helvetica-Bold').fontSize(9)
-       .text(`e-TRADE No:${auction.ano}`, xOrigin, m + 26, { width: halfW / 2, align: 'left' });
-    doc.text(`Date:${fmtDateDMY(auction.date)}`, xOrigin + halfW / 2, m + 26, { width: halfW / 2, align: 'right' });
+       .text(`e-TRADE No:${auction.ano}`, xOrigin, afterY + 12, { width: halfW / 2, align: 'left' });
+    doc.text(`Date:${fmtDateDMY(auction.date)}`, xOrigin + halfW / 2, afterY + 12, { width: halfW / 2, align: 'right' });
 
     const hy = BODY_TOP;
     doc.rect(xOrigin, hy, halfW, HEAD_H).fillAndStroke('#E8E4DD', '#444');
@@ -452,16 +453,22 @@ async function collectionPdf(db, auctionId) {
     curSegStart = null;
   }
 
+  // Resolve company branding once (logo + name + address) for use across pages
+  const companyHeader = getCompanyHeader(db);
+
   function drawTopHeader() {
-    doc.font('Helvetica-Bold').fontSize(13).fillColor('#000')
-       .text('IDEAL SPICES PRIVATE LIMITED', m, m, { width: usableW, align: 'center' });
-    doc.font('Helvetica-Bold').fontSize(10)
-       .text(`e-TRADE No: ${auction.ano}`, m, m + 18, { width: usableW / 3, align: 'left' });
-    doc.font('Helvetica').fontSize(9)
-       .text(`Page: ${doc.bufferedPageRange().count}`, m + usableW / 3, m + 18, { width: usableW / 3, align: 'center' });
-    doc.font('Helvetica-Bold').fontSize(10)
-       .text(`Date: ${fmtDateDMY(auction.date)}`, m + 2 * usableW / 3, m + 18, { width: usableW / 3, align: 'right' });
-    y = m + 40;
+    // Three-column brand band: company on left, "Collection" centered,
+    // trade meta right-aligned. The page number changes per page.
+    const afterY = drawCompanyHeader(doc, companyHeader, {
+      x: m, y: m, width: usableW,
+      title: 'COLLECTION',
+      metaLines: [
+        `e-TRADE No: ${auction.ano}`,
+        `Date: ${fmtDateDMY(auction.date)}`,
+        `Page: ${doc.bufferedPageRange().count}`,
+      ],
+    });
+    y = afterY;
     pageStartY = y;
     dataSegments.push([]);
   }
@@ -905,17 +912,23 @@ async function tradeReportPdf(db, auctionId) {
     curSegStart = null;
   }
 
+  // Resolve company branding once (logo + name + address) for use across pages
+  const companyHeader = getCompanyHeader(db);
+
   function drawTopHeader() {
     pageNum += 1;
-    doc.font('Helvetica-Bold').fontSize(13).fillColor('#000')
-       .text('IDEAL SPICES PRIVATE LIMITED', m, m, { width: usableW, align: 'center' });
-    doc.font('Helvetica-Bold').fontSize(11)
-       .text('BUYERS LIST FOR VERIFICATION', m, m + 18, { width: usableW, align: 'center' });
-    doc.font('Helvetica-Bold').fontSize(10)
-       .text(`e-TRADE No: ${auction.ano}`, m, m + 36, { width: usableW / 3, align: 'left' });
-    doc.text(`DATE: ${fmtDateDMY(auction.date)}`, m + usableW / 3, m + 36, { width: usableW / 3, align: 'center' });
-    doc.text(`PAGE: ${pageNum}`, m + 2 * usableW / 3, m + 36, { width: usableW / 3, align: 'right' });
-    y = m + 56;
+    // Three-column brand band: company on left, "BUYERS LIST FOR VERIFICATION"
+    // centered, trade meta right-aligned. Page number updates per page.
+    const afterY = drawCompanyHeader(doc, companyHeader, {
+      x: m, y: m, width: usableW,
+      title: 'BUYERS LIST FOR VERIFICATION',
+      metaLines: [
+        `e-TRADE No: ${auction.ano}`,
+        `Date: ${fmtDateDMY(auction.date)}`,
+        `Page: ${pageNum}`,
+      ],
+    });
+    y = afterY;
     pageStartY = y;
     dataSegments.push([]);
   }

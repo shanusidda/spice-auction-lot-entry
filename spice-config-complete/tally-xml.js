@@ -110,7 +110,8 @@ const rateDetails = (gstRate /* e.g. 5 = full IGST */) => {
     cgst: rateBlock('CGST', half),
     sgst: rateBlock('SGST/UTGST', half),
     igst: rateBlock('IGST', full),
-    cess: '<RATEDETAILS.LIST>\n<GSTRATEDUTYHEAD>Cess</GSTRATEDUTYHEAD>\n</RATEDETAILS.LIST>',
+    // Cess + State Cess: emit head + valuation but no rate (matches target schemas)
+    cess:  rateBlock('Cess',       null),
     scess: rateBlock('State Cess', null),
   };
 };
@@ -162,7 +163,7 @@ const cfgNum = (cfg, key, def = 0) => {
 //   }, ...]
 //
 function generSalesXML(rows, cfg, opts = {}) {
-  const company       = cfgGet(cfg, 'tally_company_name', cfgGet(cfg, 'short_name', 'Ideal Spices Private Limited'));
+  const company       = opts.companyName || cfgGet(cfg, 'tally_company_name', cfgGet(cfg, 'short_name', 'Ideal Spices Private Limited'));
   const season        = opts.season || cfgGet(cfg, 'tally_season', cfgGet(cfg, 'season_code', '2026-27'));
   const separator     = opts.separator || cfgGet(cfg, 'tally_separator', '/');
   const invPrefix     = cfgGet(cfg, 'tally_inv_prefix', 'ISP/');
@@ -379,7 +380,8 @@ ${rnd < 0 ? TAGS.DEEMYES : TAGS.DEEMNO}
   }
 
   xml += '\n' + endEnvelope();
-  return xml;
+  const BOM = '\uFEFF';
+  return BOM + xml.replace(/\r?\n/g, '\r\n');
 }
 
 // =====================================================================
@@ -394,7 +396,7 @@ ${rnd < 0 ? TAGS.DEEMYES : TAGS.DEEMNO}
 // }, ...]
 //
 function generRDPurchaseXML(rows, cfg, opts = {}) {
-  const company    = cfgGet(cfg, 'tally_company_name', cfgGet(cfg, 'short_name', 'Ideal Spices Private Limited'));
+  const company    = opts.companyName || cfgGet(cfg, 'tally_company_name', cfgGet(cfg, 'short_name', 'Ideal Spices Private Limited'));
   const season     = opts.season || cfgGet(cfg, 'tally_season', cfgGet(cfg, 'season_code', '2026-27'));
   const detailed   = cfgBool(cfg, 'tally_detailed', true);
   const tlyrnd     = cfgBool(cfg, 'tally_round_enabled', true);
@@ -621,7 +623,8 @@ ${TAGS.DEEMYES}
   }
 
   xml += '\n' + endEnvelope();
-  return xml;
+  const BOM = '\uFEFF';
+  return BOM + xml.replace(/\r?\n/g, '\r\n');
 }
 
 // =====================================================================
@@ -634,7 +637,7 @@ ${TAGS.DEEMYES}
 // }, ...]
 //
 function generURDPurchaseXML(rows, cfg, opts = {}) {
-  const company   = cfgGet(cfg, 'tally_company_name', cfgGet(cfg, 'short_name', 'Ideal Spices Private Limited'));
+  const company   = opts.companyName || cfgGet(cfg, 'tally_company_name', cfgGet(cfg, 'short_name', 'Ideal Spices Private Limited'));
   const season    = opts.season || cfgGet(cfg, 'tally_season', cfgGet(cfg, 'season_code', '2026-27'));
   const detailed  = cfgBool(cfg, 'tally_detailed', true);
   const tlyrnd    = cfgBool(cfg, 'tally_round_enabled', true);
@@ -698,6 +701,8 @@ function generURDPurchaseXML(rows, cfg, opts = {}) {
 <GSTOVRDNTYPEOFSUPPLY>Goods</GSTOVRDNTYPEOFSUPPLY>
 <GSTHSNNAME>${xe(HSN_Card)}</GSTHSNNAME>
 <GSTHSNDESCRIPTION>${xe(Item_Card)}</GSTHSNDESCRIPTION>
+<BASICPACKAGEMARKS>${xe(`${row.ano}/${lot.lot}`)}</BASICPACKAGEMARKS>
+<BASICNUMPACKAGES>${r0(lot.bag)} Bags</BASICNUMPACKAGES>
 ${TAGS.DEEMYES}
 <RATE>${r2(lot.rate)}/Kgs.</RATE>
 <AMOUNT>${-r2(lot.amount)}</AMOUNT>
@@ -735,6 +740,8 @@ ${rates.scess}
 <GSTOVRDNTYPEOFSUPPLY>Goods</GSTOVRDNTYPEOFSUPPLY>
 <GSTHSNNAME>${xe(HSN_Card)}</GSTHSNNAME>
 <GSTHSNDESCRIPTION>${xe(Item_Card)}</GSTHSNDESCRIPTION>
+<BASICPACKAGEMARKS>${xe(row.ano || '')}</BASICPACKAGEMARKS>
+<BASICNUMPACKAGES></BASICNUMPACKAGES>
 ${TAGS.DEEMYES}
 <RATE>${rt}/Kgs.</RATE>
 <AMOUNT>${-amounttot}</AMOUNT>
@@ -760,28 +767,35 @@ ${rates.scess}
 <ADDRESS>${place}</ADDRESS>
 </ADDRESS.LIST>
 <DATE>${dateval}</DATE>
-<REFERENCEDATE>${dateval}</REFERENCEDATE>
+<REFERENCEDATE></REFERENCEDATE>
 <VCHSTATUSDATE>${dateval}</VCHSTATUSDATE>
 <GSTREGISTRATIONTYPE>Unregistered/Consumer</GSTREGISTRATIONTYPE>
-<VATDEALERTYPE>Regular</VATDEALERTYPE>
+<VATDEALERTYPE>Unregistered/Consumer</VATDEALERTYPE>
 <STATENAME>${xe(sStateName)}</STATENAME>
 <COUNTRYOFRESIDENCE>India</COUNTRYOFRESIDENCE>
 <PLACEOFSUPPLY>${xe(sStateName)}</PLACEOFSUPPLY>
 <PARTYNAME>${name}</PARTYNAME>
-<REFERENCE>${xe(voucherRef)}</REFERENCE>
+<REFERENCE></REFERENCE>
 <PARTYLEDGERNAME>${name}</PARTYLEDGERNAME>
 <VOUCHERNUMBER>${xe(voucherRef)}</VOUCHERNUMBER>
 <PARTYMAILINGNAME>${name}</PARTYMAILINGNAME>
 <PARTYPINCODE>${pin}</PARTYPINCODE>
+<BASICBASEPARTYNAME>${name}</BASICBASEPARTYNAME>
 <NUMBERINGSTYLE>Manual</NUMBERINGSTYLE>
+<FBTPAYMENTTYPE>Default</FBTPAYMENTTYPE>
 <PERSISTEDVIEW>Invoice Voucher View</PERSISTEDVIEW>
 <VOUCHERTYPENAME>Purchase</VOUCHERTYPENAME>
+<BASICDATETIMEOFINVOICE></BASICDATETIMEOFINVOICE>
+<BASICDATETIMEOFREMOVAL></BASICDATETIMEOFREMOVAL>
 <VCHENTRYMODE>Item Invoice</VCHENTRYMODE>
 <DIFFACTUALQTY>Yes</DIFFACTUALQTY>
 <EFFECTIVEDATE>${dateval}</EFFECTIVEDATE>
 <ISELIGIBLEFORITC>Yes</ISELIGIBLEFORITC>
+<VCHGSTSTATUSISUNCERTAIN>No</VCHGSTSTATUSISUNCERTAIN>
+<VCHGSTSTATUSISAPPLICABLE>Applicable</VCHGSTSTATUSISAPPLICABLE>
 <ISINVOICE>Yes</ISINVOICE>
 <ISOPTIONAL>${opt ? 'Yes' : 'No'}</ISOPTIONAL>
+<ISVATDUTYPAID>Yes</ISVATDUTYPAID>
 
 <LEDGERENTRIES.LIST>
 <LEDGERNAME>${name}</LEDGERNAME>
@@ -805,7 +819,11 @@ ${TAGS.DEEMYES}
   }
 
   xml += '\n' + endEnvelope();
-  return xml;
+
+  // Match the byte sequence Tally has been importing successfully from
+  // the macros: UTF-8 BOM + CRLF line endings.
+  const BOM = '\uFEFF';
+  return BOM + xml.replace(/\r?\n/g, '\r\n');
 }
 
 // =====================================================================
@@ -819,7 +837,7 @@ ${TAGS.DEEMYES}
 // }, ...]
 //
 function generDebitNoteXML(rows, cfg, opts = {}) {
-  const company    = cfgGet(cfg, 'tally_company_name', cfgGet(cfg, 'short_name', 'Ideal Spices Private Limited'));
+  const company    = opts.companyName || cfgGet(cfg, 'tally_company_name', cfgGet(cfg, 'short_name', 'Ideal Spices Private Limited'));
   const season     = opts.season || cfgGet(cfg, 'tally_season', cfgGet(cfg, 'season_code', '2026-27'));
   const tlyrnd     = cfgBool(cfg, 'tally_round_enabled', true);
   const exempt     = cfgBool(cfg, 'tally_dn_exempt', false);
@@ -958,7 +976,8 @@ ${TAGS.DEEMNO}
   }
 
   xml += '\n' + endEnvelope();
-  return xml;
+  const BOM = '\uFEFF';
+  return BOM + xml.replace(/\r?\n/g, '\r\n');
 }
 
 // =====================================================================
@@ -1180,10 +1199,13 @@ function buildDebitNoteRows(db, auctionId, cfg) {
 //           state, applicableFrom (yyyymmdd) }]
 //
 function generLedgerXML(rows, cfg, opts = {}) {
-  const company = cfgGet(cfg, 'tally_company_name', cfgGet(cfg, 'short_name', 'Ideal Spices Private Limited'));
+  const company = opts.companyName || cfgGet(cfg, 'tally_company_name', cfgGet(cfg, 'short_name', 'Ideal Spices Private Limited'));
   const today = toTallyDate(new Date());
 
-  // Use "All Masters" reportname for ledger imports
+  // Use "All Masters" reportname for ledger imports.
+  // Target XMLs use CRLF line endings + UTF-8 BOM at start of file. We mirror
+  // that here so the byte sequence matches what Tally has been importing
+  // successfully from the macros. We build with \n then convert at the end.
   let xml = '\n' + startEnvelope(company, 'All Masters');
 
   for (const r of rows) {
@@ -1203,8 +1225,52 @@ function generLedgerXML(rows, cfg, opts = {}) {
     const isParty = r.kind === 'party';
     const hasGst = isParty && gstin;
 
-    let block = `\n<LEDGER NAME="${name}" RESERVEDNAME="">
-<NAME>${name}</NAME>
+    // Sub-kind hint from the builder so we know whether this party is sales,
+    // RD, or URD. Falls back to a heuristic based on parent group name when
+    // not provided (keeps backward compat with the all-in-one builder).
+    let partyKind = r.partyKind || '';
+    if (!partyKind && isParty) {
+      const p = String(r.parent || '').toLowerCase();
+      if (p.includes('agriculturist'))         partyKind = 'urd';
+      else if (p.includes('dealer-purchase'))  partyKind = 'sales'; // sales-side
+      else if (p.includes('dealer'))           partyKind = 'rd';    // RD purchase-side
+    }
+    const isRdParty  = isParty && partyKind === 'rd';
+    const isUrdParty = isParty && partyKind === 'urd';
+
+    // ── Build the LEDGER body in the exact order the target XMLs use ──
+    // Order: CURRENCYNAME, PRIORSTATENAME, INCOMETAXNUMBER, [VATDEALERTYPE],
+    //        PARENT, COUNTRYOFRESIDENCE, LEDGERCOUNTRYISDCODE,
+    //        ISBILLWISEON, ASORIGINAL, ISCHEQUEPRINTINGENABLED,
+    //        LANGUAGENAME.LIST, LEDGSTREGDETAILS.LIST, LEDMAILINGDETAILS.LIST.
+    // The opening tag has just NAME="" — no top-level <NAME> child, no
+    // RESERVEDNAME attribute (matches every sample we've seen).
+    let block = `\n<LEDGER NAME="${name}">
+<CURRENCYNAME>₹</CURRENCYNAME>`;
+
+    if (isParty) {
+      // For sales/RD parties we have state + PAN; for URD we still emit the
+      // tags but leave them empty (the target URD XML uses empty tags here,
+      // which is what Tally expects for unregistered parties).
+      if (isUrdParty) {
+        block += `
+<PRIORSTATENAME></PRIORSTATENAME>
+<INCOMETAXNUMBER></INCOMETAXNUMBER>`;
+      } else {
+        block += `
+<PRIORSTATENAME>${state}</PRIORSTATENAME>
+<INCOMETAXNUMBER>${pan}</INCOMETAXNUMBER>`;
+      }
+      // VATDEALERTYPE: only RD and URD purchase parties carry this (matches
+      // the schema in RD_LEDGER_MASTER and URD_LEDGER_MASTER; SALE doesn't).
+      if (isRdParty) {
+        block += `\n<VATDEALERTYPE>Regular</VATDEALERTYPE>`;
+      } else if (isUrdParty) {
+        block += `\n<VATDEALERTYPE>Unregistered/Consumer</VATDEALERTYPE>`;
+      }
+    }
+
+    block += `
 <PARENT>${parent}</PARENT>
 <COUNTRYOFRESIDENCE>India</COUNTRYOFRESIDENCE>
 <LEDGERCOUNTRYISDCODE>+91</LEDGERCOUNTRYISDCODE>`;
@@ -1214,8 +1280,6 @@ function generLedgerXML(rows, cfg, opts = {}) {
 <ISBILLWISEON>Yes</ISBILLWISEON>
 <ASORIGINAL>Yes</ASORIGINAL>
 <ISCHEQUEPRINTINGENABLED>Yes</ISCHEQUEPRINTINGENABLED>`;
-      if (state) block += `\n<PRIORSTATENAME>${state}</PRIORSTATENAME>`;
-      if (pan)   block += `\n<INCOMETAXNUMBER>${pan}</INCOMETAXNUMBER>`;
     }
 
     block += `
@@ -1225,17 +1289,34 @@ function generLedgerXML(rows, cfg, opts = {}) {
 </NAME.LIST>
 </LANGUAGENAME.LIST>`;
 
-    if (hasGst) {
-      block += `
+    // GST registration block.
+    //   • Sales / RD party with GSTIN → full block with GSTIN
+    //   • URD party (no GSTIN) → block without GSTIN, GSTREGISTRATIONTYPE = Unregistered/Consumer
+    //   • Master ledgers (sales/purchase/tax) → no block
+    if (isParty) {
+      if (hasGst) {
+        block += `
 <LEDGSTREGDETAILS.LIST>
 <APPLICABLEFROM>${dateval}</APPLICABLEFROM>
 <GSTREGISTRATIONTYPE>Regular</GSTREGISTRATIONTYPE>
 <PLACEOFSUPPLY>${state}</PLACEOFSUPPLY>
 <GSTIN>${gstin}</GSTIN>
 </LEDGSTREGDETAILS.LIST>`;
+      } else if (isUrdParty) {
+        // URD parties still get the block, just without GSTIN
+        const placeOfSupply = state || cfgGet(cfg, 'tally_urd_state', 'Kerala');
+        block += `
+<LEDGSTREGDETAILS.LIST>
+<APPLICABLEFROM>${dateval}</APPLICABLEFROM>
+<GSTREGISTRATIONTYPE>Unregistered/Consumer</GSTREGISTRATIONTYPE>
+<PLACEOFSUPPLY>${xe(placeOfSupply)}</PLACEOFSUPPLY>
+</LEDGSTREGDETAILS.LIST>`;
+      }
     }
 
     if (isParty && (address || place || pin)) {
+      // For URD where state is unknown, fall back to the configured URD state
+      const mailingState = state || (isUrdParty ? xe(cfgGet(cfg, 'tally_urd_state', 'Kerala')) : '');
       block += `
 <LEDMAILINGDETAILS.LIST>
 <ADDRESS.LIST>
@@ -1245,12 +1326,14 @@ function generLedgerXML(rows, cfg, opts = {}) {
 <APPLICABLEFROM>${dateval}</APPLICABLEFROM>
 <PINCODE>${pin}</PINCODE>
 <MAILINGNAME>${name}</MAILINGNAME>
-<STATE>${state}</STATE>
+<STATE>${mailingState}</STATE>
 <COUNTRY>India</COUNTRY>
 </LEDMAILINGDETAILS.LIST>`;
     }
 
-    // Tax ledgers: tag with the right rate-of-tax info
+    // Tax ledgers: tag with the right rate-of-tax info (only used by the
+    // all-in-one ledger export; the 3 party-only exports never include
+    // these).
     if (r.kind === 'tax') {
       const rateOfTax = Number(r.rateOfTax || 0);
       const dutyHead = r.dutyHead || 'GST';
@@ -1260,7 +1343,7 @@ function generLedgerXML(rows, cfg, opts = {}) {
 <RATEOFTAXCALCULATION>${rateOfTax}</RATEOFTAXCALCULATION>`;
     }
 
-    // Sales/Purchase ledgers: tag with rounding & taxability defaults
+    // Sales/Purchase master ledgers: rounding + taxability + HSN
     if (r.kind === 'sales' || r.kind === 'purchase') {
       block += `
 <ROUNDINGMETHOD>Normal Rounding</ROUNDINGMETHOD>
@@ -1277,105 +1360,219 @@ function generLedgerXML(rows, cfg, opts = {}) {
   }
 
   xml += '\n' + endEnvelope();
-  return xml;
+
+  // Convert to CRLF line endings + prepend UTF-8 BOM so the byte sequence
+  // matches what Tally has been importing successfully from the macros.
+  const BOM = '\uFEFF';
+  return BOM + xml.replace(/\r?\n/g, '\r\n');
+}
+
+// ── Helpers shared by the 3 ledger builders ─────────────────
+// Each builder returns rows in the same { kind, name, parent, gstin, ... }
+// shape that generLedgerXML already consumes — only the source-of-data
+// and the parent group differ.
+
+function _buyerRow(b, todayDate, intra, interDealer, localDealer) {
+  const isIntra = String(b.gstin || '').slice(0, 2) === String(intra);
+  return {
+    kind: 'party',
+    partyKind: 'sales',
+    name: b.buyer1 || b.buyer || '',
+    parent: isIntra ? localDealer : interDealer,
+    gstin: b.gstin || '',
+    pan: b.pan || '',
+    address: [b.add1, b.add2].filter(Boolean).join(', '),
+    place: b.pla || '',
+    pin: b.pin || '',
+    state: b.state || '',
+    applicableFrom: todayDate,
+  };
+}
+
+function _rdTraderRow(t, todayDate, intra, interDealPur, localDealPur) {
+  // `cr` carries the GSTIN with a "GSTIN." prefix for registered dealers
+  const fullGstin = String(t.cr || '');
+  const partyGstin = fullGstin.toUpperCase().startsWith('GST') ? fullGstin.slice(6, 21) : fullGstin;
+  const isIntra = String(partyGstin).slice(0, 2) === String(intra);
+  return {
+    kind: 'party',
+    partyKind: 'rd',
+    name: t.name || '',
+    parent: isIntra ? localDealPur : interDealPur,
+    gstin: partyGstin,
+    pan: t.pan || '',
+    address: t.padd || '',
+    place: t.ppla || '',
+    pin: t.ppin || '',
+    state: t.pstate || '',
+    applicableFrom: todayDate,
+  };
+}
+
+function _urdTraderRow(t, todayDate, auctionLDR) {
+  return {
+    kind: 'party',
+    partyKind: 'urd',
+    name: t.name || '',
+    parent: auctionLDR,           // Agriculturists go under the auction-purchase parent
+    gstin: '',
+    pan: t.pan || '',
+    address: t.padd || '',
+    place: t.ppla || '',
+    pin: t.ppin || '',
+    state: t.pstate || '',
+    applicableFrom: todayDate,
+  };
 }
 
 /**
- * Build ledger rows for an auction:
- *  - party ledgers for every buyer that appears in this auction's invoices
- *  - party ledgers for every trader that appears as a purchase party
- *  - the standard tax + sales + purchase + service master ledgers from cfg
+ * Build sales-party ledger rows (mirrors generLED).
+ * One row per distinct buyer that appears in this auction's invoices.
+ * Filter: optional `partyName` to limit output to a single buyer.
  */
-function buildLedgerRows(db, auctionId, cfg) {
-  const rows = [];
+function buildSalesPartyLedgerRows(db, auctionId, cfg, opts = {}) {
   const todayDate = toTallyDate(new Date());
   const intra = cfgGet(cfg, 'tally_state_code', '33');
-  const homeStateName = cfgGet(cfg, 'tally_home_state', 'Tamil Nadu');
-
-  // ── 1. Sales party ledgers — buyers that appear in this auction
   const interDealer = cfgGet(cfg, 'tally_dealer_sale_inter', 'Interstate Dealer-Purchase');
   const localDealer = cfgGet(cfg, 'tally_dealer_sale_intra', 'Local Dealer-Purchase');
-  const buyers = db.prepare(`
+
+  let sql = `
     SELECT DISTINCT b.*
+    FROM invoices i
+    JOIN buyers b ON b.buyer = i.buyer
+    WHERE i.auction_id = ?
+  `;
+  const params = [auctionId];
+  if (opts.partyName) {
+    sql += ` AND (b.buyer1 = ? OR b.buyer = ?)`;
+    params.push(opts.partyName, opts.partyName);
+  }
+  sql += ` ORDER BY b.buyer1`;
+
+  const buyers = db.prepare(sql).all(...params);
+  return buyers.map(b => _buyerRow(b, todayDate, intra, interDealer, localDealer));
+}
+
+/**
+ * Build RD-purchase party ledger rows (mirrors generLEDGERD).
+ * One row per distinct trader with `cr LIKE 'GSTIN.%'` in the auction's lots.
+ */
+function buildRDPartyLedgerRows(db, auctionId, cfg, opts = {}) {
+  const todayDate = toTallyDate(new Date());
+  const intra = cfgGet(cfg, 'tally_state_code', '33');
+  const interDealPur = cfgGet(cfg, 'tally_purchase_dealer_inter', 'Interstate Dealer');
+  const localDealPur = cfgGet(cfg, 'tally_purchase_dealer_intra', 'Local Dealer');
+
+  let sql = `
+    SELECT DISTINCT name, padd, ppla, ppin, pstate, cr, pan
+    FROM lots
+    WHERE auction_id = ? AND UPPER(cr) LIKE 'GSTIN.%'
+  `;
+  const params = [auctionId];
+  if (opts.partyName) {
+    sql += ` AND name = ?`;
+    params.push(opts.partyName);
+  }
+  sql += ` ORDER BY name`;
+
+  const traders = db.prepare(sql).all(...params);
+  return traders.map(t => _rdTraderRow(t, todayDate, intra, interDealPur, localDealPur));
+}
+
+/**
+ * Build URD-purchase party ledger rows (mirrors generLEDGERP).
+ * One row per distinct agriculturist (no GSTIN) in the auction's lots.
+ */
+function buildURDPartyLedgerRows(db, auctionId, cfg, opts = {}) {
+  const todayDate = toTallyDate(new Date());
+  const auctionLDR = cfgGet(cfg, 'tally_purchase_auction', 'Purchase From Agriculturist');
+
+  let sql = `
+    SELECT DISTINCT name, padd, ppla, ppin, pstate, pan
+    FROM lots
+    WHERE auction_id = ? AND (cr = '' OR cr IS NULL OR UPPER(cr) NOT LIKE 'GSTIN.%')
+      AND name != ''
+  `;
+  const params = [auctionId];
+  if (opts.partyName) {
+    sql += ` AND name = ?`;
+    params.push(opts.partyName);
+  }
+  sql += ` ORDER BY name`;
+
+  const traders = db.prepare(sql).all(...params);
+  return traders.map(t => _urdTraderRow(t, todayDate, auctionLDR));
+}
+
+/**
+ * List every party in an auction with the kind it would be exported as.
+ * Powers the "single-party" picker UI on the To Tally page so dad can
+ * pick exactly one and emit just that ledger.
+ *
+ * Returns: [{ kind: 'sales'|'rd_purchase'|'urd_purchase', name, gstin }]
+ */
+function listAuctionParties(db, auctionId) {
+  const out = [];
+
+  // Sales parties — buyers
+  const buyers = db.prepare(`
+    SELECT DISTINCT b.buyer1 AS name, b.gstin, b.pla AS place
     FROM invoices i
     JOIN buyers b ON b.buyer = i.buyer
     WHERE i.auction_id = ?
     ORDER BY b.buyer1
   `).all(auctionId);
   for (const b of buyers) {
-    const isIntra = String(b.gstin || '').slice(0, 2) === String(intra);
-    rows.push({
-      kind: 'party',
-      name: b.buyer1 || b.buyer || '',
-      parent: isIntra ? localDealer : interDealer,
-      gstin: b.gstin || '',
-      pan: b.pan || '',
-      address: [b.add1, b.add2].filter(Boolean).join(', '),
-      place: b.pla || '',
-      pin: b.pin || '',
-      state: b.state || '',
-      applicableFrom: todayDate,
-    });
+    out.push({ kind: 'sales', name: b.name || '', gstin: b.gstin || '', place: b.place || '' });
   }
 
-  // ── 2. RD purchase party ledgers — traders with GSTIN.* prefix in `cr`
-  const interDealPur = cfgGet(cfg, 'tally_purchase_dealer_inter', 'Interstate Dealer');
-  const localDealPur = cfgGet(cfg, 'tally_purchase_dealer_intra', 'Local Dealer');
-  const rdTraders = db.prepare(`
-    SELECT DISTINCT name, padd, ppla, ppin, pstate, cr, pan
+  // RD purchase parties — traders with GSTIN in lots
+  const rd = db.prepare(`
+    SELECT DISTINCT name, ppla AS place, cr
     FROM lots
-    WHERE auction_id = ? AND UPPER(cr) LIKE 'GSTIN.%'
+    WHERE auction_id = ? AND UPPER(cr) LIKE 'GSTIN.%' AND name != ''
     ORDER BY name
   `).all(auctionId);
-  for (const t of rdTraders) {
+  for (const t of rd) {
     const fullGstin = String(t.cr || '');
-    const partyGstin = fullGstin.toUpperCase().startsWith('GST') ? fullGstin.slice(6, 21) : fullGstin;
-    const isIntra = String(partyGstin).slice(0, 2) === String(intra);
-    rows.push({
-      kind: 'party',
-      name: t.name || '',
-      parent: isIntra ? localDealPur : interDealPur,
-      gstin: partyGstin,
-      pan: t.pan || '',
-      address: t.padd || '',
-      place: t.ppla || '',
-      pin: t.ppin || '',
-      state: t.pstate || '',
-      applicableFrom: todayDate,
-    });
+    const gstin = fullGstin.toUpperCase().startsWith('GST') ? fullGstin.slice(6, 21) : fullGstin;
+    out.push({ kind: 'rd_purchase', name: t.name || '', gstin, place: t.place || '' });
   }
 
-  // ── 3. URD purchase party ledgers — agriculturists (no GSTIN)
-  const auctionLDR = cfgGet(cfg, 'tally_purchase_auction', 'Purchase From Agriculturist');
-  const urdTraders = db.prepare(`
-    SELECT DISTINCT name, padd, ppla, ppin, pstate, pan
+  // URD purchase parties — agriculturists
+  const urd = db.prepare(`
+    SELECT DISTINCT name, ppla AS place
     FROM lots
-    WHERE auction_id = ? AND (cr = '' OR cr IS NULL OR UPPER(cr) NOT LIKE 'GSTIN.%')
-      AND name != ''
+    WHERE auction_id = ? AND (cr = '' OR cr IS NULL OR UPPER(cr) NOT LIKE 'GSTIN.%') AND name != ''
     ORDER BY name
   `).all(auctionId);
-  for (const t of urdTraders) {
-    rows.push({
-      kind: 'party',
-      name: t.name || '',
-      parent: auctionLDR,           // Agriculturists go under the auction-purchase parent
-      gstin: '',
-      pan: t.pan || '',
-      address: t.padd || '',
-      place: t.ppla || '',
-      pin: t.ppin || '',
-      state: t.pstate || '',
-      applicableFrom: todayDate,
-    });
+  for (const t of urd) {
+    out.push({ kind: 'urd_purchase', name: t.name || '', gstin: '', place: t.place || '' });
   }
 
-  // ── 4. Standard sales / purchase / tax / service master ledgers from cfg
+  return out;
+}
+
+/**
+ * Backwards-compatible "all ledgers in one shot" builder.
+ * Combines the 3 party builders + the master ledgers (sales/purchase/tax/
+ * service) seeded from cfg. Useful for a one-click "prime a fresh Tally
+ * company" workflow.
+ */
+function buildLedgerRows(db, auctionId, cfg) {
+  const rows = [
+    ...buildSalesPartyLedgerRows(db, auctionId, cfg),
+    ...buildRDPartyLedgerRows(db, auctionId, cfg),
+    ...buildURDPartyLedgerRows(db, auctionId, cfg),
+  ];
+  const todayDate = toTallyDate(new Date());
+
+  // ── Master ledgers from cfg (sales / purchase / tax / service) ─
   const gstRate = cfgNum(cfg, 'tally_gst_rate', 5);
   const dnRate  = cfgNum(cfg, 'tally_dn_gst_rate', 18);
   const hsnCard = cfgGet(cfg, 'tally_hsn_cardamom', '09083120');
   const hsnService = cfgGet(cfg, 'tally_hsn_service', '996111');
 
-  // Sales ledgers
   for (const [k, parent, taxability, hsn] of [
     ['tally_sales_inter',   'Sales Accounts',  'Taxable',   hsnCard],
     ['tally_sales_intra',   'Sales Accounts',  'Taxable',   hsnCard],
@@ -1388,7 +1585,6 @@ function buildLedgerRows(db, auctionId, cfg) {
     if (name) rows.push({ kind: 'sales', name, parent, taxability, hsn, applicableFrom: todayDate });
   }
 
-  // Purchase ledgers (Local + Inter_State variants of the dealer base)
   const purBase = cfgGet(cfg, 'tally_purchase_dealer', 'Trade Purchase from Dealer');
   if (purBase) {
     rows.push({ kind: 'purchase', name: `${purBase}-Local`,       parent: 'Purchase Accounts', taxability: 'Taxable', hsn: hsnCard, applicableFrom: todayDate });
@@ -1397,7 +1593,6 @@ function buildLedgerRows(db, auctionId, cfg) {
   const auctionLDRname = cfgGet(cfg, 'tally_purchase_auction', '');
   if (auctionLDRname) rows.push({ kind: 'purchase', name: auctionLDRname, parent: 'Purchase Accounts', taxability: 'Nil Rated', hsn: hsnCard, applicableFrom: todayDate });
 
-  // Tax ledgers
   const tax = (key, dutyHead, rate) => {
     const name = cfgGet(cfg, key, '');
     if (name) rows.push({ kind: 'tax', name, parent: 'Duties & Taxes', dutyHead, rateOfTax: rate, applicableFrom: todayDate });
@@ -1414,7 +1609,6 @@ function buildLedgerRows(db, auctionId, cfg) {
   tax('tally_tcs',         'TCS',  cfgNum(cfg, 'tally_tcs_rate', 0.1));
   tax('tally_tds_ledger',  'TDS',  cfgNum(cfg, 'tally_tcs_rate', 0.1));
 
-  // Service / direct expense ledgers
   const services = [
     ['tally_dn_discount',          'Indirect Incomes',   hsnService],
     ['tally_commission',           'Indirect Expenses',  hsnService],
@@ -1447,6 +1641,10 @@ module.exports = {
   buildURDPurchaseRows,
   buildDebitNoteRows,
   buildLedgerRows,
+  buildSalesPartyLedgerRows,
+  buildRDPartyLedgerRows,
+  buildURDPartyLedgerRows,
+  listAuctionParties,
   // helpers (exported for tests)
   toTallyDate,
   findState,

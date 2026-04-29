@@ -152,7 +152,8 @@ const DEFAULTS = [
   // ── TALLY EXPORT ──────────────────────────────────────────
   // Settings here mirror the macro's Configration form (UserForm1) field-for-field.
   // Identity & defaults
-  { key: 'tally_company_name',    value: 'IDEAL SPICES PRIVATE LIMITED', category: 'tally', label: 'Tally Company Name (must match company in Tally exactly)', type: 'text' },
+  { key: 'tally_company_name',     value: 'Ideal Spices Private Limited',      category: 'tally', label: 'ISP Tally Company Name (used for Sales — must match Tally company exactly)', type: 'text' },
+  { key: 'tally_asp_company_name', value: 'Amazing Spice Park Private Limited', category: 'tally', label: 'ASP Tally Company Name (used for RD / URD Purchase / Debit Note — must match Tally company exactly)', type: 'text' },
   { key: 'tally_season',          value: '2026-27',        category: 'tally', label: 'Season Suffix',                  type: 'text' },
   { key: 'tally_separator',       value: '/',              category: 'tally', label: 'Voucher Separator',              type: 'text' },
   { key: 'tally_inv_prefix',      value: 'ISP/',           category: 'tally', label: 'ISP Voucher Prefix',             type: 'text' },

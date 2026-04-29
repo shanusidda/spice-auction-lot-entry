@@ -16,6 +16,11 @@
 
 const ExcelJS = require('exceljs');
 const PDFDocument = require('pdfkit');
+const {
+  fmtMoney, fmtQty, fmtPrice,
+  getCompanyHeader, drawCompanyHeader,
+  writeXlsxCompanyHeader,
+} = require('./report-formatters');
 
 // ── Helpers ──────────────────────────────────────────────────
 function fmtDateDMY(iso) {
@@ -24,26 +29,8 @@ function fmtDateDMY(iso) {
   if (s.includes('-') && s.length >= 10) return s.slice(0, 10).split('-').reverse().join('/');
   return s;
 }
-function fmtMoney(n) {
-  const num = Number(n) || 0;
-  // Indian-style grouping with 2 decimals (e.g. 1,12,61,199.40)
-  const fixed = num.toFixed(2);
-  const [intPart, decPart] = fixed.split('.');
-  const sign = intPart.startsWith('-') ? '-' : '';
-  const digits = sign ? intPart.slice(1) : intPart;
-  let out;
-  if (digits.length <= 3) {
-    out = digits;
-  } else {
-    const last3 = digits.slice(-3);
-    const rest  = digits.slice(0, -3);
-    const restGrouped = rest.replace(/\B(?=(\d{2})+(?!\d))/g, ',');
-    out = `${restGrouped},${last3}`;
-  }
-  return `${sign}${out}.${decPart}`;
-}
-function fmtQty(n)  { return (Number(n) || 0).toFixed(3); }
-function fmtPrice(n){ return (Number(n) || 0).toFixed(2); }
+// fmtMoney / fmtQty / fmtPrice come from report-formatters.js (Indian comma
+// grouping; 2 decimals for rupees, 3 for kilos).
 
 // Manually truncate `text` so doc.widthOfString(out) <= maxWidth, appending an
 // ellipsis when truncated. PDFKit 0.15's `lineBreak: false` + `ellipsis: true`
@@ -157,44 +144,61 @@ async function lotSlipCodeXlsx(db, auctionId) {
 
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet('LotSlipCode');
+  ws.columns = [
+    { width: 8 },  // Lot
+    { width: 8 },  // Bags
+    { width: 12 }, // Kilos
+    { width: 12 }, // Price
+    { width: 14 }, // Bidder
+    { width: 8 },  // Lot (repeated, for matching the PDF carbon-copy layout)
+  ];
 
-  // Top header lines
-  ws.mergeCells('A1:E1');
-  ws.getCell('A1').value = 'IDEAL SPICES PRIVATE LIMITED';
-  ws.getCell('A1').font = { bold: true, size: 14 };
-  ws.getCell('A1').alignment = { horizontal: 'center' };
+  // Three-column brand band.
+  const startRow = writeXlsxCompanyHeader(wb, ws, getCompanyHeader(db), {
+    colCount: 6,
+    title: 'LOT SLIP CODE',
+    metaLines: [
+      `e-TRADE No: ${auction.ano}`,
+      `Date: ${fmtDateDMY(auction.date)}`,
+    ],
+  });
 
-  ws.mergeCells('A2:E2');
-  ws.getCell('A2').value = `e-TRADE No: ${auction.ano}     Date: ${fmtDateDMY(auction.date)}`;
-  ws.getCell('A2').font = { bold: true, size: 11 };
-  ws.getCell('A2').alignment = { horizontal: 'center' };
-
-  ws.addRow([]);
-  const head = ws.addRow(['Lot', 'Bags', 'Kilos', 'Price', 'Bidder']);
+  const head = ws.getRow(startRow);
+  ['Lot', 'Bags', 'Kilos', 'Price', 'Bidder', 'Lot'].forEach((h, i) => {
+    head.getCell(i + 1).value = h;
+  });
   head.font = { bold: true };
-  head.eachCell(c => {
+  head.eachCell((c, ci) => {
+    if (ci > 6) return;
     c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8E4DD' } };
     c.border = { top: { style: 'thin' }, bottom: { style: 'thin' } };
     c.alignment = { horizontal: 'center' };
   });
 
-  ws.columns = [
-    { width: 8 }, { width: 8 }, { width: 12 }, { width: 12 }, { width: 14 },
-  ];
-
   let totBag = 0, totKilo = 0;
   rows.forEach(r => {
-    const row = ws.addRow([r.lot, r.bags, Number(r.kilos), Number(r.price), r.bidder]);
+    const row = ws.addRow([
+      r.lot,
+      r.bags,
+      Number(r.kilos),
+      Number(r.price),
+      r.bidder,
+      r.lot,           // repeat the lot number on the right (matches PDF)
+    ]);
     row.getCell(2).alignment = { horizontal: 'right' };
     row.getCell(3).alignment = { horizontal: 'right' };
     row.getCell(3).numFmt = '#,##0.000';
     row.getCell(4).alignment = { horizontal: 'right' };
     row.getCell(4).numFmt = '#,##0.00';
+    row.getCell(5).alignment = { horizontal: 'center' };
+    row.getCell(6).alignment = { horizontal: 'center' };
     totBag  += Number(r.bags)  || 0;
     totKilo += Number(r.kilos) || 0;
   });
 
-  const tot = ws.addRow(['Total', totBag, totKilo, '', '']);
+  // Total row — Bags and Kilos totals, no Price/Bidder/Lot totals
+  // (matches the PDF which only sums BAG and QTY).
+  const tot = ws.addRow(['Total', totBag, totKilo, '', '', '']);
   tot.font = { bold: true };
   tot.getCell(3).numFmt = '#,##0.000';
   tot.eachCell(c => {
@@ -245,15 +249,23 @@ async function lotSlipCodePdf(db, auctionId) {
   // appear in both halves so users get an original + a duplicate slip).
   totalPages = Math.max(1, Math.ceil(rows.length / ROWS_PER_HALF));
 
+  // Resolve company branding once. The carbon-copy halves are narrow, so the
+  // brand band uses a small (22pt) logo and skips the multi-line address —
+  // only the company name fits.
+  const companyHeader = getCompanyHeader(db);
+
   function drawHalfHeader(xOrigin, page) {
-    // Company name + page + e-trade meta on top of each half
-    doc.font('Helvetica-Bold').fontSize(11).fillColor('#000')
-       .text('IDEAL SPICES PRIVATE LIMITED', xOrigin, m, { width: halfW, align: 'center' });
+    // Compact company brand band (no title/meta — too narrow for three cols).
+    const afterY = drawCompanyHeader(doc, companyHeader, {
+      x: xOrigin, y: m, width: halfW,
+      logoH: 22, logoW: 22, showAddress: false,
+    });
+    // Page / e-TRADE / Date metadata stacks beneath the brand band.
     doc.font('Helvetica').fontSize(8).fillColor('#000')
-       .text(`Page: ${page}`, xOrigin, m + 14, { width: halfW, align: 'right' });
+       .text(`Page: ${page}`, xOrigin, afterY, { width: halfW, align: 'right' });
     doc.font('Helvetica-Bold').fontSize(9)
-       .text(`e-TRADE No: ${auction.ano}`, xOrigin, m + 26, { width: halfW / 2, align: 'left' });
-    doc.text(`Date: ${fmtDateDMY(auction.date)}`, xOrigin + halfW / 2, m + 26, { width: halfW / 2, align: 'right' });
+       .text(`e-TRADE No: ${auction.ano}`, xOrigin, afterY + 12, { width: halfW / 2, align: 'left' });
+    doc.text(`Date: ${fmtDateDMY(auction.date)}`, xOrigin + halfW / 2, afterY + 12, { width: halfW / 2, align: 'right' });
 
     // Column header row
     const hy = BODY_TOP;
@@ -382,46 +394,55 @@ async function truckListXlsx(db, auctionId) {
 
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet('TruckList');
+  ws.columns = [
+    { width: 8 },  // SL.NO
+    { width: 8 },  // LOT
+    { width: 8 },  // BAG
+    { width: 12 }, // CODE
+    { width: 14 }, // QTY
+    { width: 18 }, // AMOUNT
+  ];
 
-  ws.mergeCells('A1:E1');
-  ws.getCell('A1').value = 'IDEAL SPICES PRIVATE LIMITED';
-  ws.getCell('A1').font = { bold: true, size: 14 };
-  ws.getCell('A1').alignment = { horizontal: 'center' };
+  // Three-column brand band.
+  const startRow = writeXlsxCompanyHeader(wb, ws, getCompanyHeader(db), {
+    colCount: 6,
+    title: 'TRUCK LIST',
+    metaLines: [
+      `e-TRADE No: ${auction.ano}`,
+      `Date: ${fmtDateDMY(auction.date)}`,
+    ],
+  });
 
-  ws.mergeCells('A2:E2');
-  ws.getCell('A2').value = `e-TRADE No: ${auction.ano}    TRUCK LIST    Date: ${fmtDateDMY(auction.date)}`;
-  ws.getCell('A2').font = { bold: true, size: 11 };
-  ws.getCell('A2').alignment = { horizontal: 'center' };
-
-  ws.addRow([]);
-  const head = ws.addRow(['LOT', 'BAG', 'CODE', 'QTY', 'AMOUNT']);
+  const head = ws.getRow(startRow);
+  ['SL.NO', 'LOT', 'BAG', 'CODE', 'QTY', 'AMOUNT'].forEach((h, i) => {
+    head.getCell(i + 1).value = h;
+  });
   head.font = { bold: true };
-  head.eachCell(c => {
+  head.eachCell((c, ci) => {
+    if (ci > 6) return;
     c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8E4DD' } };
     c.border = { top: { style: 'thin' }, bottom: { style: 'thin' } };
     c.alignment = { horizontal: 'center' };
   });
 
-  ws.columns = [
-    { width: 8 }, { width: 8 }, { width: 12 }, { width: 14 }, { width: 18 },
-  ];
-
   let tLot = 0, tBag = 0, tQty = 0, tAmt = 0;
-  rows.forEach(r => {
+  rows.forEach((r, idx) => {
     const row = ws.addRow([
-      r.lot_count,
+      idx + 1,           // SL.NO (sequential)
+      r.lot_count,       // LOT (count of lots in this truck/code)
       r.bag,
       r.code,
       Number(r.qty),
       Number(r.amount),
     ]);
-    row.getCell(1).alignment = { horizontal: 'right' };
+    row.getCell(1).alignment = { horizontal: 'center' };
     row.getCell(2).alignment = { horizontal: 'right' };
-    row.getCell(3).alignment = { horizontal: 'center' };
-    row.getCell(4).alignment = { horizontal: 'right' };
-    row.getCell(4).numFmt = '#,##0.000';
+    row.getCell(3).alignment = { horizontal: 'right' };
+    row.getCell(4).alignment = { horizontal: 'center' };
     row.getCell(5).alignment = { horizontal: 'right' };
-    row.getCell(5).numFmt = '#,##,##0.00';
+    row.getCell(5).numFmt = '#,##0.000';
+    row.getCell(6).alignment = { horizontal: 'right' };
+    row.getCell(6).numFmt = '#,##,##0.00';
 
     tLot += Number(r.lot_count) || 0;
     tBag += Number(r.bag) || 0;
@@ -429,11 +450,11 @@ async function truckListXlsx(db, auctionId) {
     tAmt += Number(r.amount) || 0;
   });
 
-  const tot = ws.addRow([tLot, tBag, 'TOTAL', tQty, tAmt]);
+  const tot = ws.addRow(['', tLot, tBag, 'TOTAL', tQty, tAmt]);
   tot.font = { bold: true };
-  tot.getCell(4).numFmt = '#,##0.000';
-  tot.getCell(5).numFmt = '#,##,##0.00';
-  tot.getCell(3).alignment = { horizontal: 'center' };
+  tot.getCell(5).numFmt = '#,##0.000';
+  tot.getCell(6).numFmt = '#,##,##0.00';
+  tot.getCell(4).alignment = { horizontal: 'center' };
   tot.eachCell(c => {
     c.border = { top: { style: 'thin' }, bottom: { style: 'thin' } };
     c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF3CD' } };
@@ -472,14 +493,19 @@ async function truckListPdf(db, auctionId) {
   let pageStartY;
   const pageStarts = [];
 
+  // Resolve company branding once for use across pages
+  const companyHeader = getCompanyHeader(db);
+
   function drawTopHeader() {
-    doc.font('Helvetica-Bold').fontSize(13).fillColor('#000')
-       .text('IDEAL SPICES PRIVATE LIMITED', m, m, { width: usableW, align: 'center' });
-    doc.font('Helvetica-Bold').fontSize(10)
-       .text(`e-TRADE No: ${auction.ano}`, m, m + 18, { width: usableW / 3, align: 'left' });
-    doc.text('TRUCK LIST', m + usableW / 3, m + 18, { width: usableW / 3, align: 'center' });
-    doc.text(`Date: ${fmtDateDMY(auction.date)}`, m + 2 * usableW / 3, m + 18, { width: usableW / 3, align: 'right' });
-    y = m + 44;
+    const afterY = drawCompanyHeader(doc, companyHeader, {
+      x: m, y: m, width: usableW,
+      title: 'TRUCK LIST',
+      metaLines: [
+        `e-TRADE No: ${auction.ano}`,
+        `Date: ${fmtDateDMY(auction.date)}`,
+      ],
+    });
+    y = afterY;
   }
   function drawColHeader() {
     pageStartY = y;
@@ -641,56 +667,58 @@ async function buyerLotLorryXlsx(db, auctionId) {
   const ws = wb.addWorksheet('BuyerLotLorry');
 
   ws.columns = [
-    { width: 10 }, { width: 8 }, { width: 14 }, { width: 12 }, { width: 18 },
+    { width: 8 },   // SL.NO
+    { width: 10 },  // LOT
+    { width: 8 },   // BAG
+    { width: 14 },  // QTY
+    { width: 12 },  // RATE
+    { width: 18 },  // AMOUNT
   ];
 
-  // Top header
-  ws.mergeCells('A1:E1');
-  ws.getCell('A1').value = 'IDEAL SPICES PRIVATE LIMITED';
-  ws.getCell('A1').font = { bold: true, size: 14 };
-  ws.getCell('A1').alignment = { horizontal: 'center' };
-
-  ws.mergeCells('A2:E2');
-  ws.getCell('A2').value = `e-TRADE No: ${auction.ano}    Date: ${fmtDateDMY(auction.date)}`;
-  ws.getCell('A2').font = { bold: true, size: 11 };
-  ws.getCell('A2').alignment = { horizontal: 'center' };
-
-  ws.mergeCells('A3:E3');
-  ws.getCell('A3').value = `${auction.state || 'TAMIL NADU'}`;
-  ws.getCell('A3').font = { bold: true, size: 10, color: { argb: 'FF666666' } };
-  ws.getCell('A3').alignment = { horizontal: 'center' };
-
-  ws.addRow([]);
+  // Three-column brand band (6 columns).
+  writeXlsxCompanyHeader(wb, ws, getCompanyHeader(db), {
+    colCount: 6,
+    title: 'BUYER LOT LORRY',
+    metaLines: [
+      `e-TRADE No: ${auction.ano}`,
+      `Date: ${fmtDateDMY(auction.date)}`,
+      auction.state || '',
+    ].filter(Boolean),
+  });
 
   // Grand counters across the whole report
   let gLot = 0, gBag = 0, gQty = 0, gAmt = 0;
   // Counters for the intra-only mid-subtotal (matches the sample's intra-state subtotal)
   let intraLot = 0, intraBag = 0, intraQty = 0, intraAmt = 0;
+  // Buyer counter — increments across both inter and intra so each buyer gets
+  // a unique sequence number prefix matching the PDF ("1. FLORA SPICES", etc.)
+  let buyerSeq = 0;
 
   function emitSection(title, groups) {
     if (!groups.length) return;
     const sec = ws.addRow([title]);
-    ws.mergeCells(`A${sec.number}:E${sec.number}`);
+    ws.mergeCells(`A${sec.number}:F${sec.number}`);
     sec.font = { bold: true, size: 11 };
     sec.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD4EDDA' } };
     sec.alignment = { horizontal: 'center' };
 
     groups.forEach(g => {
-      // Buyer header row 1: name + code
-      const h1 = ws.addRow([`${g.buyer1 || g.sbl || g.buyer}    [${g.code}]`]);
-      ws.mergeCells(`A${h1.number}:E${h1.number}`);
+      buyerSeq += 1;
+      // Buyer header row 1: numbered name + code (e.g. "1. FLORA SPICES   [FSS]")
+      const h1 = ws.addRow([`${buyerSeq}. ${g.buyer1 || g.sbl || g.buyer}    [${g.code}]`]);
+      ws.mergeCells(`A${h1.number}:F${h1.number}`);
       h1.font = { bold: true, size: 10 };
       h1.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF3CD' } };
 
-      // Buyer header row 2: firm name + GSTIN
+      // Buyer header row 2: proprietor name + GSTIN
       if (g.sbl || g.gstin) {
         const h2 = ws.addRow([`${g.sbl || ''}    ${g.gstin || ''}`]);
-        ws.mergeCells(`A${h2.number}:E${h2.number}`);
+        ws.mergeCells(`A${h2.number}:F${h2.number}`);
         h2.font = { italic: true, size: 9, color: { argb: 'FF555555' } };
       }
 
-      // Column header
-      const ch = ws.addRow(['LOT', 'BAG', 'QTY', 'RATE', 'AMOUNT']);
+      // Column header — 6 columns matching PDF
+      const ch = ws.addRow(['SL.NO', 'LOT', 'BAG', 'QTY', 'RATE', 'AMOUNT']);
       ch.font = { bold: true, size: 9 };
       ch.eachCell(c => {
         c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8E4DD' } };
@@ -698,28 +726,32 @@ async function buyerLotLorryXlsx(db, auctionId) {
         c.alignment = { horizontal: 'center' };
       });
 
-      // Lot rows
+      // Lot rows (sorted by lot number)
       g.lots.sort((a, b) => {
         const na = parseInt(a.lot, 10), nb = parseInt(b.lot, 10);
         if (!isNaN(na) && !isNaN(nb)) return na - nb;
         return String(a.lot).localeCompare(String(b.lot));
       });
-      g.lots.forEach(lt => {
-        const r = ws.addRow([lt.lot, lt.bag, lt.qty, lt.rate, lt.amount]);
-        r.getCell(2).alignment = { horizontal: 'right' };
+      // Per-buyer lot serial resets to 1 at the start of each buyer block —
+      // matches the PDF's SL.NO column behaviour.
+      g.lots.forEach((lt, idx) => {
+        const r = ws.addRow([idx + 1, lt.lot, lt.bag, lt.qty, lt.rate, lt.amount]);
+        r.getCell(1).alignment = { horizontal: 'center' };
+        r.getCell(2).alignment = { horizontal: 'center' };
         r.getCell(3).alignment = { horizontal: 'right' };
-        r.getCell(3).numFmt = '#,##0.000';
         r.getCell(4).alignment = { horizontal: 'right' };
-        r.getCell(4).numFmt = '#,##0.00';
+        r.getCell(4).numFmt = '#,##0.000';
         r.getCell(5).alignment = { horizontal: 'right' };
-        r.getCell(5).numFmt = '#,##,##0.00';
+        r.getCell(5).numFmt = '#,##0.00';
+        r.getCell(6).alignment = { horizontal: 'right' };
+        r.getCell(6).numFmt = '#,##,##0.00';
       });
 
-      // Buyer subtotal
-      const sub = ws.addRow([g.totalLotCount, g.totalBag, g.totalQty, '', g.totalAmount]);
+      // Buyer subtotal — blank SL.NO, sum BAG/QTY/AMOUNT, blank RATE
+      const sub = ws.addRow(['', g.totalLotCount, g.totalBag, g.totalQty, '', g.totalAmount]);
       sub.font = { bold: true };
-      sub.getCell(3).numFmt = '#,##0.000';
-      sub.getCell(5).numFmt = '#,##,##0.00';
+      sub.getCell(4).numFmt = '#,##0.000';
+      sub.getCell(6).numFmt = '#,##,##0.00';
       sub.eachCell(c => {
         c.border = { top: { style: 'thin' }, bottom: { style: 'double' } };
         c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF7F5F2' } };
@@ -745,26 +777,26 @@ async function buyerLotLorryXlsx(db, auctionId) {
 
   // Intra-state subtotal (matches FoxPro: only printed when both sections exist)
   if (interState.length && intraState.length) {
-    const intraTot = ws.addRow([intraLot, intraBag, intraQty, '', intraAmt]);
+    const intraTot = ws.addRow(['', intraLot, intraBag, intraQty, '', intraAmt]);
     intraTot.font = { bold: true };
-    intraTot.getCell(3).numFmt = '#,##0.000';
-    intraTot.getCell(5).numFmt = '#,##,##0.00';
+    intraTot.getCell(4).numFmt = '#,##0.000';
+    intraTot.getCell(6).numFmt = '#,##,##0.00';
     intraTot.eachCell((c, ci) => {
       c.border = { top: { style: 'thin' }, bottom: { style: 'thin' } };
       c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE6F4EA' } };
-      if (ci === 4) c.value = 'INTRA-STATE TOTAL';
+      if (ci === 5) c.value = 'INTRA-STATE TOTAL';
     });
   }
 
   // Grand total
-  const grand = ws.addRow([gLot, gBag, gQty, '', gAmt]);
+  const grand = ws.addRow(['', gLot, gBag, gQty, '', gAmt]);
   grand.font = { bold: true, size: 11 };
-  grand.getCell(3).numFmt = '#,##0.000';
-  grand.getCell(5).numFmt = '#,##,##0.00';
+  grand.getCell(4).numFmt = '#,##0.000';
+  grand.getCell(6).numFmt = '#,##,##0.00';
   grand.eachCell((c, ci) => {
     c.border = { top: { style: 'double' }, bottom: { style: 'double' } };
     c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF3CD' } };
-    if (ci === 4) c.value = 'GRAND TOTAL';
+    if (ci === 5) c.value = 'GRAND TOTAL';
   });
 
   return wb.xlsx.writeBuffer();
@@ -824,13 +856,19 @@ async function buyerLotLorryPdf(db, auctionId) {
     }
   }
 
+  // Resolve company branding once for use across pages
+  const companyHeader = getCompanyHeader(db);
+
   function drawTopHeader() {
-    doc.font('Helvetica-Bold').fontSize(13).fillColor('#000')
-       .text('IDEAL SPICES PRIVATE LIMITED', m, m, { width: usableW, align: 'center' });
-    doc.font('Helvetica-Bold').fontSize(10)
-       .text(`e-TRADE No: ${auction.ano}`, m, m + 18, { width: usableW / 2, align: 'left' });
-    doc.text(`Date: ${fmtDateDMY(auction.date)}`, m + usableW / 2, m + 18, { width: usableW / 2, align: 'right' });
-    y = m + 38;
+    const afterY = drawCompanyHeader(doc, companyHeader, {
+      x: m, y: m, width: usableW,
+      title: 'BUYER LOT LORRY',
+      metaLines: [
+        `e-TRADE No: ${auction.ano}`,
+        `Date: ${fmtDateDMY(auction.date)}`,
+      ],
+    });
+    y = afterY;
   }
 
   function drawSection(label) {

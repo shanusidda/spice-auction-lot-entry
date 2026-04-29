@@ -15,6 +15,10 @@
 
 const PDFDocument = require('pdfkit');
 const auctionReports = require('./auction-reports');
+const {
+  fmtMoney, fmtQty, fmtPrice,
+  getCompanyHeader, drawCompanyHeader,
+} = require('./report-formatters');
 
 // Manually truncate `text` to fit `maxWidth` using doc.widthOfString. PDFKit
 // 0.15's `lineBreak: false` + `ellipsis: true` is unreliable for long single
@@ -123,7 +127,7 @@ function preprocessRows(rows, opts) {
 }
 
 // ── Generic table-to-PDF renderer ───────────────────────────
-function renderTablePdf({ title, subtitle, columns, rows, totals, layout }) {
+function renderTablePdf({ title, subtitle, columns, rows, totals, layout, companyHeader }) {
   // layout: 'portrait' (default) or 'landscape'. All exports default to
   // portrait per user preference. Override per-type via PDF_LAYOUT below
   // if a specific report ever needs landscape (e.g. very wide column sets).
@@ -164,8 +168,6 @@ function renderTablePdf({ title, subtitle, columns, rows, totals, layout }) {
 
   const ROW_H = 13;
   const HEAD_H = 16;
-  const TOP = m;
-  const BODY_TOP_FIRST = TOP + 38 + (subtitle ? 14 : 0);
   let y;
 
   function isNumericCol(col) {
@@ -177,9 +179,16 @@ function renderTablePdf({ title, subtitle, columns, rows, totals, layout }) {
     if (val === null || val === undefined || val === '') return '';
     if (typeof val === 'number') {
       const h = (col.header || '').toUpperCase();
-      if (h === 'QTY' || h === 'PQTY' || h === 'LITRE') return val.toFixed(3);
-      if (Number.isInteger(val)) return String(val);
-      return val.toFixed(2);
+      // Kilos / pure quantities: 3 decimals, Indian commas (1,100.000)
+      if (h === 'QTY' || h === 'PQTY' || h === 'LITRE' || h === 'KILOS' || h === 'QUANTITY') {
+        return fmtQty(val);
+      }
+      // Bag counts and other non-decimal integers stay plain
+      if (Number.isInteger(val) && (h === 'BAG' || h === 'BAGS' || h === 'LOTS' || h === 'LOT')) {
+        return String(val);
+      }
+      // Everything else numeric is treated as rupees: 2 decimals, Indian commas.
+      return fmtMoney(val);
     }
     return String(val);
   }
@@ -220,19 +229,29 @@ function renderTablePdf({ title, subtitle, columns, rows, totals, layout }) {
 
   function drawHeader(firstPage) {
     if (firstPage) {
-      doc.font('Helvetica-Bold').fontSize(13).fillColor('#000')
-         .text(title, m, TOP, { width: usableW, align: 'left' });
-      doc.font('Helvetica').fontSize(8).fillColor('#555')
-         .text(new Date().toLocaleString('en-GB'), m, TOP + 16, { width: usableW, align: 'right' });
+      // Three-column brand band: company on left, report title centered,
+      // subtitle pieces (trade no, date, etc.) right-aligned. The subtitle
+      // string for these reports is "Trade #3 — 15/04/2026 — ASP", so split
+      // it on " — " into separate meta lines.
+      const metaLines = [];
       if (subtitle) {
-        doc.font('Helvetica').fontSize(9).fillColor('#333')
-           .text(subtitle, m, TOP + 28, { width: usableW, align: 'left' });
+        for (const part of String(subtitle).split(' — ')) {
+          if (part.trim()) metaLines.push(part.trim());
+        }
       }
-      y = BODY_TOP_FIRST;
+      // Always include the timestamp on the right as the last meta line.
+      metaLines.push(new Date().toLocaleString('en-GB'));
+
+      const afterY = drawCompanyHeader(doc, companyHeader || {}, {
+        x: m, y: m, width: usableW,
+        title: title,
+        metaLines: metaLines,
+      });
+      y = afterY;
     } else {
       doc.font('Helvetica-Bold').fontSize(10).fillColor('#000')
-         .text(`${title} (continued)`, m, TOP, { width: usableW, align: 'left' });
-      y = TOP + 20;
+         .text(`${title} (continued)`, m, m, { width: usableW, align: 'left' });
+      y = m + 18;
     }
 
     // Compute header height by wrapping each header label
@@ -259,51 +278,94 @@ function renderTablePdf({ title, subtitle, columns, rows, totals, layout }) {
     y += headH;
   }
 
+  // For numeric cells: if the rendered string is wider than the column,
+  // shrink the font from BASE down to a minimum until it fits. Returns the
+  // size to use (the caller restores after). Non-numeric cells still wrap.
+  function fitNumericFontSize(text, maxWidth, baseSize, isBold) {
+    doc.font(isBold ? 'Helvetica-Bold' : 'Helvetica');
+    let size = baseSize;
+    doc.fontSize(size);
+    while (size > 5 && doc.widthOfString(text) > maxWidth) {
+      size -= 0.5;
+      doc.fontSize(size);
+    }
+    return size;
+  }
+
   function drawRow(row, i, rowH, wrapped) {
     if (row._isSubtotal) {
       // Subtotal row — full-width yellow strip styled like the grand total.
       doc.rect(m, y, usableW, rowH).fillAndStroke('#FFF3CD', '#E0B020');
-      doc.fillColor('#000').font('Helvetica-Bold').fontSize(7.5);
+      const BASE = 7.5;
       const LINE_H = 10;
       const PAD_TOP = 3;
       columns.forEach((c, ci) => {
         const lines = wrapped[ci];
-        lines.forEach((line, li) => {
-          doc.text(line, colX[ci] + 3, y + PAD_TOP + li * LINE_H, {
-            width: colWidths[ci] - 6,
-            align: isNumericCol(c) ? 'right' : 'left',
-            lineBreak: false,
+        const cellW = colWidths[ci] - 6;
+        if (isNumericCol(c) && lines.length === 1) {
+          // Numeric: auto-shrink to fit on one line.
+          const size = fitNumericFontSize(lines[0], cellW, BASE, true);
+          doc.fillColor('#000').font('Helvetica-Bold').fontSize(size);
+          doc.text(lines[0], colX[ci] + 3, y + PAD_TOP, {
+            width: cellW, align: 'right', lineBreak: false,
           });
-        });
+        } else {
+          doc.fillColor('#000').font('Helvetica-Bold').fontSize(BASE);
+          lines.forEach((line, li) => {
+            doc.text(line, colX[ci] + 3, y + PAD_TOP + li * LINE_H, {
+              width: cellW, align: isNumericCol(c) ? 'right' : 'left', lineBreak: false,
+            });
+          });
+        }
       });
       y += rowH;
       return;
     }
     if (i % 2 === 1) doc.rect(m, y, usableW, rowH).fill('#F7F5F2');
-    doc.fillColor('#000').font('Helvetica').fontSize(7.5);
+    const BASE = 7.5;
     const LINE_H = 10;
     const PAD_TOP = 3;
     columns.forEach((c, ci) => {
       const lines = wrapped[ci];
-      lines.forEach((line, li) => {
-        doc.text(line, colX[ci] + 3, y + PAD_TOP + li * LINE_H, {
-          width: colWidths[ci] - 6,
-          align: isNumericCol(c) ? 'right' : 'left',
-          lineBreak: false,
+      const cellW = colWidths[ci] - 6;
+      if (isNumericCol(c) && lines.length === 1) {
+        // Numeric: auto-shrink to fit on one line — never wrap a number.
+        const size = fitNumericFontSize(lines[0], cellW, BASE, false);
+        doc.fillColor('#000').font('Helvetica').fontSize(size);
+        doc.text(lines[0], colX[ci] + 3, y + PAD_TOP, {
+          width: cellW, align: 'right', lineBreak: false,
         });
-      });
+      } else {
+        doc.fillColor('#000').font('Helvetica').fontSize(BASE);
+        lines.forEach((line, li) => {
+          doc.text(line, colX[ci] + 3, y + PAD_TOP + li * LINE_H, {
+            width: cellW, align: isNumericCol(c) ? 'right' : 'left', lineBreak: false,
+          });
+        });
+      }
     });
     doc.moveTo(m, y + rowH).lineTo(m + usableW, y + rowH).lineWidth(0.25).strokeColor('#DDD').stroke();
     y += rowH;
   }
 
   // Pre-measure a row's required height by wrapping each cell.
+  // Numeric cells are NOT wrapped — they're laid out single-line and the font
+  // shrinks if the value overflows, since wrapping a number across lines
+  // (e.g. "10,71,225." / "00") looks broken. Non-numeric cells word-wrap.
   function measureRow(row) {
     doc.font('Helvetica').fontSize(7.5);
     const LINE_H = 10;
     const PAD_TOP = 3, PAD_BOT = 3;
     const MIN_ROW = 14;
-    const wrapped = columns.map((c, ci) => wrapText(doc, fmtCell(row[c.key], c), colWidths[ci] - 6));
+    const wrapped = columns.map((c, ci) => {
+      const cellW = colWidths[ci] - 6;
+      const text = fmtCell(row[c.key], c);
+      if (isNumericCol(c)) {
+        // Single-line; auto-shrink handled at draw time.
+        return [String(text)];
+      }
+      return wrapText(doc, text, cellW);
+    });
     const maxLines = Math.max(1, ...wrapped.map(ls => ls.length));
     const rowH = Math.max(MIN_ROW, maxLines * LINE_H + PAD_TOP + PAD_BOT);
     return { rowH, wrapped };
@@ -328,16 +390,27 @@ function renderTablePdf({ title, subtitle, columns, rows, totals, layout }) {
     drawDataVerticals();
     y += 2;
     doc.rect(m, y, usableW, ROW_H + 2).fillAndStroke('#FFF3CD', '#E0B020');
-    doc.fillColor('#000').font('Helvetica-Bold').fontSize(8);
     columns.forEach((c, ci) => {
       const val = totals[c.key];
       if (val === undefined || val === null || val === '') return;
-      const fitted = fitText(doc, fmtCell(val, c), colWidths[ci] - 6);
-      doc.text(fitted, colX[ci] + 3, y + 4, {
-        width: colWidths[ci] - 6,
-        align: isNumericCol(c) ? 'right' : 'left',
-        lineBreak: false,
-      });
+      const cellW = colWidths[ci] - 6;
+      const text = fmtCell(val, c);
+      if (isNumericCol(c)) {
+        // Auto-shrink numeric totals so they never get truncated with an
+        // ellipsis — losing digits in a total is much worse than a slightly
+        // smaller font.
+        const size = fitNumericFontSize(text, cellW, 8, true);
+        doc.fillColor('#000').font('Helvetica-Bold').fontSize(size);
+        doc.text(text, colX[ci] + 3, y + 4, {
+          width: cellW, align: 'right', lineBreak: false,
+        });
+      } else {
+        doc.fillColor('#000').font('Helvetica-Bold').fontSize(8);
+        const fitted = fitText(doc, text, cellW);
+        doc.text(fitted, colX[ci] + 3, y + 4, {
+          width: cellW, align: 'left', lineBreak: false,
+        });
+      }
     });
     y += ROW_H + 2;
     // Outer border now encloses data + totals; the verticals were drawn
@@ -417,15 +490,15 @@ const COLS = {
     // STATE column dropped per user request; serial number shown per-name
     // (resets within each name group), with a subtotal row for each name.
     { header: 'SL.NO',  key: '_sn',         width: 6  },
-    { header: 'NAME',   key: 'poolername',  width: 30 },
-    { header: 'BRANCH', key: 'br',          width: 14 },
-    { header: 'LOT',    key: 'lot',         width: 8  },
+    { header: 'NAME',   key: 'poolername',  width: 28 },
+    { header: 'BRANCH', key: 'br',          width: 12 },
+    { header: 'LOT',    key: 'lot',         width: 7  },
     { header: 'QTY',    key: 'qty',         width: 12 },
-    { header: 'PRICE',  key: 'price',       width: 10 },
-    { header: 'AMOUNT', key: 'amount',      width: 14 },
+    { header: 'PRICE',  key: 'price',       width: 9  },
+    { header: 'AMOUNT', key: 'amount',      width: 16 },
     { header: 'PQTY',   key: 'pqty',        width: 12 },
-    { header: 'PRATE',  key: 'prate',       width: 10 },
-    { header: 'PURAMT', key: 'puramt',      width: 14 },
+    { header: 'PRATE',  key: 'prate',       width: 9  },
+    { header: 'PURAMT', key: 'puramt',      width: 16 },
   ],
   full_file: [
     { header: 'STATE', key: 'state', width: 10 }, { header: 'LOT', key: 'lot_no', width: 8 },
@@ -475,18 +548,20 @@ const COLS = {
   ],
   payment: [
     // Serial number resets per pooler; each pooler gets a subtotal row.
-    { header: 'SL.NO',      key: '_sn',         width: 6 },
-    { header: 'POOLERNAME', key: 'poolername',  width: 26 },
-    { header: 'LOT',        key: 'lot',         width: 8 },
-    { header: 'BAG',        key: 'bag',         width: 6 },
+    // Money columns sized for Indian-format 7-digit values like
+    // "1,73,31,966.50" without wrapping.
+    { header: 'SL.NO',      key: '_sn',         width: 5  },
+    { header: 'POOLERNAME', key: 'poolername',  width: 22 },
+    { header: 'LOT',        key: 'lot',         width: 7  },
+    { header: 'BAG',        key: 'bag',         width: 5  },
     { header: 'QTY',        key: 'qty',         width: 10 },
-    { header: 'PRICE',      key: 'price',       width: 10 },
-    { header: 'AMOUNT',     key: 'amount',      width: 12 },
+    { header: 'PRICE',      key: 'price',       width: 9  },
+    { header: 'AMOUNT',     key: 'amount',      width: 14 },
     { header: 'PQTY',       key: 'pqty',        width: 10 },
-    { header: 'PRATE',      key: 'prate',       width: 10 },
-    { header: 'PURAMT',     key: 'puramt',      width: 12 },
+    { header: 'PRATE',      key: 'prate',       width: 9  },
+    { header: 'PURAMT',     key: 'puramt',      width: 14 },
     { header: 'DISCOUNT',   key: 'discount',    width: 10 },
-    { header: 'PAYABLE',    key: 'payable',     width: 12 },
+    { header: 'PAYABLE',    key: 'payable',     width: 14 },
   ],
   tally_purchase: [
     { header: 'NAME', key: 'name', width: 24 }, { header: 'ADD', key: 'add', width: 24 },
@@ -728,6 +803,7 @@ async function exportPdf(db, type, auctionId, cfg, extra = {}) {
     rows,
     totals,
     layout: PDF_LAYOUT[type],
+    companyHeader: getCompanyHeader(db),
   });
 }
 
