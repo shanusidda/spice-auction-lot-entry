@@ -231,16 +231,14 @@ function renderTablePdf({ title, subtitle, columns, rows, totals, layout, compan
     if (firstPage) {
       // Three-column brand band: company on left, report title centered,
       // subtitle pieces (trade no, date, etc.) right-aligned. The subtitle
-      // string for these reports is "Trade #3 — 15/04/2026 — ASP", so split
-      // it on " — " into separate meta lines.
+      // string for these reports is e.g. "e-TRADE No: 3 — Date: 15/04/2026",
+      // so split it on " — " into separate meta lines.
       const metaLines = [];
       if (subtitle) {
         for (const part of String(subtitle).split(' — ')) {
           if (part.trim()) metaLines.push(part.trim());
         }
       }
-      // Always include the timestamp on the right as the last meta line.
-      metaLines.push(new Date().toLocaleString('en-GB'));
 
       const afterY = drawCompanyHeader(doc, companyHeader || {}, {
         x: m, y: m, width: usableW,
@@ -791,7 +789,11 @@ async function exportPdf(db, type, auctionId, cfg, extra = {}) {
     const auction = db.get('SELECT ano, date, crop_type FROM auctions WHERE id = ?', [auctionId]);
     if (auction) {
       const d = auction.date ? auction.date.split('-').reverse().join('/') : '';
-      subtitle = `Trade #${auction.ano} — ${d}${auction.crop_type ? ' — ' + auction.crop_type : ''}`;
+      // Two clean meta lines, joined by " — " so renderTablePdf can split
+      // them back into separate right-side rows. The crop type (ISP/ASP) is
+      // omitted — the active preset is already obvious from the logo and
+      // company name in the brand block.
+      subtitle = `e-TRADE No: ${auction.ano} — Date: ${d}`;
       if (extra.state) subtitle += ` — State: ${extra.state}`;
     }
   }

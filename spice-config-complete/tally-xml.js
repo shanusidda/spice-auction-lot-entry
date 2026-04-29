@@ -1459,7 +1459,12 @@ function buildSalesPartyLedgerRows(db, auctionId, cfg, opts = {}) {
  */
 function buildRDPartyLedgerRows(db, auctionId, cfg, opts = {}) {
   const todayDate = toTallyDate(new Date());
-  const intra = cfgGet(cfg, 'tally_state_code', '33');
+  // RD party ledgers belong in the ASP Tally company. The intra/local
+  // determination must therefore use the ASP company's home GSTIN state
+  // code (defaults to 32 = Kerala), not the ISP code (33 = Tamil Nadu).
+  // Falls back to the ISP code if the ASP one isn't configured, so existing
+  // setups without a separate ASP code keep working.
+  const intra = cfgGet(cfg, 'tally_state_code_amazing', '') || cfgGet(cfg, 'tally_state_code', '33');
   const interDealPur = cfgGet(cfg, 'tally_purchase_dealer_inter', 'Interstate Dealer');
   const localDealPur = cfgGet(cfg, 'tally_purchase_dealer_intra', 'Local Dealer');
 

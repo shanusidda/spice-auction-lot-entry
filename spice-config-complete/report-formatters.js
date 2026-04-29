@@ -65,7 +65,7 @@ function getCompanyHeader(db) {
   let name = 'IDEAL SPICES PRIVATE LIMITED';
   let logoFile = 'logo-ispl.png';
   let address1 = '';
-  let address2 = '';
+  let branch = '';
 
   if (db && typeof db.get === 'function') {
     try {
@@ -94,13 +94,15 @@ function getCompanyHeader(db) {
       // logo-ispl.png is the actual filename in /public for the ISP preset
       logoFile = logoCode === 'asp' ? 'logo-asp.png' : 'logo-ispl.png';
 
-      // Address lines come from the location-specific block.  For ISP we use
-      // the Tamil Nadu address (tn_*); for ASP the sister address (s_*).
+      // Brand block shows three lines: company name, address line 1, and
+      // office branch. For ISP we use the Tamil Nadu fields (tn_*); for
+      // ASP we use the sister/Kerala fields (s_address1 + kl_branch).
       const addrPrefix = isASP ? 's_' : 'tn_';
+      const branchKey = isASP ? 'kl_branch' : 'tn_branch';
       const a1Row = db.get('SELECT value FROM company_settings WHERE key = ?', [addrPrefix + 'address1']);
-      const a2Row = db.get('SELECT value FROM company_settings WHERE key = ?', [addrPrefix + 'address2']);
       if (a1Row && a1Row.value) address1 = a1Row.value;
-      if (a2Row && a2Row.value) address2 = a2Row.value;
+      const bRow = db.get('SELECT value FROM company_settings WHERE key = ?', [branchKey]);
+      if (bRow && bRow.value) branch = bRow.value;
     } catch (_) {
       // Ignore — fall through to defaults
     }
@@ -110,7 +112,10 @@ function getCompanyHeader(db) {
   const logoPath = path.join(__dirname, 'public', logoFile);
   const logoOnDisk = fs.existsSync(logoPath) ? logoPath : null;
 
-  return { name, logoPath: logoOnDisk, address1, address2 };
+  // The header object exposes `address1` and `address2` for backward
+  // compatibility with PDF/XLSX renderers — `address2` now carries the
+  // office branch instead of the second address line.
+  return { name, logoPath: logoOnDisk, address1, address2: branch, branch };
 }
 
 // Truncate `text` so doc.widthOfString(out) <= maxWidth, appending an ellipsis
@@ -416,10 +421,17 @@ function writeXlsxCompanyHeader(wb, ws, header, opts) {
       break;
     }
 
-    // Left zone needs enough width for "IDEAL SPICES PRIVATE LIMITED" on a
-    // single line. With wrapText enabled, the address lines wrap naturally
-    // inside, so we only need ~28 units (the name is ~28 chars at 11pt bold).
-    const NEEDED_LEFT = 28;
+    // Left zone needs enough width to fit the company name on a single line.
+    // Address lines may wrap, but row heights below are tall enough to show
+    // those wrapped lines without clipping.
+    const nameLen = (header.name || '').length;          // chars at 11pt bold
+    const LOGO_INDENT = 9;
+    // 11pt bold needs ~1.1 char-unit per character + padding for indent and margin.
+    const nameNeed = LOGO_INDENT + Math.ceil(nameLen * 1.1) + 2;
+    // leftZoneWidth() doesn't include the logo column (col 1), so subtract
+    // the logo column width from the budget. Cap at ~40 char-units so we
+    // don't push other columns off the printable page.
+    const NEEDED_LEFT = Math.max(0, Math.min(40, nameNeed - colWidths[0]));
     const shortfall = NEEDED_LEFT - leftZoneWidth();
     if (shortfall > 0) {
       const widenCol = ws.getColumn(leftEnd);
@@ -454,11 +466,11 @@ function writeXlsxCompanyHeader(wb, ws, header, opts) {
   const lastCol = colCount;
 
   // Brand band: 3 rows of content + 1 spacer = 4 rows total.
-  // Tall rows (~80pt total) so the merged left cell can fit the company name
-  // plus 2 address lines, even when the addresses wrap to 2 lines each.
-  ws.getRow(1).height = 22;
-  ws.getRow(2).height = 22;
-  ws.getRow(3).height = 22;
+  // Tall rows (~78pt total) so the merged left cell can fit the company name
+  // plus 2 address lines, with each address wrapping to up to 2 lines.
+  ws.getRow(1).height = 26;
+  ws.getRow(2).height = 26;
+  ws.getRow(3).height = 26;
   ws.getRow(4).height = 6;
 
   // ── Brand block: ONE merged cell spanning cols 1..leftEnd × rows 1-3 ──

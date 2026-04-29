@@ -4,18 +4,88 @@
  */
 
 const ExcelJS = require('exceljs');
+const { collectionXlsx: newCollectionXlsx, tradeReportXlsx } = require('./auction-reports');
+const {
+  getCompanyHeader, writeXlsxCompanyHeader, xlsxNumFmtForHeader,
+} = require('./report-formatters');
 
-async function createExcelBuffer(sheetName, columns, rows) {
+// Build an XLSX buffer with a unified brand band on top and Indian-format
+// numeric columns. `opts.title` is the report title shown in the middle of
+// the band; `opts.metaLines` is an array of right-aligned meta strings
+// (e.g. ["Trade #3", "15/04/2026", "ASP"]).
+async function createExcelBuffer(sheetName, columns, rows, opts) {
+  opts = opts || {};
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet(sheetName);
-  ws.columns = columns.map(c => ({ header: c.header, key: c.key, width: c.width || 15 }));
-  
-  // Header style
-  ws.getRow(1).font = { bold: true, size: 10 };
-  ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8E4DD' } };
-  
-  rows.forEach(r => ws.addRow(r));
+
+  // Apply column widths up front (the brand band uses these widths too).
+  ws.columns = columns.map(c => ({ key: c.key, width: c.width || 15 }));
+
+  // Brand band: logo + name + address (left), title (middle), meta (right).
+  const header = opts.companyHeader || getCompanyHeader(opts.db);
+  const startRow = writeXlsxCompanyHeader(wb, ws, header, {
+    colCount: columns.length,
+    title: opts.title || sheetName,
+    metaLines: opts.metaLines || [],
+  });
+
+  // Column-header row (right after the brand band, with the spacer row).
+  const headerRow = ws.getRow(startRow);
+  columns.forEach((c, i) => {
+    headerRow.getCell(i + 1).value = c.header;
+  });
+  headerRow.font = { bold: true, size: 10 };
+  headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8E4DD' } };
+  headerRow.eachCell((cell) => {
+    cell.border = { top: { style: 'thin' }, bottom: { style: 'thin' } };
+    cell.alignment = { horizontal: 'center' };
+  });
+
+  // Apply Indian-format numFmt to each numeric column. We do this on the
+  // worksheet column object so every data row picks it up automatically.
+  columns.forEach((c, i) => {
+    const fmt = xlsxNumFmtForHeader(c.header);
+    if (fmt) {
+      const colObj = ws.getColumn(i + 1);
+      colObj.numFmt = fmt;
+      colObj.alignment = { horizontal: 'right' };
+    }
+  });
+
+  // Data rows. addRow uses keys from ws.columns to map object → cells.
+  rows.forEach((rowObj) => {
+    const dataRow = ws.addRow({});
+    columns.forEach((c, i) => {
+      let v = rowObj[c.key];
+      // Coerce string-numbers to numbers so Excel applies the numFmt.
+      if (typeof v === 'string' && v !== '' && !isNaN(Number(v))) {
+        const n = Number(v);
+        if (!Number.isNaN(n) && xlsxNumFmtForHeader(c.header)) v = n;
+      }
+      dataRow.getCell(i + 1).value = v == null ? '' : v;
+    });
+  });
+
   return wb.xlsx.writeBuffer();
+}
+
+// Build the common XLSX header meta lines for a given auction. Returns
+// an array like ["e-TRADE No: 3", "Date: 15/04/2026"]. The crop type
+// (ISP/ASP) is omitted — the active preset is already shown via the logo
+// and company name in the brand block.
+function auctionMeta(db, auctionId) {
+  if (!auctionId) return [];
+  try {
+    const a = db.get(
+      'SELECT ano, date, crop_type FROM auctions WHERE id = ?', [auctionId]
+    );
+    if (!a) return [];
+    const dt = String(a.date || '').slice(0, 10).split('-').reverse().join('/');
+    const meta = [];
+    if (a.ano) meta.push(`e-TRADE No: ${a.ano}`);
+    if (dt) meta.push(`Date: ${dt}`);
+    return meta;
+  } catch (_) { return []; }
 }
 
 // ── Export Type 1: Lot Slip (before trade) ───────────────────
@@ -34,7 +104,9 @@ async function exportLotSlip(db, auctionId, state) {
     { header: 'QTY', key: 'qty', width: 12 },
     { header: 'LITRE', key: 'litre', width: 10 },
   ];
-  return createExcelBuffer('LotSlip', cols, rows);
+  return createExcelBuffer('LotSlip', cols, rows, {
+    db, title: 'Lot Slip', metaLines: auctionMeta(db, auctionId),
+  });
 }
 
 // ── Export Type 2: Lot Slip After Trade (with price/buyer) ───
@@ -54,7 +126,9 @@ async function exportLotSlipAfter(db, auctionId, state) {
     { header: 'AMOUNT', key: 'amount', width: 14 },
     { header: 'CODE', key: 'code', width: 8 },
   ];
-  return createExcelBuffer('LotSlipAfter', cols, rows);
+  return createExcelBuffer('LotSlipAfter', cols, rows, {
+    db, title: 'Lot Slip (After Trade)', metaLines: auctionMeta(db, auctionId),
+  });
 }
 
 // ── Export Type 3: Price List ─────────────────────────────────
@@ -71,7 +145,9 @@ async function exportPriceList(db, auctionId) {
     { header: 'CODE', key: 'code', width: 8 },
     { header: 'BIDDER', key: 'bidder', width: 20 },
   ];
-  return createExcelBuffer('PriceList', cols, rows);
+  return createExcelBuffer('PriceList', cols, rows, {
+    db, title: 'Price List', metaLines: auctionMeta(db, auctionId),
+  });
 }
 
 // ── Export Type 4: Bank Payment (RTGS/NEFT format) ───────────
@@ -89,7 +165,9 @@ async function exportBankPayment(db, auctionId, cfg) {
     { header: 'Amount', key: 'amount', width: 14 },
     { header: 'SendertoRcvrInfo', key: 'remarks', width: 50 },
   ];
-  return createExcelBuffer('BankPayment', cols, payments);
+  return createExcelBuffer('BankPayment', cols, payments, {
+    db, title: 'Bank Payment (RTGS/NEFT)', metaLines: auctionMeta(db, auctionId),
+  });
 }
 
 // ── Export Type 5: Pooler-wise Register ───────────────────────
@@ -111,7 +189,9 @@ async function exportPoolerRegister(db, auctionId) {
     { header: 'PRATE', key: 'prate', width: 10 },
     { header: 'PURAMT', key: 'puramt', width: 14 },
   ];
-  return createExcelBuffer('PoolerRegister', cols, rows);
+  return createExcelBuffer('PoolerRegister', cols, rows, {
+    db, title: 'Pooler Register', metaLines: auctionMeta(db, auctionId),
+  });
 }
 
 // ── Export Type 6: Full File ─────────────────────────────────
@@ -133,25 +213,16 @@ async function exportFullFile(db, auctionId) {
     { header: 'SGST', key: 'sgst' }, { header: 'IGST', key: 'igst' },
     { header: 'ADVANCE', key: 'advance', width: 14 }, { header: 'BALANCE', key: 'balance', width: 14 },
   ];
-  return createExcelBuffer('FullFile', cols, rows);
+  return createExcelBuffer('FullFile', cols, rows, {
+    db, title: 'Full File', metaLines: auctionMeta(db, auctionId),
+  });
 }
 
-// ── Export Type 7: Collection/Lorry ──────────────────────────
+// ── Export Type 7: Collection (invoice register) ─────────────
+// Mirrors COLLECTION.pdf: one row per sales invoice issued, grouped by buyer
+// state. Columns: SALE+INVO | TRADE NAME (firm) | NAME (buyer) | QTY | VALUE.
 async function exportCollection(db, auctionId) {
-  const rows = db.all(
-    `SELECT branch, name, cr, bags as bag, qty, litre, grade
-     FROM lots WHERE auction_id = ? ORDER BY branch, name`, [auctionId]
-  );
-  const cols = [
-    { header: 'BRANCH', key: 'branch', width: 15 },
-    { header: 'NAME', key: 'name', width: 30 },
-    { header: 'CR', key: 'cr', width: 25 },
-    { header: 'BAG', key: 'bag', width: 6 },
-    { header: 'QTY', key: 'qty', width: 12 },
-    { header: 'LITRE', key: 'litre', width: 10 },
-    { header: 'GRADE', key: 'grade', width: 8 },
-  ];
-  return createExcelBuffer('Collection', cols, rows);
+  return newCollectionXlsx(db, auctionId);
 }
 
 // ── Export Type 8: Dealer List ────────────────────────────────
@@ -170,7 +241,9 @@ async function exportDealerList(db, auctionId) {
     { header: 'BAGS', key: 'bags', width: 6 },
     { header: 'QTY', key: 'qty', width: 12 },
   ];
-  return createExcelBuffer('DealerList', cols, rows);
+  return createExcelBuffer('DealerList', cols, rows, {
+    db, title: 'Dealer List', metaLines: auctionMeta(db, auctionId),
+  });
 }
 
 // ── Export Type 9: Sales & Taxes ─────────────────────────────
@@ -194,7 +267,9 @@ async function exportSalesTaxes(db, auctionId) {
     { header: 'INSURANCE', key: 'insurance', width: 10 },
     { header: 'TOTAL', key: 'total', width: 14 },
   ];
-  return createExcelBuffer('SalesTaxes', cols, rows);
+  return createExcelBuffer('SalesTaxes', cols, rows, {
+    db, title: 'Sales & Taxes', metaLines: auctionMeta(db, auctionId),
+  });
 }
 
 // ── Export: Payment Summary ──────────────────────────────────
@@ -249,7 +324,9 @@ async function exportPaymentSummary(db, auctionId, cfg) {
     { header: 'DISCOUNT', key: 'discount', width: 14 },
     { header: 'PAYABLE', key: 'payable', width: 14 },
   ];
-  return createExcelBuffer('Payment', cols, enriched);
+  return createExcelBuffer('Payment', cols, enriched, {
+    db, title: 'Payment Summary', metaLines: auctionMeta(db, auctionId),
+  });
 }
 
 // ── Export: TDS Return ───────────────────────────────────────
@@ -264,7 +341,9 @@ async function exportTDSReturn(db, fromDate, toDate) {
     { header: 'ASSESS_VALUE', key: 'assess_value', width: 14 },
     { header: 'TDS', key: 'tds', width: 12 },
   ];
-  return createExcelBuffer('TDSReturn', cols, rows);
+  return createExcelBuffer('TDSReturn', cols, rows, {
+    db, title: 'TDS Return', metaLines: [`From: ${fromDate}`, `To: ${toDate}`],
+  });
 }
 
 // ── Export: Tally format (TALY.PRG — purchase data for accounting)
@@ -289,7 +368,9 @@ async function exportTallyPurchase(db, auctionId, cfg) {
     { header: 'IGST', key: 'igst', width: 12 }, { header: 'DISCOUNT', key: 'discount', width: 14 },
     { header: 'BILAMT', key: 'bilamt', width: 14 },
   ];
-  return createExcelBuffer('TallyPurchase', cols, rows);
+  return createExcelBuffer('TallyPurchase', cols, rows, {
+    db, title: 'Tally Purchase', metaLines: auctionMeta(db, auctionId),
+  });
 }
 
 // ── Export: Sales Journal (JOUR.PRG) ────────────────────────
@@ -317,7 +398,10 @@ async function exportSalesJournal(db, fromDate, toDate, saleType) {
     { header: 'ROUND', key: 'rund', width: 8 },
     { header: 'TOTAL', key: 'total', width: 14 },
   ];
-  return createExcelBuffer('SalesJournal', cols, rows);
+  return createExcelBuffer('SalesJournal', cols, rows, {
+    db, title: 'Sales Journal',
+    metaLines: [`From: ${fromDate}`, `To: ${toDate}`, saleType ? `Type: ${saleType}` : ''].filter(Boolean),
+  });
 }
 
 // ── Export: Purchase Journal (PUJOUR.PRG / PPUJOUR.PRG) ────
@@ -355,7 +439,11 @@ async function exportPurchaseJournal(db, fromDate, toDate, type) {
     { header: 'TDS', key: 'tds', width: 10 },
   ];
   const name = type === 'agri' ? 'AgriBillJournal' : 'PurchaseJournal';
-  return createExcelBuffer(name, cols, rows);
+  return createExcelBuffer(name, cols, rows, {
+    db,
+    title: type === 'agri' ? 'Agri Bill Journal' : 'Purchase Journal',
+    metaLines: [`From: ${fromDate}`, `To: ${toDate}`],
+  });
 }
 
 // ── Export: Praman CSV (Lot Slip in Praman auction platform format) ──
@@ -436,6 +524,11 @@ async function exportPramanCSV(db, auctionId, cfg, state) {
   return Buffer.from('\uFEFF' + lines.join('\r\n'), 'utf8');
 }
 
+// ── Export Type 12: Trade Report (BUYERS LIST FOR VERIFICATION) ──
+async function exportTradeReport(db, auctionId) {
+  return tradeReportXlsx(db, auctionId);
+}
+
 // ── Export router ────────────────────────────────────────────
 const EXPORT_TYPES = {
   lot_slip:       { fn: exportLotSlip,       name: 'LotSlip' },
@@ -446,6 +539,7 @@ const EXPORT_TYPES = {
   pooler_register:{ fn: exportPoolerRegister,name: 'PoolerRegister' },
   full_file:      { fn: exportFullFile,      name: 'FullFile' },
   collection:     { fn: exportCollection,    name: 'Collection' },
+  trade_report:   { fn: exportTradeReport,   name: 'TradeReport' },
   dealer_list:    { fn: exportDealerList,    name: 'DealerList' },
   sales_taxes:    { fn: exportSalesTaxes,    name: 'SalesTaxes' },
   payment:        { fn: exportPaymentSummary,name: 'Payment',        needsCfg: true },
@@ -455,7 +549,7 @@ const EXPORT_TYPES = {
 module.exports = {
   EXPORT_TYPES,
   exportLotSlip, exportLotSlipAfter, exportPramanCSV, exportPriceList, exportBankPayment,
-  exportPoolerRegister, exportFullFile, exportCollection, exportDealerList,
+  exportPoolerRegister, exportFullFile, exportCollection, exportTradeReport, exportDealerList,
   exportSalesTaxes, exportPaymentSummary, exportTDSReturn, exportTallyPurchase,
   exportSalesJournal, exportPurchaseJournal,
 };
