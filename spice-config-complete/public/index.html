@@ -681,6 +681,66 @@ tr:hover td{background:var(--spice-cream)}
 .sw input:checked+.sl{background:var(--green)}
 .sw input:checked+.sl::before{transform:translateX(14px)}
 
+
+/* ── To Tally settings panel — macro-style grouped form ──── */
+.tally-banner{
+  background:var(--spice-cream);border:1px solid var(--spice-saffron-lt);
+  padding:10px 14px;border-radius:8px;margin-bottom:12px;font-size:12px;
+  color:var(--text2);line-height:1.5
+}
+.tally-banner strong{color:var(--text)}
+.tally-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+@media (max-width:1100px){.tally-grid{grid-template-columns:1fr}}
+.tally-col{display:flex;flex-direction:column;gap:12px}
+.tally-box{
+  border:1px solid var(--border);border-radius:8px;padding:8px 12px 12px;
+  background:#fff;margin:0
+}
+.tally-box legend{
+  font-size:13px;font-weight:700;color:var(--text);
+  padding:0 6px;background:#fff
+}
+.tally-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;align-items:center}
+.tally-row > *{flex:1;min-width:0}
+.tally-in{
+  border:1px solid var(--border);border-radius:6px;padding:6px 8px;
+  font-size:12px;color:var(--text);background:#fff;width:100%;
+  font-family:inherit
+}
+.tally-in:focus{outline:none;border-color:var(--green);box-shadow:0 0 0 2px var(--green-bg)}
+.tally-in.tally-ro{background:#F8FAFC;color:var(--text3);cursor:not-allowed}
+.tally-chk{
+  display:inline-flex;align-items:center;gap:6px;padding:6px 8px;
+  font-size:12px;font-weight:600;color:var(--text);
+  background:var(--bg);border:1px solid var(--border);border-radius:6px;
+  cursor:pointer;flex:0 0 auto;white-space:nowrap
+}
+.tally-chk input[type=checkbox]{margin:0;cursor:pointer}
+.tally-sep{color:var(--text3);padding:0 4px;font-weight:600}
+.tally-viewbar{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  padding:8px 10px;margin-bottom:10px;
+  background:var(--bg);border:1px solid var(--border);border-radius:8px
+}
+.tally-viewbar .btn-sm{
+  padding:5px 12px;font-size:12px;font-weight:600;
+  background:#fff;color:var(--text2);border:1px solid var(--border);
+  border-radius:6px;cursor:pointer
+}
+.tally-viewbar .btn-sm:hover{background:var(--bg)}
+.tally-viewbar .btn-sm.is-active{
+  background:var(--green);color:#fff;border-color:var(--green)
+}
+.tally-viewbar-hint{font-size:11px;color:var(--text3);margin-left:6px;flex:1;min-width:200px}
+.tally-co-badge{
+  display:inline-block;font-size:10px;font-weight:700;letter-spacing:.4px;
+  padding:2px 6px;border-radius:4px;margin-left:6px;text-transform:uppercase;
+  vertical-align:middle
+}
+.tally-co-isp{background:var(--green-bg);color:var(--green);border:1px solid var(--green)}
+.tally-co-asp{background:#FEF3C7;color:#B45309;border:1px solid #F59E0B}
+
+
 /* ── Loading spinner + button-busy state ──────────────── */
 @keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
 .btn.is-busy{position:relative;pointer-events:none;opacity:.75}
@@ -1246,6 +1306,10 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
         <button class="side-item" data-tab="journals" onclick="go('journals')">
           <svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
           Journals
+        </button>
+        <button class="side-item" data-tab="tally" onclick="go('tally')">
+          <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+          To Tally
         </button>
       </div>
     </aside>
@@ -1929,6 +1993,185 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
     </div>
 
     <!-- JOURNALS -->
+    <div class="tc" id="tc-tally">
+      <div class="card">
+        <h2>To Tally
+          <span style="font-weight:400;font-size:12px;color:var(--text3)">Generate Tally-importable XML files from your auction data</span>
+        </h2>
+
+        <div class="fg" style="max-width:360px"><label>Select Auction</label>
+          <select id="tally-auction" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px"></select>
+        </div>
+
+        <div style="margin-top:12px;padding:10px 14px;background:var(--green-bg);border-radius:8px;border:1px solid var(--green);font-size:12px;color:var(--text2);line-height:1.5">
+          <strong style="color:var(--green)">Two Tally companies for ledgers:</strong>
+          <strong>Sales Party Ledgers</strong> import into the <span class="tally-co-badge tally-co-isp">ISP</span> Tally company (since buyers are ISP customers).
+          <strong>RD &amp; URD Purchase Party Ledgers</strong> import into the <span class="tally-co-badge tally-co-asp">ASP</span> Tally company (since suppliers are ASP's).
+          All vouchers currently import into ISP — open the matching company in Tally before importing.
+          <br><strong style="color:var(--green)">Workflow:</strong> Import party ledgers first, then matching vouchers — Tally rejects imports if any referenced ledger is missing.
+        </div>
+
+        <h3 style="margin:16px 0 8px 0;font-size:14px;color:var(--text);font-weight:700">📚 Party Ledgers</h3>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px">
+          <div style="padding:14px;border:1px solid var(--border);border-radius:10px;background:#fff">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+              <span style="width:32px;height:32px;border-radius:8px;background:var(--green-bg);display:inline-flex;align-items:center;justify-content:center;font-size:18px">🛒</span>
+              <div>
+                <div style="font-weight:700;color:var(--text);font-size:14px">Sales Party Ledgers <span class="tally-co-badge tally-co-isp">ISP</span></div>
+                <div style="font-size:11px;color:var(--text3)">Buyers from this auction's invoices (under Local / Inter Dealer-Purchase)</div>
+              </div>
+            </div>
+            <div id="tally-preview-ledger_sales" style="font-size:11px;color:var(--text3);min-height:18px;margin:6px 0"></div>
+            <div style="display:flex;gap:6px;margin-top:8px">
+              <button class="btn btn-a" onclick="tallyPreview('ledger_sales')" style="flex:1;padding:7px;font-size:12px">Preview</button>
+              <button class="btn btn-g" onclick="tallyDownload('ledger_sales')" style="flex:1;padding:7px;font-size:12px">Download XML</button>
+            </div>
+          </div>
+
+          <div style="padding:14px;border:1px solid var(--border);border-radius:10px;background:#fff">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+              <span style="width:32px;height:32px;border-radius:8px;background:var(--spice-saffron-lt);display:inline-flex;align-items:center;justify-content:center;font-size:18px">🏢</span>
+              <div>
+                <div style="font-weight:700;color:var(--text);font-size:14px">RD Purchase Party Ledgers <span class="tally-co-badge tally-co-asp">ASP</span></div>
+                <div style="font-size:11px;color:var(--text3)">Registered dealers (under Local / Inter Dealer)</div>
+              </div>
+            </div>
+            <div id="tally-preview-ledger_rd_purchase" style="font-size:11px;color:var(--text3);min-height:18px;margin:6px 0"></div>
+            <div style="display:flex;gap:6px;margin-top:8px">
+              <button class="btn btn-a" onclick="tallyPreview('ledger_rd_purchase')" style="flex:1;padding:7px;font-size:12px">Preview</button>
+              <button class="btn btn-g" onclick="tallyDownload('ledger_rd_purchase')" style="flex:1;padding:7px;font-size:12px">Download XML</button>
+            </div>
+          </div>
+
+          <div style="padding:14px;border:1px solid var(--border);border-radius:10px;background:#fff">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+              <span style="width:32px;height:32px;border-radius:8px;background:var(--spice-cardamom-lt);display:inline-flex;align-items:center;justify-content:center;font-size:18px">🌾</span>
+              <div>
+                <div style="font-weight:700;color:var(--text);font-size:14px">URD Purchase Party Ledgers <span class="tally-co-badge tally-co-asp">ASP</span></div>
+                <div style="font-size:11px;color:var(--text3)">Agriculturists (under Purchase From Agriculturist)</div>
+              </div>
+            </div>
+            <div id="tally-preview-ledger_urd_purchase" style="font-size:11px;color:var(--text3);min-height:18px;margin:6px 0"></div>
+            <div style="display:flex;gap:6px;margin-top:8px">
+              <button class="btn btn-a" onclick="tallyPreview('ledger_urd_purchase')" style="flex:1;padding:7px;font-size:12px">Preview</button>
+              <button class="btn btn-g" onclick="tallyDownload('ledger_urd_purchase')" style="flex:1;padding:7px;font-size:12px">Download XML</button>
+            </div>
+          </div>
+
+          <div style="padding:14px;border:1px dashed var(--border);border-radius:10px;background:var(--bg)">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+              <span style="width:32px;height:32px;border-radius:8px;background:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:18px">📦</span>
+              <div>
+                <div style="font-weight:700;color:var(--text);font-size:14px">All Ledgers (everything) <span class="tally-co-badge tally-co-isp">ISP</span></div>
+                <div style="font-size:11px;color:var(--text3)">All 3 party groups + tax + sales + purchase + service ledgers. Use this when priming a fresh Tally company. Imports into the ISP company; for ASP-only ledgers use the RD/URD cards above.</div>
+              </div>
+            </div>
+            <div id="tally-preview-ledger" style="font-size:11px;color:var(--text3);min-height:18px;margin:6px 0"></div>
+            <div style="display:flex;gap:6px;margin-top:8px">
+              <button class="btn btn-a" onclick="tallyPreview('ledger')" style="flex:1;padding:7px;font-size:12px">Preview</button>
+              <button class="btn btn-g" onclick="tallyDownload('ledger')" style="flex:1;padding:7px;font-size:12px">Download XML</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Single Party picker -->
+        <h3 style="margin:18px 0 8px 0;font-size:14px;color:var(--text);font-weight:700">🎯 Single Party Ledger</h3>
+        <div style="padding:14px;border:1px solid var(--border);border-radius:10px;background:#fff">
+          <div style="font-size:11px;color:var(--text3);margin-bottom:8px">Pick one party from this auction and download just its ledger. Useful when you've added a new buyer/trader and only need to create that one ledger in Tally.</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+            <div style="flex:2;min-width:220px"><label style="font-size:11px;color:var(--text2);font-weight:600">Search</label>
+              <input type="text" id="tally-party-search" placeholder="Type to filter by name, GSTIN, or place…" oninput="renderTallyPartyList()" style="width:100%;padding:7px;border:1px solid var(--border);border-radius:6px;font-size:13px">
+            </div>
+            <div style="flex:1;min-width:160px"><label style="font-size:11px;color:var(--text2);font-weight:600">Filter by kind</label>
+              <select id="tally-party-kind" onchange="renderTallyPartyList()" style="width:100%;padding:7px;border:1px solid var(--border);border-radius:6px;font-size:13px">
+                <option value="">All kinds</option>
+                <option value="sales">Sales (buyer)</option>
+                <option value="rd_purchase">RD Purchase (dealer)</option>
+                <option value="urd_purchase">URD Purchase (agriculturist)</option>
+              </select>
+            </div>
+            <button class="btn btn-a" onclick="loadTallyParties()" style="padding:7px 14px;font-size:12px">Refresh List</button>
+          </div>
+          <div id="tally-party-list" style="margin-top:10px;max-height:320px;overflow:auto;border:1px solid var(--border);border-radius:6px;background:var(--bg)">
+            <div style="padding:14px;color:var(--text3);font-size:12px;text-align:center">Pick an auction and click <strong>Refresh List</strong> to load parties.</div>
+          </div>
+        </div>
+
+        <h3 style="margin:18px 0 8px 0;font-size:14px;color:var(--text);font-weight:700">📄 Vouchers</h3>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px">
+          <div style="padding:14px;border:1px solid var(--border);border-radius:10px;background:#fff">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+              <span style="width:32px;height:32px;border-radius:8px;background:var(--green-bg);display:inline-flex;align-items:center;justify-content:center;font-size:18px">💰</span>
+              <div>
+                <div style="font-weight:700;color:var(--text);font-size:14px">Sales Vouchers <span class="tally-co-badge tally-co-isp">ISP</span></div>
+                <div style="font-size:11px;color:var(--text3)">Registered dealer sales — output GST, party ledgers, inventory</div>
+              </div>
+            </div>
+            <div id="tally-preview-sales" style="font-size:11px;color:var(--text3);min-height:18px;margin:6px 0"></div>
+            <div style="display:flex;gap:6px;margin-top:8px">
+              <button class="btn btn-a" onclick="tallyPreview('sales')" style="flex:1;padding:7px;font-size:12px">Preview</button>
+              <button class="btn btn-g" onclick="tallyDownload('sales')" style="flex:1;padding:7px;font-size:12px">Download XML</button>
+            </div>
+          </div>
+
+          <div style="padding:14px;border:1px solid var(--border);border-radius:10px;background:#fff">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+              <span style="width:32px;height:32px;border-radius:8px;background:var(--spice-saffron-lt);display:inline-flex;align-items:center;justify-content:center;font-size:18px">📥</span>
+              <div>
+                <div style="font-weight:700;color:var(--text);font-size:14px">RD Purchase Vouchers <span class="tally-co-badge tally-co-isp">ISP</span></div>
+                <div style="font-size:11px;color:var(--text3)">Registered dealers — input GST, TDS 194Q, batch tracking</div>
+              </div>
+            </div>
+            <div id="tally-preview-rd_purchase" style="font-size:11px;color:var(--text3);min-height:18px;margin:6px 0"></div>
+            <div style="display:flex;gap:6px;margin-top:8px">
+              <button class="btn btn-a" onclick="tallyPreview('rd_purchase')" style="flex:1;padding:7px;font-size:12px">Preview</button>
+              <button class="btn btn-g" onclick="tallyDownload('rd_purchase')" style="flex:1;padding:7px;font-size:12px">Download XML</button>
+            </div>
+          </div>
+
+          <div style="padding:14px;border:1px solid var(--border);border-radius:10px;background:#fff">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+              <span style="width:32px;height:32px;border-radius:8px;background:var(--spice-cardamom-lt);display:inline-flex;align-items:center;justify-content:center;font-size:18px">🌾</span>
+              <div>
+                <div style="font-weight:700;color:var(--text);font-size:14px">URD Purchase Vouchers <span class="tally-co-badge tally-co-isp">ISP</span></div>
+                <div style="font-size:11px;color:var(--text3)">Agriculturist / unregistered — Nil Rated, no GST input</div>
+              </div>
+            </div>
+            <div id="tally-preview-urd_purchase" style="font-size:11px;color:var(--text3);min-height:18px;margin:6px 0"></div>
+            <div style="display:flex;gap:6px;margin-top:8px">
+              <button class="btn btn-a" onclick="tallyPreview('urd_purchase')" style="flex:1;padding:7px;font-size:12px">Preview</button>
+              <button class="btn btn-g" onclick="tallyDownload('urd_purchase')" style="flex:1;padding:7px;font-size:12px">Download XML</button>
+            </div>
+          </div>
+
+          <div style="padding:14px;border:1px solid var(--border);border-radius:10px;background:#fff">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+              <span style="width:32px;height:32px;border-radius:8px;background:#FCEBEB;display:inline-flex;align-items:center;justify-content:center;font-size:18px">📝</span>
+              <div>
+                <div style="font-weight:700;color:var(--text);font-size:14px">Debit Notes <span class="tally-co-badge tally-co-isp">ISP</span></div>
+                <div style="font-size:11px;color:var(--text3)">Discount received from suppliers — 18% GST credit</div>
+              </div>
+            </div>
+            <div id="tally-preview-debit_note" style="font-size:11px;color:var(--text3);min-height:18px;margin:6px 0"></div>
+            <div style="display:flex;gap:6px;margin-top:8px">
+              <button class="btn btn-a" onclick="tallyPreview('debit_note')" style="flex:1;padding:7px;font-size:12px">Preview</button>
+              <button class="btn btn-g" onclick="tallyDownload('debit_note')" style="flex:1;padding:7px;font-size:12px">Download XML</button>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top:16px;padding:12px 14px;background:var(--spice-saffron-lt);border-radius:8px;font-size:12px;color:var(--text2);line-height:1.6">
+          <strong style="color:var(--text)">How to import into Tally:</strong>
+          <ol style="margin:6px 0 0 18px;padding:0">
+            <li>Open your Tally company (must match the name in <a href="javascript:go('settings');setTimeout(()=>selectCat('tally'),100)" style="color:var(--green)">Settings → To Tally</a>).</li>
+            <li>Press <code style="background:#fff;padding:1px 5px;border-radius:3px">Alt+O</code> → <strong>Import</strong> → <strong>Vouchers</strong>.</li>
+            <li>Select the downloaded <code style="background:#fff;padding:1px 5px;border-radius:3px">.xml</code> file and confirm.</li>
+            <li>Tally rejects the import if any ledger name in the XML doesn't exist in your company — make sure the ledgers in <a href="javascript:go('settings');setTimeout(()=>selectCat('tally'),100)" style="color:var(--green)">Settings → To Tally</a> match your Tally setup exactly.</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+
     <div class="tc" id="tc-journals">
       <div class="card">
         <h2>Journals <span style="font-weight:400;font-size:12px;color:var(--text3)">Sales & Purchase registers</span></h2>
@@ -3110,7 +3353,7 @@ function go(tab){
   const loaders={dash:loadStats,settings:loadSettings,users:loadUsers,traders:()=>searchTraders(''),buyers:()=>searchBuyers(''),
     auctions:loadAuctions,lots:loadLotAuctions,invoices:loadInvAuctions,purchases:loadPurAuctions,
     payments:loadPayAuctions,exports:loadExpAuctions,tds:()=>{},lorry:loadLorryAuctions,
-    bills:loadBillAuctions,debit:loadDebitNotes,journals:loadJournalDefault};
+    bills:loadBillAuctions,debit:loadDebitNotes,journals:loadJournalDefault,tally:loadTallyAuctions};
   if(loaders[tab]){
     try{
       const r=loaders[tab]();
@@ -3820,6 +4063,15 @@ const _MODE_HIDE_KEYS = {
   'e-Trade':   ['commission','hpc','sb_refund']
 };
 
+// State-based category hiding. TN business hides the Kerala address category
+// (and vice versa) so the user only sees fields relevant to their active
+// branch — the other category's data still exists in the DB and gets used
+// automatically if the state is switched.
+const _STATE_HIDE_CATS = {
+  'TAMIL NADU': ['address_kl'],
+  'KERALA':     ['address_tn'],
+};
+
 function getCurrentBusinessMode(){
   // Prefer the live select value if mode panel is on-screen
   const liveSel = document.querySelector('select[data-key="business_mode"]');
@@ -3857,7 +4109,11 @@ function getCurrentLogoCode(){
 
 function isCategoryHiddenByMode(catKey){
   const m = getCurrentBusinessMode();
-  return (_MODE_HIDE_CATS[m] || []).includes(catKey);
+  if ((_MODE_HIDE_CATS[m] || []).includes(catKey)) return true;
+  // Also check state-based hiding (address_tn / address_kl)
+  const s = String(getCurrentBusinessState() || '').toUpperCase();
+  if ((_STATE_HIDE_CATS[s] || []).includes(catKey)) return true;
+  return false;
 }
 
 // Show/hide the "Print Selected Purchase" button in the Sales tab toolbar
@@ -4007,6 +4263,20 @@ function renderSettingsPanel(){
   let fields=_sdata[ck]||[];
   // Filter out individual fields hidden by current business mode
   fields = fields.filter(f => !isFieldHiddenByMode(f.key));
+  // For the Company category specifically, overlay the active preset's
+  // values onto the displayed fields. Server-side the company_settings
+  // table always holds the ISP values (intentional — PDFs read state-aware
+  // via effectiveCompany), so without this overlay the panel would always
+  // render ISP values even when the active preset is ASP.
+  if (ck === 'company' && _presets && _presets.active) {
+    const overlay = _presets[_presets.active] || {};
+    fields = fields.map(f => {
+      if (Object.prototype.hasOwnProperty.call(overlay, f.key)) {
+        return { ...f, value: overlay[f.key] };
+      }
+      return f;
+    });
+  }
   const q=_setFilter.toLowerCase().trim();
   if(q)fields=fields.filter(f=>(f.label||'').toLowerCase().includes(q)||(f.key||'').toLowerCase().includes(q));
   if(!fields.length){document.getElementById('settings-root').innerHTML='<div class="set-no-match">No matching settings</div>';return}
@@ -4032,6 +4302,8 @@ function renderSettingsPanel(){
       else html+=fld(f);
     }
     html+='</div>';
+  }else if(ck==='tally'){
+    html+=renderTallyPanel(fields);
   }else{
     // Company and Sister Company categories get a logo upload widget on top
     if (ck === 'company') {
@@ -4245,8 +4517,16 @@ async function onBusinessStateChanged(newState){
     // Non-fatal — user can still hit Calculate All manually
   }
 
-  // If the user is currently viewing the Company tab, re-render so they see the new values
-  if (_activeCat === 'company' || _activeCat === 'mode') renderSettingsPanel();
+  // Re-render nav AND panel after a state change. The address category
+  // visibility flips (TN hides address_kl, KL hides address_tn), and the
+  // Company panel needs to reflect the new active preset's values.
+  // If the user happens to be viewing the now-hidden category, fall back
+  // to a sensible default ('mode' is always visible).
+  if (isCategoryHiddenByMode(_activeCat)) {
+    _activeCat = 'mode';
+  }
+  renderSettingsNav();
+  renderSettingsPanel();
   // Logo code may have flipped (ASP ↔ ISP)
   applyLogoBadge();
   // Refresh invoice list — the listing now filters by business state, so
@@ -4301,6 +4581,273 @@ function fld(f){
   const t = f.field_type === 'number' ? 'number' : f.field_type === 'date' ? 'date' : 'text';
   const tip = FIELD_HELP[f.key] ? helpTip(FIELD_HELP[f.key]) : '';
   return `<div class="fg"><label>${esc(f.label)}${tip}</label><input type="${t}" data-key="${f.key}" value="${esc(f.value)}"${t==='number'?' step="any"':''}></div>`;
+}
+
+// ── To Tally settings panel ───────────────────────────────
+// Two views: macro-form layout (default) and a classic flat field list
+// (toggled by the dad if he wants to see every key in one column).
+// The classic view uses the standard `fld()` renderer so booleans show
+// as toggle switches like Flags. Both views share the same data-key
+// inputs, so captureCurrentPanel() picks edits up identically.
+let _tallyClassic = false;
+function setTallyView(classic){
+  captureCurrentPanel();
+  _tallyClassic = !!classic;
+  renderSettingsPanel();
+}
+
+function renderTallyPanel(fields){
+  // Toggle bar — appears at the top of either view
+  const toggleBar = `
+    <div class="tally-viewbar">
+      <button class="btn btn-sm ${_tallyClassic?'':'is-active'}" onclick="setTallyView(false)">📋 Form Layout</button>
+      <button class="btn btn-sm ${_tallyClassic?'is-active':''}" onclick="setTallyView(true)">🗂 Classic List</button>
+      <span class="tally-viewbar-hint">Form Layout matches the macro's Configration window. Classic List shows every field individually.</span>
+    </div>`;
+
+  if (_tallyClassic) {
+    // Classic flat list: use the standard fld() renderer; booleans get toggle switches
+    let body = '<div class="sgrid">';
+    for (const f of fields) {
+      if (f.field_type === 'boolean') {
+        const ck2 = (f.value === 'true') ? 'checked' : '';
+        body += `<div class="flag-row" style="border:1px solid var(--border);border-radius:6px;padding:8px 12px"><label>${esc(f.label)}</label><label class="sw"><input type="checkbox" data-key="${f.key}" data-type="boolean" ${ck2}><span class="sl"></span></label></div>`;
+      } else {
+        body += fld(f);
+      }
+    }
+    body += '</div>';
+    return toggleBar + body;
+  }
+
+  // Index fields by key for direct lookup
+  const map = {};
+  for (const f of fields) map[f.key] = f;
+  const v  = (k) => map[k] ? (map[k].value || '') : '';
+  const lab= (k) => map[k] ? (map[k].label || k) : k;
+
+  // Text input — placeholder doubles as label (macro form has no labels, only placeholders)
+  const ti = (k, ph, opts={}) => {
+    if (!map[k]) return '';
+    const placeholder = ph || lab(k);
+    const style = opts.style || '';
+    return `<input type="text" data-key="${k}" value="${esc(v(k))}" placeholder="${esc(placeholder)}" title="${esc(lab(k))}" class="tally-in" style="${style}">`;
+  };
+
+  // Number input
+  const ni = (k, ph, opts={}) => {
+    if (!map[k]) return '';
+    const placeholder = ph || lab(k);
+    const style = opts.style || '';
+    return `<input type="number" step="any" data-key="${k}" value="${esc(v(k))}" placeholder="${esc(placeholder)}" title="${esc(lab(k))}" class="tally-in" style="${style}">`;
+  };
+
+  // Boolean checkbox — inline label
+  const bi = (k, lblOverride) => {
+    if (!map[k]) return '';
+    const checked = (v(k) === 'true') ? 'checked' : '';
+    const lbl = lblOverride || lab(k).replace(/\s*\(.*?\)\s*/g, '').trim();
+    return `<label class="tally-chk"><input type="checkbox" data-key="${k}" data-type="boolean" ${checked}> <span>${esc(lbl)}</span></label>`;
+  };
+
+  // Group/section wrapper
+  const box = (title, body) => `
+    <fieldset class="tally-box">
+      <legend>${esc(title)}</legend>
+      ${body}
+    </fieldset>`;
+
+  // Row of inline fields
+  const row = (...cells) => `<div class="tally-row">${cells.join('')}</div>`;
+
+  // ── COMPANY PROFILE ────────────────────────────────────────
+  const cp = readGlobalSettings();
+  const ce = (k, ph, opts={}) => `<input type="text" value="${esc(cp[k]||'')}" placeholder="${esc(ph)}" disabled class="tally-in tally-ro" title="From Settings → ${opts.from||'Company'} (read-only here)" style="${opts.style||''}">`;
+
+  const companyProfile = box('Company Profile',
+    row(`<input type="text" data-key="tally_company_name" value="${esc(v('tally_company_name'))}" placeholder="Tally Company Name" title="${esc(lab('tally_company_name'))}" class="tally-in" style="flex:1">`) +
+    row(
+      ce('short_name','ISP — Trade Name',{from:'Company'}),
+      ce('s_short_name','ASP — Trade Name',{from:'Sister Company'})
+    ) +
+    row(
+      ce('tn_address1','TN — Address Line 1',{from:'Address (Tamil Nadu)'}),
+      ce('s_address1','ASP — Address Line 1',{from:'Sister Company'})
+    ) +
+    row(
+      ce('tn_address2','TN — Address Line 2',{from:'Address (Tamil Nadu)'}),
+      ce('s_address2','ASP — Address Line 2',{from:'Sister Company'})
+    ) +
+    row(
+      ce('tn_branch','TN — Branch',{from:'Address (Tamil Nadu)'}),
+      ce('kl_branch','KL — Branch',{from:'Address (Kerala)'})
+    ) +
+    row(
+      `<input type="text" value="Tamil Nadu" disabled class="tally-in tally-ro">`,
+      `<input type="text" data-key="tally_state_code" value="${esc(v('tally_state_code'))}" placeholder="Code (e.g. 33)" title="${esc(lab('tally_state_code'))}" class="tally-in">`,
+      `<input type="text" value="Kerala" disabled class="tally-in tally-ro">`,
+      `<input type="text" data-key="tally_state_code_amazing" value="${esc(v('tally_state_code_amazing'))}" placeholder="Code (e.g. 32)" title="${esc(lab('tally_state_code_amazing'))}" class="tally-in">`
+    ) +
+    row(
+      ce('tn_gstin','TN GSTIN',{from:'Address (Tamil Nadu)'}),
+      ce('s_gstin','ASP GSTIN',{from:'Sister Company'})
+    ) +
+    row(
+      ce('tn_phone','TN — Phone',{from:'Address (Tamil Nadu)'}),
+      ce('s_phone','ASP — Phone',{from:'Sister Company'})
+    ) +
+    row(
+      ce('tn_email','TN — Email',{from:'Address (Tamil Nadu)'}),
+      ce('s_email','ASP — Email',{from:'Sister Company'})
+    )
+  );
+
+  // ── ACCOUNT LEDGER NAMES ────────────────────────────────────
+  // Each row in the macro form pairs ledger + HSN + checkbox where
+  // applicable. We mirror that 1:1.
+  const ledgerBox = box('Account Ledger Names',
+    row(ti('tally_sales_inter','Cardamom Inter-State Sales',{style:'flex:2'})) +
+    row(
+      ti('tally_sales_intra','Cardamom Local Sales'),
+      ti('tally_sales_export','Cardamom Export Sales (Deemed)')
+    ) +
+    row(
+      ti('tally_gunny_inter','Gunny Interstate Sales'),
+      ti('tally_dealer_sale_inter','Interstate Dealer-Purch'),
+      ti('tally_dealer_sale_intra','Local Dealer-Purcha')
+    ) +
+    row(
+      ti('tally_gunny_intra','Gunny Local Sales'),
+      ti('tally_gunny_export','Gunny Export Sales')
+    ) +
+    row(
+      ti('tally_purchase_auction','Purchase From Agriculturist'),
+      ti('tally_tds_paid_sales','TDS Paid on Sales')
+    ) +
+    row(
+      ti('tally_purchase_dealer','Trade Purchase From Dealer'),
+      ti('tally_purchase_dealer_inter','Interstate Dealer'),
+      ti('tally_purchase_dealer_intra','Local Dealer')
+    ) +
+    row(
+      ti('tally_dn_discount','Discount on Purch'),
+      ti('tally_commission','Commission-Planter'),
+      ti('tally_hsn_service','SAC (e.g. 996111)',{style:'max-width:120px'}),
+      bi('tally_dn_exempt','Exempted')
+    ) +
+    row(
+      ti('tally_cash_handling','Cash Handling Charges'),
+      ti('tally_cash_handling_planter','Cash Handling Charges-Planter')
+    ) +
+    row(
+      ti('tally_sample_planter','Sample Refund to Planter'),
+      bi('tally_sample_stock','Stock'),
+      ti('tally_sample_dealer','Sample Refund to Dealer')
+    ) +
+    row(
+      ti('tally_round','Round On/Off'),
+      bi('tally_round_enabled','Round'),
+      ti('tally_chc_planter','CHC From Planter')
+    ) +
+    // ── Transport row: ledger + rate + HSN + Local toggle ──
+    row(
+      ti('tally_transport','Transport (e.g. Transport Rs.2.50/per Kg)',{style:'flex:2'}),
+      ni('tally_transport_rate','Rate ₹/Kg',{style:'max-width:90px'}),
+      ti('tally_hsn_transport','HSN/SAC (e.g. 996791)',{style:'max-width:140px'}),
+      bi('tally_local_transport','Local Transport')
+    ) +
+    // ── Insurance row: ledger + rate + HSN + Local toggle ──
+    row(
+      ti('tally_insurance','Insurance (e.g. Insurance Rs.0.75/per Thousand)',{style:'flex:2'}),
+      ni('tally_insurance_rate','Rate ₹/₹1000',{style:'max-width:90px'}),
+      ti('tally_hsn_insurance','HSN/SAC (e.g. 997136)',{style:'max-width:140px'}),
+      bi('tally_local_insurance','Local Insurance')
+    )
+  );
+
+  // ── TAX LEDGER NAMES ────────────────────────────────────────
+  const taxLedgerBox = box('Tax Ledger Names',
+    row(ti('tally_cgst','CGST 2.5%'), ti('tally_dn_cgst','CGST 9%')) +
+    row(ti('tally_sgst','SGST 2.5%'), ti('tally_dn_sgst','SGST 9%')) +
+    row(ti('tally_igst','IGST 5%'),   ti('tally_dn_igst','IGST 18%')) +
+    row(ti('tally_tds_ledger','TDS on Purchase of Goods')) +
+    row(ti('tally_tcs','TCS on Sale of Goods'))
+  );
+
+  // ── TAX RATE ────────────────────────────────────────────────
+  const taxRateBox = box('Tax Rate',
+    row(ni('tally_gst_rate','5'),       bi('tally_amazing_mode','Amazing')) +
+    row(ni('tally_service_rate','18'),  bi('tally_optional','Optional')) +
+    row(ni('tally_tcs_rate','0.1'),     bi('tally_detailed','Detailed Inv')) +
+    row(ni('tally_sample_kgs','1.900'), `<span class="tally-sep">—</span>`, ni('tally_unit_rate','0.1'))
+  );
+
+  // ── BANK ACCOUNT DETAILS ──────────────────────────────────
+  const bankBox = box('Bank Account Details',
+    row(
+      ce('bank_tn_name','Bank Name',{from:'Bank Details'}),
+      ce('tn_branch','Branch',{from:'Address (Tamil Nadu)'}),
+      ce('bank_tn_acct','Account No.',{from:'Bank Details'}),
+      ce('bank_tn_ifsc','IFSC Code',{from:'Bank Details'})
+    )
+  );
+
+  // ── STOCK ITEM NAMES + HSN ───────────────────────────────
+  const stockBox = box('Stock Item Names',
+    row(ti('tally_item_cardamom','Cardamom'), ti('tally_hsn_cardamom','HSN (e.g. 09083120)')) +
+    row(ti('tally_item_gunny','Gunny Bag'),    ti('tally_hsn_gunny','HSN (e.g. 63051040)')) +
+    row(
+      bi('tally_dispatch_from','Dispatch'),
+      bi('tally_tcs_enabled','TCS')
+    ) +
+    row(
+      bi('tally_ship_to','Ship To'),
+      bi('tally_tds_enabled','TDS')
+    )
+  );
+
+  // ── ITEM RATES (gunny + local rates that aren't shown elsewhere) ──
+  const itemRatesBox = box('Item Rates',
+    row(ni('tally_gunny_rate','Gunny ₹/bag (e.g. 165)')) +
+    row(ni('tally_local_trans_rate','Local Transport ₹/Kg')) +
+    row(ni('tally_local_ins_rate','Local Insurance ₹/₹1000'))
+  );
+
+  // ── HEADER NOTE ──────────────────────────────────────────
+  const note = `
+    <div class="tally-banner">
+      <strong>Layout matches the macro's Configration form.</strong>
+      Greyed-out fields are pulled live from other Settings categories (Company, Sister, Address, Bank). To change them, go to that category. Editable fields here are Tally-specific: ledger names, HSN/SAC codes, rates, and toggles.
+    </div>`;
+
+  // ── TWO-COLUMN GRID ──────────────────────────────────────
+  return toggleBar + note + `
+    <div class="tally-grid">
+      <div class="tally-col">
+        ${companyProfile}
+        ${taxLedgerBox}
+        ${bankBox}
+      </div>
+      <div class="tally-col">
+        ${ledgerBox}
+        <div class="tally-row" style="gap:12px">
+          <div style="flex:1">${taxRateBox}</div>
+          <div style="flex:1">${stockBox}</div>
+          <div style="flex:1">${itemRatesBox}</div>
+        </div>
+      </div>
+    </div>`;
+}
+
+// Read the global settings flat map so the Tally panel can echo company,
+// address, sister, and bank values as read-only context fields.
+function readGlobalSettings(){
+  const out = {};
+  if (!_sdata) return out;
+  for (const cat of Object.keys(_sdata)) {
+    for (const f of (_sdata[cat] || [])) out[f.key] = f.value;
+  }
+  return out;
 }
 
 // ── Company identity presets (ISP / ASP) ────────────────────────────
@@ -4434,13 +4981,24 @@ function updateSdataField(key, value) {
   }
 }
 async function saveSettings(){
-  // Capture what's currently on-screen, then flatten ALL categories
+  // Capture what's currently on-screen, then flatten ALL categories EXCEPT
+  // 'company' — those fields are stored in the preset table (company_presets)
+  // and saved via saveActivePreset(). The company_settings.* rows for those
+  // keys are intentionally kept as ISP-stable so PDFs always render correctly,
+  // and writing the active preset's values back into them via the generic
+  // Save would corrupt that invariant.
   captureCurrentPanel();
   const s={};
   for(const ck of Object.keys(_sdata)){
+    if (ck === 'company') continue;
     for(const f of _sdata[ck]||[]){s[f.key]=f.value}
   }
   await j('/api/company-settings',{method:'PUT',body:JSON.stringify({settings:s})});
+  // If the active preset has unsaved edits in the Company panel, save those
+  // separately to the preset table.
+  if (_companyDirty && _presets && _presets.active) {
+    try { await saveActivePreset(/*silent=*/true); } catch (_) {}
+  }
   toast('Settings saved');
 }
 async function exportSettings(){const d=await j('/api/company-settings/export');const b=new Blob([JSON.stringify(d,null,2)],{type:'application/json'});
@@ -6665,6 +7223,182 @@ function loadJournalDefault(){
   if(!document.getElementById('jr-to').value)document.getElementById('jr-to').value=today;
   updateJournalSaleVisibility();
 }
+
+// ── To Tally ──────────────────────────────────────────────
+const TALLY_LABELS={
+  ledger_sales:'Sales Party Ledgers',
+  ledger_rd_purchase:'RD Purchase Party Ledgers',
+  ledger_urd_purchase:'URD Purchase Party Ledgers',
+  ledger:'All Ledgers',
+  sales:'Sales',
+  rd_purchase:'RD Purchase',
+  urd_purchase:'URD Purchase',
+  debit_note:'Debit Note'
+};
+const TALLY_TYPES=Object.keys(TALLY_LABELS);
+const TALLY_LEDGER_TYPES=['ledger_sales','ledger_rd_purchase','ledger_urd_purchase','ledger'];
+function loadTallyAuctions(){
+  fillAucSelect('tally-auction');
+  // Clear preview text + party list when auction changes
+  const sel=document.getElementById('tally-auction');
+  if(sel&&!sel.dataset.tallyBound){
+    sel.addEventListener('change',()=>{
+      TALLY_TYPES.forEach(t=>{
+        const el=document.getElementById('tally-preview-'+t);if(el)el.textContent='';
+      });
+      // also clear the party list
+      _tallyParties=null;
+      const list=document.getElementById('tally-party-list');
+      if(list)list.innerHTML='<div style="padding:14px;color:var(--text3);font-size:12px;text-align:center">Auction changed — click <strong>Refresh List</strong> to reload parties.</div>';
+    });
+    sel.dataset.tallyBound='1';
+  }
+}
+async function tallyPreview(type){
+  const aid=document.getElementById('tally-auction')?.value;
+  if(!aid){alert('Select an auction first');return}
+  const target=document.getElementById('tally-preview-'+type);
+  if(target)target.textContent='Loading…';
+  try{
+    const r=await fetch(B+`/api/tally/preview/${type}/${aid}`,{headers:{'Authorization':'Bearer '+T}});
+    if(!r.ok){
+      let msg='Preview failed';
+      try{const e=await r.json();if(e.error)msg=e.error}catch(x){}
+      if(target)target.textContent=msg;
+      return;
+    }
+    const data=await r.json();
+    if(target){
+      const coBadge = data.targetCompany ? ` <span style="color:var(--text3);font-size:10px">→ ${esc(data.targetCompany)}</span>` : '';
+      if(TALLY_LEDGER_TYPES.includes(type)){
+        if(data.ledgerCount===0){
+          target.innerHTML=`<span style="color:#C62828">No ledgers — empty auction or no matching parties</span>`;
+        }else{
+          const k=data.byKind||{};
+          const breakdown=['party','sales','purchase','tax']
+            .filter(x=>k[x])
+            .map(x=>`<strong>${k[x]}</strong> ${x}`).join(' · ');
+          target.innerHTML=`<strong style="color:var(--green)">${data.ledgerCount}</strong> ledger${data.ledgerCount===1?'':'s'}` + (breakdown?` · ${breakdown}`:'') + coBadge;
+        }
+      }else if(data.voucherCount===0){
+        target.innerHTML=`<span style="color:#C62828">No data found for this auction</span>`;
+      }else{
+        target.innerHTML=`<strong style="color:var(--green)">${data.voucherCount}</strong> voucher${data.voucherCount===1?'':'s'} · <strong>${data.lotCount}</strong> lot${data.lotCount===1?'':'s'}` + coBadge;
+      }
+    }
+  }catch(e){
+    if(target)target.textContent='Preview failed: '+e.message;
+  }
+}
+async function tallyDownload(type){
+  const aid=document.getElementById('tally-auction')?.value;
+  if(!aid){alert('Select an auction first');return}
+  const label=TALLY_LABELS[type]||type;
+  await withOverlay(`Generating Tally ${label} XML…`, async () => {
+    const r=await fetch(B+`/api/tally/export/${type}/${aid}`,{headers:{'Authorization':'Bearer '+T}});
+    if(!r.ok){
+      let msg='Tally export failed';
+      try{const e=await r.json();if(e.error)msg=e.error}catch(x){}
+      toast(msg);return;
+    }
+    const blob=await r.blob();
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+    a.download=`Tally_${label.replace(/\s/g,'')}_${aid}.xml`;a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+    toast(`Downloaded Tally ${label} XML`);
+  });
+}
+
+// ── Single-party picker ──────────────────────────────────
+// Fetches every distinct party in the auction and renders a filterable
+// list. Clicking a party triggers the per-party endpoint to download
+// just that one ledger.
+let _tallyParties=null;
+const TALLY_PARTY_KIND_LABEL={sales:'Sales',rd_purchase:'RD Purchase',urd_purchase:'URD Purchase'};
+const TALLY_PARTY_KIND_BG={sales:'var(--green-bg)',rd_purchase:'var(--spice-saffron-lt)',urd_purchase:'var(--spice-cardamom-lt)'};
+const TALLY_PARTY_KIND_CO={sales:'isp',rd_purchase:'asp',urd_purchase:'asp'};
+async function loadTallyParties(){
+  const aid=document.getElementById('tally-auction')?.value;
+  if(!aid){alert('Select an auction first');return}
+  const list=document.getElementById('tally-party-list');
+  if(list)list.innerHTML='<div style="padding:14px;color:var(--text3);font-size:12px;text-align:center">Loading parties…</div>';
+  try{
+    const r=await fetch(B+`/api/tally/parties/${aid}`,{headers:{'Authorization':'Bearer '+T}});
+    if(!r.ok){
+      let msg='Failed to load parties';
+      try{const e=await r.json();if(e.error)msg=e.error}catch(x){}
+      if(list)list.innerHTML=`<div style="padding:14px;color:#C62828;font-size:12px;text-align:center">${esc(msg)}</div>`;
+      return;
+    }
+    const data=await r.json();
+    _tallyParties=data.parties||[];
+    renderTallyPartyList();
+  }catch(e){
+    if(list)list.innerHTML=`<div style="padding:14px;color:#C62828;font-size:12px;text-align:center">Error: ${esc(e.message)}</div>`;
+  }
+}
+function renderTallyPartyList(){
+  const list=document.getElementById('tally-party-list');
+  if(!list)return;
+  if(!_tallyParties){
+    list.innerHTML='<div style="padding:14px;color:var(--text3);font-size:12px;text-align:center">Click <strong>Refresh List</strong> to load parties.</div>';
+    return;
+  }
+  const q=(document.getElementById('tally-party-search')?.value||'').toLowerCase().trim();
+  const kindFilter=document.getElementById('tally-party-kind')?.value||'';
+  const filtered=_tallyParties.filter(p=>{
+    if(kindFilter&&p.kind!==kindFilter)return false;
+    if(q){
+      const hay=`${p.name} ${p.gstin} ${p.place||''}`.toLowerCase();
+      if(!hay.includes(q))return false;
+    }
+    return true;
+  });
+  if(filtered.length===0){
+    list.innerHTML='<div style="padding:14px;color:var(--text3);font-size:12px;text-align:center">No parties match.</div>';
+    return;
+  }
+  // Group by kind for visual structure
+  const byKind={sales:[],rd_purchase:[],urd_purchase:[]};
+  for(const p of filtered)(byKind[p.kind]||(byKind[p.kind]=[])).push(p);
+  let html='';
+  for(const kind of ['sales','rd_purchase','urd_purchase']){
+    const arr=byKind[kind];if(!arr||arr.length===0)continue;
+    const co=TALLY_PARTY_KIND_CO[kind]||'isp';
+    html+=`<div style="padding:6px 12px;background:${TALLY_PARTY_KIND_BG[kind]};font-size:11px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px">${TALLY_PARTY_KIND_LABEL[kind]} · ${arr.length} <span class="tally-co-badge tally-co-${co}">${co.toUpperCase()}</span></div>`;
+    for(const p of arr){
+      const safeName=(p.name||'').replace(/'/g,"\\'");
+      html+=`<div style="padding:8px 12px;border-bottom:1px solid var(--border);background:#fff;display:flex;align-items:center;gap:10px">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.name)}</div>
+          <div style="font-size:11px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.gstin?esc(p.gstin):'<em>No GSTIN</em>'}${p.place?' · '+esc(p.place):''}</div>
+        </div>
+        <button class="btn btn-g" onclick="tallyDownloadParty('${kind}','${safeName.replace(/"/g,'&quot;')}')" style="padding:5px 10px;font-size:11px;flex:0 0 auto">Download</button>
+      </div>`;
+    }
+  }
+  list.innerHTML=html;
+}
+async function tallyDownloadParty(kind,partyName){
+  const aid=document.getElementById('tally-auction')?.value;
+  if(!aid){alert('Select an auction first');return}
+  await withOverlay(`Generating ${partyName} ledger XML…`, async () => {
+    const url=B+`/api/tally/party-ledger/${kind}/${aid}?name=${encodeURIComponent(partyName)}`;
+    const r=await fetch(url,{headers:{'Authorization':'Bearer '+T}});
+    if(!r.ok){
+      let msg='Party ledger export failed';
+      try{const e=await r.json();if(e.error)msg=e.error}catch(x){}
+      toast(msg);return;
+    }
+    const blob=await r.blob();
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+    const safeName=partyName.replace(/[^a-zA-Z0-9]/g,'_').slice(0,40);
+    a.download=`Tally_PartyLedger_${kind}_${safeName}_${aid}.xml`;a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+    toast(`Downloaded ledger for ${partyName}`);
+  });
+}
+
 function updateJournalSaleVisibility(){
   document.getElementById('jr-sale-wrap').style.display=document.getElementById('jr-type').value==='sales'?'block':'none';
 }
