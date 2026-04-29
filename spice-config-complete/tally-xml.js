@@ -408,26 +408,27 @@ ${rnd < 0 ? TAGS.DEEMYES : TAGS.DEEMNO}
 // }, ...]
 //
 function generRDPurchaseXML(rows, cfg, opts = {}) {
-  const company    = opts.companyName || cfgGet(cfg, 'tally_company_name', cfgGet(cfg, 'short_name', 'Ideal Spices Private Limited'));
+  const company    = opts.companyName || cfgGet(cfg, 'tally_asp_company_name', cfgGet(cfg, 'tally_company_name', 'Amazing Spice Park Private Limited'));
   const season     = opts.season || cfgGet(cfg, 'tally_season', cfgGet(cfg, 'season_code', '2026-27'));
   const detailed   = cfgBool(cfg, 'tally_detailed', true);
   const tlyrnd     = cfgBool(cfg, 'tally_round_enabled', true);
-  const tds        = cfgBool(cfg, 'tally_tds_enabled', false);
   const opt        = cfgBool(cfg, 'tally_optional', false);
-  const intra      = cfgGet(cfg, 'tally_state_code', '33');
-  const amazing    = cfgBool(cfg, 'tally_amazing_mode', false);
-  const aintra     = cfgGet(cfg, 'tally_state_code_amazing', '32');
-  const homeIntra  = amazing ? aintra : intra;
-  const sStateName = cfgGet(cfg, 'tally_home_state', amazing ? 'Kerala' : 'Tamil Nadu');
+  // RD vouchers go to the ASP company. The intra/inter test must therefore
+  // compare the seller's GSTIN state against ASP's home state code (32 by
+  // default for Kerala), not the ISP one. Falls back to ISP if ASP not set.
+  const intra      = cfgGet(cfg, 'tally_state_code_amazing', '') || cfgGet(cfg, 'tally_state_code', '32');
+  const ainvPrefix = cfgGet(cfg, 'tally_ainv_prefix', 'ASP/');
+  const sStateName = cfgGet(cfg, 'tally_home_state_amazing', cfgGet(cfg, 'tally_home_state', 'Kerala'));
 
-  const Purchase_LDR    = cfgGet(cfg, 'tally_purchase_dealer', 'Trade Purchase from Dealer');
+  const Purchase_LDR    = cfgGet(cfg, 'tally_purchase_dealer', 'Trade Purchase From Dealer');
   const Tax_CGST_IN     = cfgGet(cfg, 'tally_cgst_input', 'INPUT CGST 2.5%');
   const Tax_SGST_IN     = cfgGet(cfg, 'tally_sgst_input', 'INPUT SGST 2.5%');
   const Tax_IGST_IN     = cfgGet(cfg, 'tally_igst_input', 'INPUT IGST 5%');
-  const TDS_LDR         = cfgGet(cfg, 'tally_tds_ledger', 'TDS on Purchase of Goods 194Q');
-  const Round_LDR       = cfgGet(cfg, 'tally_round', 'Round Off');
+  const TDS_LDR         = cfgGet(cfg, 'tally_tds_ledger', 'TDS on Purchase of Goods');
+  const Round_LDR       = cfgGet(cfg, 'tally_round', 'Round On/Off');
   const Item_Card       = cfgGet(cfg, 'tally_item_cardamom', 'Cardamom');
   const HSN_Card        = cfgGet(cfg, 'tally_hsn_cardamom',  '09083110');
+  const TDS_Rate        = cfgNum(cfg, 'tds_purchase_rate', 0.1);  // % rate for 194Q
 
   let xml = '\n' + startEnvelope(company, 'Vouchers');
 
@@ -442,8 +443,10 @@ function generRDPurchaseXML(rows, cfg, opts = {}) {
     const fullGstin  = String(row.gstin || '');
     const partyGstin = fullGstin.toUpperCase().startsWith('GST') ? fullGstin.slice(6, 21) : fullGstin;
     const state      = xe(findState(partyGstin));
-    const isIntra    = String(partyGstin).slice(0, 2) === String(homeIntra);
+    const isIntra    = String(partyGstin).slice(0, 2) === String(intra);
     const rates      = rateDetails(cfgNum(cfg, 'gst_goods', 5));
+    // RD vouchers always go to ASP, so prefix is always ASP/, e.g. ASP/P-1/2026-27
+    const voucherRef = `${ainvPrefix}P-${taxNm}/${season}`;
 
     const startVoucher = `<VOUCHER VCHTYPE="Purchase" ACTION="Create" OBJVIEW="Invoice Voucher View">`;
     const total       = r2(row.total);
@@ -452,7 +455,10 @@ function generRDPurchaseXML(rows, cfg, opts = {}) {
     const cgst        = r2(row.cgst || 0);
     const sgst        = r2(row.sgst || 0);
     const igst        = r2(row.igst || 0);
-    const tdsamt      = tds ? r2(row.tdsamt || 0) : 0;
+    // TDS amount is always passed through if computed by the builder; the
+    // TDS LEDGERENTRIES block is always emitted (per-conversation decision)
+    // so even a zero TDS amount shows up as a placeholder ledger entry.
+    const tdsamt      = r2(row.tdsamt || 0);
     const bilamttot   = r2(row.bilamttot || total);
     const amounttot   = r2(row.amounttot || 0);
     const qtytot      = r2(row.qtytot || 0);
@@ -486,6 +492,8 @@ function generRDPurchaseXML(rows, cfg, opts = {}) {
 <GSTOVRDNTYPEOFSUPPLY>Goods</GSTOVRDNTYPEOFSUPPLY>
 <GSTHSNNAME>${xe(HSN_Card)}</GSTHSNNAME>
 <GSTHSNDESCRIPTION>Cardamom</GSTHSNDESCRIPTION>
+<BASICPACKAGEMARKS></BASICPACKAGEMARKS>
+<BASICNUMPACKAGES>${r0(lot.bag)} Bags</BASICNUMPACKAGES>
 ${TAGS.DEEMYES}
 <RATE>${r2(lot.rate)}/Kgs.</RATE>
 <AMOUNT>${-r2(lot.amount)}</AMOUNT>
@@ -505,7 +513,7 @@ ${TAGS.DEEMYES}
 ${TAGS.DEEMYES}
 <AMOUNT>${-r2(lot.amount)}</AMOUNT>
 </ACCOUNTINGALLOCATIONS.LIST>
-${isIntra ? `${rates.cgst}\n${rates.sgst}` : rates.igst}
+${isIntra ? rates.igst : `${rates.cgst}\n${rates.sgst}`}
 ${rates.cess}
 </ALLINVENTORYENTRIES.LIST>`;
       }
@@ -522,6 +530,8 @@ ${rates.cess}
 <GSTOVRDNTYPEOFSUPPLY>Goods</GSTOVRDNTYPEOFSUPPLY>
 <GSTHSNNAME>${xe(HSN_Card)}</GSTHSNNAME>
 <GSTHSNDESCRIPTION>Cardamom</GSTHSNDESCRIPTION>
+<BASICPACKAGEMARKS></BASICPACKAGEMARKS>
+<BASICNUMPACKAGES></BASICNUMPACKAGES>
 ${TAGS.DEEMYES}
 <RATE>${rt}/Kgs.</RATE>
 <AMOUNT>${-amounttot}</AMOUNT>
@@ -533,7 +543,7 @@ ${TAGS.DEEMYES}
 ${TAGS.DEEMYES}
 <AMOUNT>${-amounttot}</AMOUNT>
 </ACCOUNTINGALLOCATIONS.LIST>
-${isIntra ? `${rates.cgst}\n${rates.sgst}` : rates.igst}
+${isIntra ? rates.igst : `${rates.cgst}\n${rates.sgst}`}
 ${rates.cess}
 </ALLINVENTORYENTRIES.LIST>`;
     }
@@ -544,7 +554,7 @@ ${rates.cess}
 <ADDRESS>${place}</ADDRESS>
 </ADDRESS.LIST>
 <DATE>${dateval}</DATE>
-<REFERENCEDATE>${dateval}</REFERENCEDATE>
+<REFERENCEDATE></REFERENCEDATE>
 <VCHSTATUSDATE>${dateval}</VCHSTATUSDATE>
 <GSTREGISTRATIONTYPE>Regular</GSTREGISTRATIONTYPE>
 <STATENAME>${state}</STATENAME>
@@ -553,19 +563,23 @@ ${rates.cess}
 <PLACEOFSUPPLY>${xe(sStateName)}</PLACEOFSUPPLY>
 <PARTYNAME>${name}</PARTYNAME>
 <PARTYLEDGERNAME>${name}</PARTYLEDGERNAME>
-<VOUCHERNUMBER>${xe(`${row.ano}/${taxNm}/${season}`)}</VOUCHERNUMBER>
-<REFERENCE>${xe(`${row.ano}/${taxNm}/${season}`)}</REFERENCE>
+<VOUCHERNUMBER>${xe(voucherRef)}</VOUCHERNUMBER>
+<REFERENCE>${xe(voucherRef)}</REFERENCE>
 <PARTYMAILINGNAME>${name}</PARTYMAILINGNAME>
 <PARTYPINCODE>${pin}</PARTYPINCODE>
+<BASICBASEPARTYNAME>${name}</BASICBASEPARTYNAME>
 <NUMBERINGSTYLE>Manual</NUMBERINGSTYLE>
 <PERSISTEDVIEW>Invoice Voucher View</PERSISTEDVIEW>
 <VOUCHERTYPENAME>Purchase</VOUCHERTYPENAME>
+<BASICDATETIMEOFINVOICE></BASICDATETIMEOFINVOICE>
+<BASICDATETIMEOFREMOVAL></BASICDATETIMEOFREMOVAL>
 <VCHENTRYMODE>Item Invoice</VCHENTRYMODE>
 <DIFFACTUALQTY>Yes</DIFFACTUALQTY>
 <EFFECTIVEDATE>${dateval}</EFFECTIVEDATE>
 <ISELIGIBLEFORITC>Yes</ISELIGIBLEFORITC>
 <ISINVOICE>Yes</ISINVOICE>
 <ISOPTIONAL>${opt ? 'Yes' : 'No'}</ISOPTIONAL>
+<ISVATDUTYPAID>Yes</ISVATDUTYPAID>
 
 <LEDGERENTRIES.LIST>
 <LEDGERNAME>${name}</LEDGERNAME>
@@ -577,11 +591,6 @@ ${TAGS.DEEMNO}
 <BILLTYPE>New Ref</BILLTYPE>
 <AMOUNT>${tlyrnd ? r0(bilamttot) : bilamttot}</AMOUNT>
 </BILLALLOCATIONS.LIST>`}
-<BILLALLOCATIONS.LIST>
-<NAME>${xe(`${row.ano}/GST/${season}`)}</NAME>
-<BILLTYPE>New Ref</BILLTYPE>
-<AMOUNT>${tlyrnd ? (r0(cgst + sgst + igst) - tdsamt) : (r2(cgst + sgst + igst) - tdsamt)}</AMOUNT>
-</BILLALLOCATIONS.LIST>
 </LEDGERENTRIES.LIST>`;
 
     // Tax ledgers
@@ -609,26 +618,59 @@ ${TAGS.DEEMYES}
 </LEDGERENTRIES.LIST>`;
     }
 
-    // TDS
-    if (tds && tdsamt > 0) {
+    // TDS — emit only when the "TDS on Purchase of Goods" flag is ON
+    // (cfg.flag_tds_purchase). The block is the standard 194Q structure
+    // with 4 subcategories (Income Tax + 3 placeholder cesses); Tally
+    // requires all 4 even if only the first carries the actual TDS amount.
+    // When the flag is OFF, we skip emission entirely so the LEDGERENTRIES
+    // count drops by 1 — matching the reference XMLs that show some
+    // vouchers with TDS and some without.
+    if (cfgBool(cfg, 'flag_tds_purchase', false)) {
+      const expensesLdr = isIntra ? `${Purchase_LDR}-Local` : `${Purchase_LDR}-Inter_State`;
+      const assessable  = amounttot;
       xml += `
 <LEDGERENTRIES.LIST>
 <LEDGERNAME>${xe(TDS_LDR)}</LEDGERNAME>
 ${TAGS.DEEMNO}
-<AMOUNT>${-tdsamt}</AMOUNT>
+<AMOUNT>${tlyrnd ? r0(tdsamt) : tdsamt}</AMOUNT>
+<VATEXPAMOUNT>${tlyrnd ? r0(tdsamt) : tdsamt}</VATEXPAMOUNT>
+<TAXOBJECTALLOCATIONS.LIST>
+<CATEGORY>${xe(TDS_LDR)}</CATEGORY>
+<TAXTYPE>TDS</TAXTYPE>
+<PARTYLEDGER>${name}</PARTYLEDGER>
+<EXPENSES>${xe(expensesLdr)}</EXPENSES>
+<REFTYPE>New Ref</REFTYPE>
+<EXEMPTED>No</EXEMPTED>
+<SUBCATEGORYALLOCATION.LIST>
+<SUBCATEGORY>Income Tax</SUBCATEGORY>
+<DUTYLEDGER>${xe(TDS_LDR)}</DUTYLEDGER>
+<TAXRATE>${TDS_Rate} %</TAXRATE>
+<ASSESSABLEAMOUNT>${tlyrnd ? r0(assessable) : assessable}</ASSESSABLEAMOUNT>
+<TAX>${tlyrnd ? r0(tdsamt) : tdsamt}</TAX>
+</SUBCATEGORYALLOCATION.LIST>
+<SUBCATEGORYALLOCATION.LIST>
+<SUBCATEGORY>Surcharge</SUBCATEGORY>
+</SUBCATEGORYALLOCATION.LIST>
+<SUBCATEGORYALLOCATION.LIST>
+<SUBCATEGORY>Education Cess</SUBCATEGORY>
+</SUBCATEGORYALLOCATION.LIST>
+<SUBCATEGORYALLOCATION.LIST>
+<SUBCATEGORY>Secondary Education Cess</SUBCATEGORY>
+</SUBCATEGORYALLOCATION.LIST>
+</TAXOBJECTALLOCATIONS.LIST>
 </LEDGERENTRIES.LIST>`;
     }
 
-    // Round
-    if (tlyrnd && Math.abs(rnd) > 0.001) {
-      xml += `
+    // Round Off — always emit (matches target which has it on every voucher).
+    // If round flag is off OR rnd is zero we still emit a 0-amount entry,
+    // because Tally expects the structural slot per the reference XMLs.
+    xml += `
 <LEDGERENTRIES.LIST>
 <LEDGERNAME>${xe(Round_LDR)}</LEDGERNAME>
 ${TAGS.DEEMYES}
 <AMOUNT>${-r2(rnd)}</AMOUNT>
 <VATEXPAMOUNT>${-r2(rnd)}</VATEXPAMOUNT>
 </LEDGERENTRIES.LIST>`;
-    }
 
     xml += invEntries;
     xml += `\n${TAGS.ENDVOUCHER}`;
@@ -1625,7 +1667,7 @@ function buildLedgerRows(db, auctionId, cfg) {
     if (name) rows.push({ kind: 'sales', name, parent, taxability, hsn, applicableFrom: todayDate });
   }
 
-  const purBase = cfgGet(cfg, 'tally_purchase_dealer', 'Trade Purchase from Dealer');
+  const purBase = cfgGet(cfg, 'tally_purchase_dealer', 'Trade Purchase From Dealer');
   if (purBase) {
     rows.push({ kind: 'purchase', name: `${purBase}-Local`,       parent: 'Purchase Accounts', taxability: 'Taxable', hsn: hsnCard, applicableFrom: todayDate });
     rows.push({ kind: 'purchase', name: `${purBase}-Inter_State`, parent: 'Purchase Accounts', taxability: 'Taxable', hsn: hsnCard, applicableFrom: todayDate });
