@@ -670,7 +670,9 @@ function generURDPurchaseXML(rows, cfg, opts = {}) {
     const amounttot  = r2(row.amounttot);
     const qtytot     = r2(row.qtytot);
     const rt         = r2(qtytot > 0 ? amounttot / qtytot : 0);
-    const voucherRef = `${amazing ? ainvPrefix : invPrefix}P-${taxNm}/${season}`;
+    // URD purchase vouchers always go to the ASP Tally company, so the
+    // voucher number always uses the ASP prefix regardless of amazing mode.
+    const voucherRef = `${ainvPrefix}P-${taxNm}/${season}`;
 
     const startVoucher = `<VOUCHER VCHTYPE="Purchase" ACTION="Create" OBJVIEW="Invoice Voucher View">`;
 
@@ -701,7 +703,7 @@ function generURDPurchaseXML(rows, cfg, opts = {}) {
 <GSTOVRDNTYPEOFSUPPLY>Goods</GSTOVRDNTYPEOFSUPPLY>
 <GSTHSNNAME>${xe(HSN_Card)}</GSTHSNNAME>
 <GSTHSNDESCRIPTION>${xe(Item_Card)}</GSTHSNDESCRIPTION>
-<BASICPACKAGEMARKS>${xe(`${row.ano}/${lot.lot}`)}</BASICPACKAGEMARKS>
+<BASICPACKAGEMARKS></BASICPACKAGEMARKS>
 <BASICNUMPACKAGES>${r0(lot.bag)} Bags</BASICNUMPACKAGES>
 ${TAGS.DEEMYES}
 <RATE>${r2(lot.rate)}/Kgs.</RATE>
@@ -740,7 +742,7 @@ ${rates.scess}
 <GSTOVRDNTYPEOFSUPPLY>Goods</GSTOVRDNTYPEOFSUPPLY>
 <GSTHSNNAME>${xe(HSN_Card)}</GSTHSNNAME>
 <GSTHSNDESCRIPTION>${xe(Item_Card)}</GSTHSNDESCRIPTION>
-<BASICPACKAGEMARKS>${xe(row.ano || '')}</BASICPACKAGEMARKS>
+<BASICPACKAGEMARKS></BASICPACKAGEMARKS>
 <BASICNUMPACKAGES></BASICNUMPACKAGES>
 ${TAGS.DEEMYES}
 <RATE>${rt}/Kgs.</RATE>
