@@ -13,12 +13,6 @@ const { EXPORT_TYPES } = require('./exports');
 const { exportPdf: exportAnyPdf } = require('./exports-pdf');
 const { DBF_EXPORTS } = require('./dbf-exports');
 const { REPORTS: LORRY_REPORTS } = require('./lorry-reports');
-const {
-  generSalesXML, generRDPurchaseXML, generURDPurchaseXML, generDebitNoteXML, generLedgerXML,
-  buildSalesRows, buildRDPurchaseRows, buildURDPurchaseRows, buildDebitNoteRows, buildLedgerRows,
-  buildSalesPartyLedgerRows, buildRDPartyLedgerRows, buildURDPartyLedgerRows,
-  listAuctionParties,
-} = require('./tally-xml');
 
 const app = express();
 app.use(express.json({ limit: '50mb' }));
@@ -2748,6 +2742,7 @@ app.get('/api/exports/:type/:auctionId', requireExport, async (req, res) => {
       res.setHeader('Content-Disposition', `attachment; filename="${niceName}_${auctionId}.pdf"`);
       return res.send(buffer);
     } catch (e) {
+      console.error(`[export ${type} pdf] failed for auction ${auctionId}:`, e.stack || e);
       return res.status(500).json({ error: e.message });
     }
   }
@@ -2775,6 +2770,7 @@ app.get('/api/exports/:type/:auctionId', requireExport, async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="${exportDef.name}_${auctionId}.${ext}"`);
     res.send(Buffer.from(buffer));
   } catch(e) {
+    console.error(`[export ${type}] failed for auction ${auctionId}:`, e.stack || e);
     res.status(500).json({ error: e.message });
   }
 });
@@ -2877,172 +2873,6 @@ app.get('/api/dbf-exports/:type', requireExport, async (req, res) => {
   } catch(e) {
     console.error('DBF export error:', e);
     res.status(500).json({ error: 'DBF export failed: ' + e.message });
-  }
-});
-
-// ══════════════════════════════════════════════════════════════
-// TO TALLY — XML exports for Tally accounting software
-// ══════════════════════════════════════════════════════════════
-
-// Definitions of available Tally exports — keep in sync with frontend.
-//
-// `company` resolves which Tally company name goes in the XML's
-// <SVCURRENTCOMPANY> tag. For now this routing only differs across the
-// 3 party-ledger types:
-//   • Sales Party Ledgers → ISP (sales-side parties = ISP customers)
-//   • RD / URD Party Ledgers → ASP (purchase-side parties = ASP suppliers)
-// All other exports (vouchers, the all-in-one ledger master) currently
-// import into the ISP company. We can split vouchers later if dad asks.
-const TALLY_EXPORTS = {
-  ledger_sales:        { label: 'Sales Party Ledgers',                              name: 'SalesPartyLedgers',  builder: buildSalesPartyLedgerRows, generator: generLedgerXML, isLedger: true, company: 'isp' },
-  ledger_rd_purchase:  { label: 'RD Purchase Party Ledgers',                        name: 'RDPartyLedgers',     builder: buildRDPartyLedgerRows,    generator: generLedgerXML, isLedger: true, company: 'asp' },
-  ledger_urd_purchase: { label: 'URD Purchase Party Ledgers (Agriculturist)',       name: 'URDPartyLedgers',    builder: buildURDPartyLedgerRows,   generator: generLedgerXML, isLedger: true, company: 'asp' },
-  ledger:              { label: 'All Ledger Masters (parties + tax + sales + purchase)', name: 'AllLedgers',  builder: buildLedgerRows,           generator: generLedgerXML, isLedger: true, company: 'isp' },
-  sales:               { label: 'Sales Vouchers',                                   name: 'Sales',              builder: buildSalesRows,            generator: generSalesXML,        company: 'isp' },
-  rd_purchase:         { label: 'RD Purchase Vouchers',                             name: 'RDPurchase',         builder: buildRDPurchaseRows,       generator: generRDPurchaseXML,   company: 'isp' },
-  urd_purchase:        { label: 'URD Purchase Vouchers (Agriculturist)',            name: 'URDPurchase',        builder: buildURDPurchaseRows,      generator: generURDPurchaseXML,  company: 'isp' },
-  debit_note:          { label: 'Debit Notes (Discount)',                           name: 'DebitNote',          builder: buildDebitNoteRows,        generator: generDebitNoteXML,    company: 'isp' },
-};
-
-// Resolve the Tally company name for a given export type.
-// 'isp' → tally_company_name; 'asp' → tally_asp_company_name (falls
-// back to ISP if the ASP name is blank, so existing setups keep working).
-function resolveTallyCompanyName(cfg, target) {
-  const isp = (cfg.tally_company_name || '').trim();
-  const asp = (cfg.tally_asp_company_name || '').trim();
-  if (target === 'asp') return asp || isp;
-  return isp;
-}
-
-// Map a single-party `kind` (sales|rd_purchase|urd_purchase) to its
-// dedicated builder + which Tally company its ledger belongs to.
-const PARTY_LEDGER_BUILDERS = {
-  sales:        { builder: buildSalesPartyLedgerRows, company: 'isp' },
-  rd_purchase:  { builder: buildRDPartyLedgerRows,    company: 'asp' },
-  urd_purchase: { builder: buildURDPartyLedgerRows,   company: 'asp' },
-};
-
-// List endpoint — used by the To Tally tab to render export buttons
-app.get('/api/tally/list', requireExport, (req, res) => {
-  const list = {};
-  for (const [key, def] of Object.entries(TALLY_EXPORTS)) {
-    list[key] = { label: def.label, name: def.name };
-  }
-  res.json(list);
-});
-
-// Preview endpoint — returns row counts so the user knows how many vouchers
-// will be in the XML before downloading
-app.get('/api/tally/preview/:type/:auctionId', requireExport, (req, res) => {
-  const { type, auctionId } = req.params;
-  const def = TALLY_EXPORTS[type];
-  if (!def) return res.status(400).json({ error: 'Unknown Tally export', available: Object.keys(TALLY_EXPORTS) });
-  try {
-    const db = getDb();
-    const cfg = getSettingsFlat(db);
-    const rows = def.builder(db, auctionId, cfg);
-    const targetCompany = resolveTallyCompanyName(cfg, def.company);
-    if (def.isLedger) {
-      // Ledger rows have a different shape — count by kind
-      const byKind = rows.reduce((acc, r) => {
-        const k = r.kind || 'other';
-        acc[k] = (acc[k] || 0) + 1;
-        return acc;
-      }, {});
-      return res.json({
-        type, auctionId,
-        ledgerCount: rows.length,
-        byKind,
-        targetCompany,
-        sample: rows.slice(0, 6).map(r => ({ kind: r.kind, name: r.name, parent: r.parent, gstin: r.gstin || '' })),
-      });
-    }
-    const totalLots = rows.reduce((s, r) => s + (Array.isArray(r.lots) ? r.lots.length : 0), 0);
-    res.json({
-      type, auctionId,
-      voucherCount: rows.length,
-      lotCount: totalLots,
-      targetCompany,
-      sample: rows.slice(0, 3).map(r => ({
-        ano: r.ano, date: r.date, name: r.partyName || r.name,
-        voucher: r.voucherNum || r.invo,
-        amount: r.total,
-      })),
-    });
-  } catch (e) {
-    console.error('tally preview error:', e);
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// Party listing for an auction — used by the single-party picker UI.
-// Returns every distinct party (buyer/RD/URD) with the kind it would be
-// exported under so the frontend can group and filter.
-app.get('/api/tally/parties/:auctionId', requireExport, (req, res) => {
-  const { auctionId } = req.params;
-  try {
-    const db = getDb();
-    const parties = listAuctionParties(db, auctionId);
-    const byKind = parties.reduce((acc, p) => {
-      acc[p.kind] = (acc[p.kind] || 0) + 1;
-      return acc;
-    }, {});
-    res.json({ auctionId, total: parties.length, byKind, parties });
-  } catch (e) {
-    console.error('tally parties error:', e);
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// Single-party ledger XML — emits exactly one ledger for the named party.
-// kind: 'sales'|'rd_purchase'|'urd_purchase'  (matches party's source)
-// Sales parties go into the ISP Tally company; RD/URD parties go into ASP.
-app.get('/api/tally/party-ledger/:kind/:auctionId', requireExport, (req, res) => {
-  const { kind, auctionId } = req.params;
-  const partyName = req.query.name;
-  if (!partyName) return res.status(400).json({ error: 'Missing ?name=<party name>' });
-  const partyDef = PARTY_LEDGER_BUILDERS[kind];
-  if (!partyDef) return res.status(400).json({ error: 'Unknown party kind', available: Object.keys(PARTY_LEDGER_BUILDERS) });
-  try {
-    const db = getDb();
-    const cfg = getSettingsFlat(db);
-    const rows = partyDef.builder(db, auctionId, cfg, { partyName });
-    if (rows.length === 0) {
-      return res.status(404).json({ error: `Party "${partyName}" not found in ${kind} for auction ${auctionId}` });
-    }
-    const xml = generLedgerXML(rows, cfg, { companyName: resolveTallyCompanyName(cfg, partyDef.company) });
-    const safeName = String(partyName).replace(/[^a-zA-Z0-9]/g, '_').slice(0, 40);
-    const filename = `Tally_PartyLedger_${kind}_${safeName}_${auctionId}.xml`;
-    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    res.send(xml);
-  } catch (e) {
-    console.error('tally party-ledger error:', e);
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// XML download endpoint — the main thing
-app.get('/api/tally/export/:type/:auctionId', requireExport, (req, res) => {
-  const { type, auctionId } = req.params;
-  const def = TALLY_EXPORTS[type];
-  if (!def) return res.status(400).json({ error: 'Unknown Tally export', available: Object.keys(TALLY_EXPORTS) });
-  try {
-    const db = getDb();
-    const cfg = getSettingsFlat(db);
-    const rows = def.builder(db, auctionId, cfg);
-    if (rows.length === 0) {
-      const what = def.isLedger ? def.label.toLowerCase() : `${def.label.toLowerCase()}`;
-      return res.status(404).json({ error: `No ${what} found for auction ${auctionId}` });
-    }
-    const xml = def.generator(rows, cfg, { companyName: resolveTallyCompanyName(cfg, def.company) });
-    const filename = `${def.name}_${auctionId}.xml`;
-    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    res.send(xml);
-  } catch (e) {
-    console.error('tally export error:', e);
-    res.status(500).json({ error: e.message });
   }
 });
 
