@@ -3040,6 +3040,72 @@ app.get('/api/tally/party-ledger/:kind/:auctionId', requireExport, (req, res) =>
   }
 });
 
+// Single-party voucher XML — emits exactly one voucher for the named
+// party, for one of the voucher types: sales_isp, sales_asp, rd_purchase,
+// urd_purchase, debit_note. Useful when a single buyer/dealer needs a
+// voucher import in isolation (e.g. you missed one and don't want to
+// re-import the whole auction).
+//
+// We reuse the existing TALLY_EXPORTS builders (which produce rows for
+// the entire auction) and filter the rows by party name in-memory. The
+// "party name" field varies per voucher type:
+//   sales_isp     → row.partyName     (= invoices.buyer1, the buyer)
+//   sales_asp     → row.buyerName     (= the downstream ISP-side buyer)
+//   rd_purchase   → row.name          (= purchases.name, the dealer)
+//   urd_purchase  → row.name          (= bills.name, the agriculturist)
+//   debit_note    → row.partyName     (= the discount-paying supplier)
+const VOUCHER_PARTY_KEY = {
+  sales_isp:    (r) => r.partyName || '',
+  sales_asp:    (r) => r.buyerName || r.buyer || '',
+  rd_purchase:  (r) => r.name || '',
+  urd_purchase: (r) => r.name || '',
+  debit_note:   (r) => r.partyName || r.name || '',
+  // Legacy alias still works
+  sales:        (r) => r.partyName || '',
+};
+
+app.get('/api/tally/party-voucher/:type/:auctionId', requireExport, (req, res) => {
+  const { type, auctionId } = req.params;
+  const partyName = req.query.name;
+  if (!partyName) return res.status(400).json({ error: 'Missing ?name=<party name>' });
+  const def = TALLY_EXPORTS[type];
+  const keyFn = VOUCHER_PARTY_KEY[type];
+  if (!def || !keyFn || def.isLedger) {
+    return res.status(400).json({
+      error: 'Unknown or unsupported voucher type for single-party export',
+      supported: Object.keys(VOUCHER_PARTY_KEY),
+    });
+  }
+  try {
+    const db = getDb();
+    const cfg = getSettingsFlat(db);
+    const allRows = def.builder(db, auctionId, cfg);
+    // Case-insensitive exact match on the party name; fall back to
+    // contains-match if no exact hit (handles minor whitespace/case
+    // differences between the picker label and the underlying data).
+    const target = String(partyName).trim().toUpperCase();
+    let rows = allRows.filter(r => String(keyFn(r) || '').trim().toUpperCase() === target);
+    if (rows.length === 0) {
+      rows = allRows.filter(r => String(keyFn(r) || '').toUpperCase().includes(target));
+    }
+    if (rows.length === 0) {
+      return res.status(404).json({
+        error: `No ${def.label} found for "${partyName}" in auction ${auctionId}`,
+        availableParties: [...new Set(allRows.map(keyFn).filter(Boolean))].slice(0, 20),
+      });
+    }
+    const xml = def.generator(rows, cfg, { companyName: resolveTallyCompanyName(cfg, def.company) });
+    const safeName = String(partyName).replace(/[^a-zA-Z0-9]/g, '_').slice(0, 40);
+    const filename = `${def.name}_${safeName}_${auctionId}.xml`;
+    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(xml);
+  } catch (e) {
+    console.error('tally party-voucher error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // XML download endpoint — the main thing
 app.get('/api/tally/export/:type/:auctionId', requireExport, (req, res) => {
   const { type, auctionId } = req.params;

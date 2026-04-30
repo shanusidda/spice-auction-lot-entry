@@ -1979,6 +1979,7 @@ function buildSalesAspRows(db, auctionId, cfg) {
       sale: r.sale,
       invo: r.invo,
       buyer: r.buyer,
+      buyerName: r.buyer1 || r.buyer || '',  // downstream ISP-side buyer; surfaced for filter UIs
       ispPartyName,
       ispAddress: ispAddr1,
       ispPlace: ispBranch,

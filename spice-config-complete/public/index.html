@@ -740,6 +740,49 @@ tr:hover td{background:var(--spice-cream)}
 .tally-co-isp{background:var(--green-bg);color:var(--green);border:1px solid var(--green)}
 .tally-co-asp{background:#FEF3C7;color:#B45309;border:1px solid #F59E0B}
 
+/* Collapsible section heading — click chevron or text to toggle */
+.tally-section{margin:18px 0 0 0}
+.tally-section-head{
+  margin:0 0 8px 0;font-size:14px;color:var(--text);font-weight:700;
+  cursor:pointer;user-select:none;
+  display:flex;align-items:center;gap:8px;
+  padding:6px 8px;border-radius:6px;
+  transition:background .12s;
+}
+.tally-section-head:hover{background:var(--bg)}
+.tally-section-chev{
+  display:inline-block;width:18px;text-align:center;
+  font-size:11px;color:var(--text3);
+  transition:transform .15s;
+}
+.tally-section.is-collapsed .tally-section-chev{transform:rotate(-90deg)}
+.tally-section.is-collapsed .tally-section-body{display:none}
+.tally-section-count{
+  font-weight:400;font-size:11px;color:var(--text3);
+  background:var(--bg);padding:2px 8px;border-radius:10px;margin-left:auto;
+}
+
+/* Search box with leading magnifying-glass icon and trailing clear (✕) */
+.tally-search{position:relative;flex:1}
+.tally-search input{
+  width:100%;padding:7px 30px 7px 30px;
+  border:1px solid var(--border);border-radius:6px;font-size:13px;
+  box-sizing:border-box;
+}
+.tally-search input:focus{outline:none;border-color:var(--green);box-shadow:0 0 0 2px var(--green-bg)}
+.tally-search-icon{
+  position:absolute;left:9px;top:50%;transform:translateY(-50%);
+  color:var(--text3);font-size:13px;pointer-events:none;
+}
+.tally-search-clear{
+  position:absolute;right:6px;top:50%;transform:translateY(-50%);
+  width:20px;height:20px;border:none;background:var(--bg);
+  border-radius:50%;cursor:pointer;font-size:11px;color:var(--text3);
+  display:none;align-items:center;justify-content:center;padding:0;line-height:1;
+}
+.tally-search-clear:hover{background:var(--border);color:var(--text)}
+.tally-search.has-text .tally-search-clear{display:inline-flex}
+
 
 /* ── Loading spinner + button-busy state ──────────────── */
 @keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
@@ -2011,7 +2054,13 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
           <br><strong style="color:var(--green)">Workflow:</strong> Import party ledgers first, then matching vouchers — Tally rejects imports if any referenced ledger is missing.
         </div>
 
-        <h3 style="margin:16px 0 8px 0;font-size:14px;color:var(--text);font-weight:700">📚 Party Ledgers</h3>
+        <div class="tally-section" id="tally-sec-ledgers">
+        <h3 class="tally-section-head" onclick="toggleTallySection('tally-sec-ledgers')">
+          <span class="tally-section-chev">▼</span>
+          <span>📚 Party Ledgers</span>
+          <span class="tally-section-count">4</span>
+        </h3>
+        <div class="tally-section-body">
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px">
           <div style="padding:14px;border:1px solid var(--border);border-radius:10px;background:#fff">
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
@@ -2074,13 +2123,25 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
           </div>
         </div>
 
+        </div>
+        </div><!-- /tally-sec-ledgers -->
+
         <!-- Single Party picker -->
-        <h3 style="margin:18px 0 8px 0;font-size:14px;color:var(--text);font-weight:700">🎯 Single Party Ledger</h3>
+        <div class="tally-section" id="tally-sec-single-ledger">
+        <h3 class="tally-section-head" onclick="toggleTallySection('tally-sec-single-ledger')">
+          <span class="tally-section-chev">▼</span>
+          <span>🎯 Single Party Ledger</span>
+        </h3>
+        <div class="tally-section-body">
         <div style="padding:14px;border:1px solid var(--border);border-radius:10px;background:#fff">
           <div style="font-size:11px;color:var(--text3);margin-bottom:8px">Pick one party from this auction and download just its ledger. Useful when you've added a new buyer/trader and only need to create that one ledger in Tally.</div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
             <div style="flex:2;min-width:220px"><label style="font-size:11px;color:var(--text2);font-weight:600">Search</label>
-              <input type="text" id="tally-party-search" placeholder="Type to filter by name, GSTIN, or place…" oninput="renderTallyPartyList()" style="width:100%;padding:7px;border:1px solid var(--border);border-radius:6px;font-size:13px">
+              <div class="tally-search" id="tally-party-search-wrap">
+                <span class="tally-search-icon">🔍</span>
+                <input type="text" id="tally-party-search" placeholder="Type to filter by name, GSTIN, or place…" oninput="onTallySearchInput('tally-party-search', renderTallyPartyList)">
+                <button type="button" class="tally-search-clear" onclick="clearTallySearch('tally-party-search', renderTallyPartyList)" title="Clear">✕</button>
+              </div>
             </div>
             <div style="flex:1;min-width:160px"><label style="font-size:11px;color:var(--text2);font-weight:600">Filter by kind</label>
               <select id="tally-party-kind" onchange="renderTallyPartyList()" style="width:100%;padding:7px;border:1px solid var(--border);border-radius:6px;font-size:13px">
@@ -2096,8 +2157,50 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
             <div style="padding:14px;color:var(--text3);font-size:12px;text-align:center">Pick an auction and click <strong>Refresh List</strong> to load parties.</div>
           </div>
         </div>
+        </div>
+        </div><!-- /tally-sec-single-ledger -->
 
-        <h3 style="margin:18px 0 8px 0;font-size:14px;color:var(--text);font-weight:700">📄 Vouchers</h3>
+        <!-- Single Party Voucher picker -->
+        <div class="tally-section" id="tally-sec-single-voucher">
+        <h3 class="tally-section-head" onclick="toggleTallySection('tally-sec-single-voucher')">
+          <span class="tally-section-chev">▼</span>
+          <span>🎫 Single Party Voucher</span>
+        </h3>
+        <div class="tally-section-body">
+        <div style="padding:14px;border:1px solid var(--border);border-radius:10px;background:#fff">
+          <div style="font-size:11px;color:var(--text3);margin-bottom:8px">Generate a voucher XML for just one party. Useful when you missed an entry or need a single voucher re-imported. Each party gets a download button per applicable voucher type — Sales (ISP / ASP) for buyers, RD or URD Purchase for traders.</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+            <div style="flex:2;min-width:220px"><label style="font-size:11px;color:var(--text2);font-weight:600">Search</label>
+              <div class="tally-search" id="tally-pv-search-wrap">
+                <span class="tally-search-icon">🔍</span>
+                <input type="text" id="tally-pv-search" placeholder="Type to filter by name, GSTIN, or place…" oninput="onTallySearchInput('tally-pv-search', renderTallyPartyVoucherList)">
+                <button type="button" class="tally-search-clear" onclick="clearTallySearch('tally-pv-search', renderTallyPartyVoucherList)" title="Clear">✕</button>
+              </div>
+            </div>
+            <div style="flex:1;min-width:160px"><label style="font-size:11px;color:var(--text2);font-weight:600">Filter by kind</label>
+              <select id="tally-pv-kind" onchange="renderTallyPartyVoucherList()" style="width:100%;padding:7px;border:1px solid var(--border);border-radius:6px;font-size:13px">
+                <option value="">All kinds</option>
+                <option value="sales">Sales (buyer)</option>
+                <option value="rd_purchase">RD Purchase (dealer)</option>
+                <option value="urd_purchase">URD Purchase (agriculturist)</option>
+              </select>
+            </div>
+            <button class="btn btn-a" onclick="loadTallyParties()" style="padding:7px 14px;font-size:12px">Refresh List</button>
+          </div>
+          <div id="tally-pv-list" style="margin-top:10px;max-height:380px;overflow:auto;border:1px solid var(--border);border-radius:6px;background:var(--bg)">
+            <div style="padding:14px;color:var(--text3);font-size:12px;text-align:center">Pick an auction and click <strong>Refresh List</strong> to load parties.</div>
+          </div>
+        </div>
+        </div>
+        </div><!-- /tally-sec-single-voucher -->
+
+        <div class="tally-section" id="tally-sec-vouchers">
+        <h3 class="tally-section-head" onclick="toggleTallySection('tally-sec-vouchers')">
+          <span class="tally-section-chev">▼</span>
+          <span>📄 Vouchers</span>
+          <span class="tally-section-count">5</span>
+        </h3>
+        <div class="tally-section-body">
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px">
           <div style="padding:14px;border:1px solid var(--border);border-radius:10px;background:#fff">
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
@@ -2174,6 +2277,8 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
             </div>
           </div>
         </div>
+        </div>
+        </div><!-- /tally-sec-vouchers -->
 
         <div style="margin-top:16px;padding:12px 14px;background:var(--spice-saffron-lt);border-radius:8px;font-size:12px;color:var(--text2);line-height:1.6">
           <strong style="color:var(--text)">How to import into Tally:</strong>
@@ -7265,8 +7370,11 @@ function loadTallyAuctions(){
       });
       // also clear the party list
       _tallyParties=null;
+      const resetMsg='<div style="padding:14px;color:var(--text3);font-size:12px;text-align:center">Auction changed — click <strong>Refresh List</strong> to reload parties.</div>';
       const list=document.getElementById('tally-party-list');
-      if(list)list.innerHTML='<div style="padding:14px;color:var(--text3);font-size:12px;text-align:center">Auction changed — click <strong>Refresh List</strong> to reload parties.</div>';
+      if(list)list.innerHTML=resetMsg;
+      const pvList=document.getElementById('tally-pv-list');
+      if(pvList)pvList.innerHTML=resetMsg;
     });
     sel.dataset.tallyBound='1';
   }
@@ -7338,20 +7446,28 @@ async function loadTallyParties(){
   const aid=document.getElementById('tally-auction')?.value;
   if(!aid){alert('Select an auction first');return}
   const list=document.getElementById('tally-party-list');
-  if(list)list.innerHTML='<div style="padding:14px;color:var(--text3);font-size:12px;text-align:center">Loading parties…</div>';
+  const pvList=document.getElementById('tally-pv-list');
+  const loadingHtml='<div style="padding:14px;color:var(--text3);font-size:12px;text-align:center">Loading parties…</div>';
+  if(list)list.innerHTML=loadingHtml;
+  if(pvList)pvList.innerHTML=loadingHtml;
   try{
     const r=await fetch(B+`/api/tally/parties/${aid}`,{headers:{'Authorization':'Bearer '+T}});
     if(!r.ok){
       let msg='Failed to load parties';
       try{const e=await r.json();if(e.error)msg=e.error}catch(x){}
-      if(list)list.innerHTML=`<div style="padding:14px;color:#C62828;font-size:12px;text-align:center">${esc(msg)}</div>`;
+      const errHtml=`<div style="padding:14px;color:#C62828;font-size:12px;text-align:center">${esc(msg)}</div>`;
+      if(list)list.innerHTML=errHtml;
+      if(pvList)pvList.innerHTML=errHtml;
       return;
     }
     const data=await r.json();
     _tallyParties=data.parties||[];
     renderTallyPartyList();
+    renderTallyPartyVoucherList();
   }catch(e){
-    if(list)list.innerHTML=`<div style="padding:14px;color:#C62828;font-size:12px;text-align:center">Error: ${esc(e.message)}</div>`;
+    const errHtml=`<div style="padding:14px;color:#C62828;font-size:12px;text-align:center">Error: ${esc(e.message)}</div>`;
+    if(list)list.innerHTML=errHtml;
+    if(pvList)pvList.innerHTML=errHtml;
   }
 }
 function renderTallyPartyList(){
@@ -7413,6 +7529,134 @@ async function tallyDownloadParty(kind,partyName){
     a.download=`Tally_PartyLedger_${kind}_${safeName}_${aid}.xml`;a.click();
     setTimeout(()=>URL.revokeObjectURL(a.href),5000);
     toast(`Downloaded ledger for ${partyName}`);
+  });
+}
+
+// ── Collapsible Tally sections ──────────────────────────────────
+// Sections are collapsed/expanded by toggling a class on the parent;
+// CSS hides .tally-section-body and rotates the chevron. State persists
+// in localStorage so collapse choice survives page reloads.
+function toggleTallySection(id){
+  const el=document.getElementById(id);if(!el)return;
+  el.classList.toggle('is-collapsed');
+  try{
+    const collapsed=Array.from(document.querySelectorAll('.tally-section.is-collapsed')).map(e=>e.id);
+    localStorage.setItem('tallyCollapsedSections',JSON.stringify(collapsed));
+  }catch(e){}
+}
+function restoreTallyCollapseState(){
+  try{
+    const saved=JSON.parse(localStorage.getItem('tallyCollapsedSections')||'[]');
+    for(const id of saved){
+      const el=document.getElementById(id);
+      if(el)el.classList.add('is-collapsed');
+    }
+  }catch(e){}
+}
+document.addEventListener('DOMContentLoaded',restoreTallyCollapseState);
+
+// ── Search box helpers (icon + clear button) ────────────────────
+// onTallySearchInput keeps the wrap's .has-text class in sync so the ✕
+// button shows only when there's text. clearTallySearch wipes the value
+// and re-runs the render callback.
+function onTallySearchInput(inputId,renderFn){
+  const inp=document.getElementById(inputId);if(!inp)return;
+  const wrap=inp.closest('.tally-search');
+  if(wrap)wrap.classList.toggle('has-text',!!inp.value);
+  if(typeof renderFn==='function')renderFn();
+}
+function clearTallySearch(inputId,renderFn){
+  const inp=document.getElementById(inputId);if(!inp)return;
+  inp.value='';
+  const wrap=inp.closest('.tally-search');
+  if(wrap)wrap.classList.remove('has-text');
+  if(typeof renderFn==='function')renderFn();
+  inp.focus();
+}
+
+// ── Single Party Voucher list ────────────────────────────────────
+// Per party, render a row with the applicable voucher-type buttons:
+//   - Sales (buyer)        → ISP Sale + ASP Sale (two buttons)
+//   - RD Purchase (dealer) → RD Purchase (one button)
+//   - URD (agriculturist)  → URD Purchase (one button)
+// Each button hits /api/tally/party-voucher/<type>/<auctionId>?name=...
+// which filters the full builder output by party name and emits XML for
+// that one voucher only.
+const TALLY_PV_TYPES_BY_KIND={
+  sales:[
+    {type:'sales_isp',label:'ISP Sale',co:'isp',title:'Generate the ISP-side sale voucher (sale to outside customer)'},
+    {type:'sales_asp',label:'ASP Sale',co:'asp',title:'Generate the ASP→ISP internal-transfer voucher'},
+  ],
+  rd_purchase:[
+    {type:'rd_purchase',label:'RD Purchase',co:'asp',title:'Generate the registered-dealer purchase voucher'},
+  ],
+  urd_purchase:[
+    {type:'urd_purchase',label:'URD Purchase',co:'asp',title:'Generate the agriculturist purchase voucher (Bill of Supply)'},
+  ],
+};
+function renderTallyPartyVoucherList(){
+  const list=document.getElementById('tally-pv-list');
+  if(!list)return;
+  if(!_tallyParties){
+    list.innerHTML='<div style="padding:14px;color:var(--text3);font-size:12px;text-align:center">Click <strong>Refresh List</strong> to load parties.</div>';
+    return;
+  }
+  const q=(document.getElementById('tally-pv-search')?.value||'').toLowerCase().trim();
+  const kindFilter=document.getElementById('tally-pv-kind')?.value||'';
+  const filtered=_tallyParties.filter(p=>{
+    if(kindFilter&&p.kind!==kindFilter)return false;
+    if(q){
+      const hay=`${p.name} ${p.gstin} ${p.place||''}`.toLowerCase();
+      if(!hay.includes(q))return false;
+    }
+    return true;
+  });
+  if(filtered.length===0){
+    list.innerHTML='<div style="padding:14px;color:var(--text3);font-size:12px;text-align:center">No parties match.</div>';
+    return;
+  }
+  const byKind={sales:[],rd_purchase:[],urd_purchase:[]};
+  for(const p of filtered)(byKind[p.kind]||(byKind[p.kind]=[])).push(p);
+  let html='';
+  for(const kind of ['sales','rd_purchase','urd_purchase']){
+    const arr=byKind[kind];if(!arr||arr.length===0)continue;
+    const co=TALLY_PARTY_KIND_CO[kind]||'isp';
+    html+=`<div style="padding:6px 12px;background:${TALLY_PARTY_KIND_BG[kind]};font-size:11px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px">${TALLY_PARTY_KIND_LABEL[kind]} · ${arr.length}</div>`;
+    const types=TALLY_PV_TYPES_BY_KIND[kind]||[];
+    for(const p of arr){
+      const safeName=(p.name||'').replace(/'/g,"\\'");
+      let btns='';
+      for(const t of types){
+        btns+=`<button class="btn btn-g" onclick="tallyDownloadPartyVoucher('${t.type}','${safeName.replace(/"/g,'&quot;')}')" title="${esc(t.title)}" style="padding:5px 8px;font-size:11px;flex:0 0 auto;display:inline-flex;align-items:center;gap:4px"><span class="tally-co-badge tally-co-${t.co}" style="font-size:9px;padding:1px 4px">${t.co.toUpperCase()}</span>${esc(t.label)}</button>`;
+      }
+      html+=`<div style="padding:8px 12px;border-bottom:1px solid var(--border);background:#fff;display:flex;align-items:center;gap:8px">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.name)}</div>
+          <div style="font-size:11px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.gstin?esc(p.gstin):'<em>No GSTIN</em>'}${p.place?' · '+esc(p.place):''}</div>
+        </div>
+        <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">${btns}</div>
+      </div>`;
+    }
+  }
+  list.innerHTML=html;
+}
+async function tallyDownloadPartyVoucher(type,partyName){
+  const aid=document.getElementById('tally-auction')?.value;
+  if(!aid){alert('Select an auction first');return}
+  await withOverlay(`Generating ${TALLY_LABELS[type]||type} voucher for ${partyName}…`, async () => {
+    const url=B+`/api/tally/party-voucher/${type}/${aid}?name=${encodeURIComponent(partyName)}`;
+    const r=await fetch(url,{headers:{'Authorization':'Bearer '+T}});
+    if(!r.ok){
+      let msg='Voucher export failed';
+      try{const e=await r.json();if(e.error)msg=e.error}catch(x){}
+      toast(msg);return;
+    }
+    const blob=await r.blob();
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+    const safeName=partyName.replace(/[^a-zA-Z0-9]/g,'_').slice(0,40);
+    a.download=`Tally_${type}_${safeName}_${aid}.xml`;a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+    toast(`Downloaded ${TALLY_LABELS[type]||type} voucher for ${partyName}`);
   });
 }
 
