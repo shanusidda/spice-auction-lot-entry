@@ -2202,7 +2202,7 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
         <h3 class="tally-section-head" onclick="toggleTallySection('tally-sec-vouchers')">
           <span class="tally-section-chev">▼</span>
           <span>📄 Vouchers</span>
-          <span class="tally-section-count">5</span>
+          <span class="tally-section-count">6</span>
         </h3>
         <div class="tally-section-body">
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px">
@@ -2233,6 +2233,21 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
             <div style="display:flex;gap:6px;margin-top:8px">
               <button class="btn btn-a" onclick="tallyPreview('sales_asp')" style="flex:1;padding:7px;font-size:12px">Preview</button>
               <button class="btn btn-g" onclick="tallyDownload('sales_asp')" style="flex:1;padding:7px;font-size:12px">Download XML</button>
+            </div>
+          </div>
+
+          <div data-tally-co="isp" style="padding:14px;border:1px solid var(--border);border-radius:10px;background:#fff">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+              <span style="width:32px;height:32px;border-radius:8px;background:var(--green-bg);display:inline-flex;align-items:center;justify-content:center;font-size:18px">📦</span>
+              <div>
+                <div style="font-weight:700;color:var(--text);font-size:14px">ISP Purchase Vouchers <span class="tally-co-badge tally-co-isp">ISP</span></div>
+                <div style="font-size:11px;color:var(--text3)">Mirror of ASP→ISP transfer — same voucher number (ASP/I-…), supplier=ASP, IGST input</div>
+              </div>
+            </div>
+            <div id="tally-preview-isp_purchase" style="font-size:11px;color:var(--text3);min-height:18px;margin:6px 0"></div>
+            <div style="display:flex;gap:6px;margin-top:8px">
+              <button class="btn btn-a" onclick="tallyPreview('isp_purchase')" style="flex:1;padding:7px;font-size:12px">Preview</button>
+              <button class="btn btn-g" onclick="tallyDownload('isp_purchase')" style="flex:1;padding:7px;font-size:12px">Download XML</button>
             </div>
           </div>
 
@@ -7545,6 +7560,7 @@ const TALLY_LABELS={
   sales_isp:'Sales ISP',
   sales_asp:'Sales ASP',
   sales:'Sales',
+  isp_purchase:'ISP Purchase',
   rd_purchase:'RD Purchase',
   urd_purchase:'URD Purchase',
   debit_note:'Debit Note'
@@ -7782,6 +7798,7 @@ const TALLY_PV_TYPES_BY_KIND={
   sales:[
     {type:'sales_isp',label:'ISP Sale',co:'isp',title:'Generate the ISP-side sale voucher (sale to outside customer)'},
     {type:'sales_asp',label:'ASP Sale',co:'asp',title:'Generate the ASP→ISP internal-transfer voucher'},
+    {type:'isp_purchase',label:'ISP Purchase',co:'isp',title:'Generate the ISP-side purchase voucher (mirror of ASP→ISP transfer)'},
   ],
   rd_purchase:[
     {type:'rd_purchase',label:'RD Purchase',co:'asp',title:'Generate the registered-dealer purchase voucher'},

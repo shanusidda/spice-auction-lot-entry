@@ -14,7 +14,7 @@ const { exportPdf: exportAnyPdf } = require('./exports-pdf');
 const { DBF_EXPORTS } = require('./dbf-exports');
 const { REPORTS: LORRY_REPORTS } = require('./lorry-reports');
 const {
-  generSalesXML, generSalesIspXML, generSalesAspXML,
+  generSalesXML, generSalesIspXML, generSalesAspXML, generIspPurchaseXML,
   generRDPurchaseXML, generURDPurchaseXML, generDebitNoteXML, generLedgerXML,
   buildSalesRows, buildSalesIspRows, buildSalesAspRows,
   buildRDPurchaseRows, buildURDPurchaseRows, buildDebitNoteRows, buildLedgerRows,
@@ -2910,6 +2910,11 @@ const TALLY_EXPORTS = {
   sales_isp:           { label: 'Sales Vouchers — ISP',                             name: 'SalesISP',           builder: buildSalesIspRows,         generator: generSalesIspXML,     company: 'isp' },
   sales_asp:           { label: 'Sales Vouchers — ASP',                             name: 'SalesASP',           builder: buildSalesAspRows,         generator: generSalesAspXML,     company: 'asp' },
   sales:               { label: 'Sales Vouchers (legacy alias for ISP)',            name: 'Sales',              builder: buildSalesIspRows,         generator: generSalesIspXML,     company: 'isp' },
+  // ISP Purchase = the buyer-side mirror of an ASP→ISP transfer. Each
+  // sales_asp row produces one isp_purchase voucher into ISP's books with
+  // the same VOUCHERNUMBER (e.g. ASP/I-61/26-27) for cross-reference. We
+  // re-use buildSalesAspRows directly since the row shape is identical.
+  isp_purchase:        { label: 'ISP Purchase Vouchers (mirror of ASP→ISP)',        name: 'ISPPurchase',        builder: buildSalesAspRows,         generator: generIspPurchaseXML,  company: 'isp' },
   rd_purchase:         { label: 'RD Purchase Vouchers',                             name: 'RDPurchase',         builder: buildRDPurchaseRows,       generator: generRDPurchaseXML,   company: 'asp' },
   urd_purchase:        { label: 'URD Purchase Vouchers (Agriculturist)',            name: 'URDPurchase',        builder: buildURDPurchaseRows,      generator: generURDPurchaseXML,  company: 'asp' },
   debit_note:          { label: 'Debit Notes (Discount)',                           name: 'DebitNote',          builder: buildDebitNoteRows,        generator: generDebitNoteXML,    company: 'isp' },
@@ -3199,12 +3204,18 @@ app.get('/api/tally/party-ledger/:kind/:auctionId', requireExport, (req, res) =>
 // "party name" field varies per voucher type:
 //   sales_isp     → row.partyName     (= invoices.buyer1, the buyer)
 //   sales_asp     → row.buyerName     (= the downstream ISP-side buyer)
+//   isp_purchase  → row.buyerName     (= same source as sales_asp; the
+//                                       voucher's "party" is always ASP,
+//                                       so we filter by the downstream
+//                                       buyer to let users pick a single
+//                                       transfer voucher)
 //   rd_purchase   → row.name          (= purchases.name, the dealer)
 //   urd_purchase  → row.name          (= bills.name, the agriculturist)
 //   debit_note    → row.partyName     (= the discount-paying supplier)
 const VOUCHER_PARTY_KEY = {
   sales_isp:    (r) => r.partyName || '',
   sales_asp:    (r) => r.buyerName || r.buyer || '',
+  isp_purchase: (r) => r.buyerName || r.buyer || '',
   rd_purchase:  (r) => r.name || '',
   urd_purchase: (r) => r.name || '',
   debit_note:   (r) => r.partyName || r.name || '',

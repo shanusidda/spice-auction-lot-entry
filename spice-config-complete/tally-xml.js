@@ -899,6 +899,310 @@ ${rates.cess}
 }
 
 // =====================================================================
+// ISP PURCHASE (mirror of ASP→ISP transfer, ISP-side books)
+// =====================================================================
+//
+// For every ASP sale voucher (ASP→ISP internal transfer), the ISP company
+// needs a matching purchase voucher in its books. Same line items, same
+// amounts, but viewed from the buyer side:
+//   • PARTYNAME = ASP (the supplier)
+//   • Imports into the ISP Tally company
+//   • VOUCHERNUMBER = same as the ASP sale (e.g. ASP/I-61/26-27) — this is
+//     the cross-reference key. NOT a fresh ISP-prefixed number.
+//   • Inventory AMOUNTs are negative (purchase debits stock)
+//   • Tax ledger AMOUNTs are negative (input GST claimed)
+//   • Round-off sign is flipped vs the sale (preRound − rounded)
+//   • Single accounting ledger: "Trade Purchase From Dealer" (no
+//     -Local/-Inter_State variant — always inter-state Kerala→TN)
+//   • Sales-only fields (DISPATCHFROMNAME, BILLTOPLACE, ORDERREF, etc.)
+//     are absent
+//
+// Input shape: same as buildSalesAspRows produces. We re-use that builder
+// directly — no new builder needed.
+//
+function generIspPurchaseXML(rows, cfg, opts = {}) {
+  // Imports into ISP company (the buyer's books)
+  const company       = opts.companyName || cfgGet(cfg, 'tally_company_name', cfgGet(cfg, 'short_name', 'Ideal Spices Private Limited'));
+  const tlyrnd        = cfgBool(cfg, 'flag_tally_round', true);
+
+  // Ledger names — Trade Purchase From Dealer is the single accounting
+  // ledger used in the reference for ALL inventory entries (cardamom +
+  // gunny). Configurable via tally_isp_purchase_ledger.
+  const Purchase_LDR = cfgGet(cfg, 'tally_isp_purchase_ledger', 'Trade Purchase From Dealer');
+  const Tax_IGST_IN  = cfgGet(cfg, 'tally_igst_input',          'INPUT IGST 5%');
+  const Round_LDR    = cfgGet(cfg, 'tally_round',               'Round On/Off');
+  const Item_Card    = cfgGet(cfg, 'tally_item_cardamom',       'Cardamom');
+  const Item_Gunny   = cfgGet(cfg, 'tally_item_gunny',          'Gunny');
+  const HSN_Card     = cfgGet(cfg, 'tally_hsn_cardamom',        '09083120');
+  const HSN_Gunny    = cfgGet(cfg, 'tally_hsn_gunny',           '63051040');
+
+  // Sister/ASP party identity — fetched from sister-company cfg.
+  const aspName    = cfgGet(cfg, 's_company',
+                       cfgGet(cfg, 's_short_name', 'AMAZING SPICE PARK PRIVATE LIMITED'));
+  const aspAddr1   = cfgGet(cfg, 's_address1', cfgGet(cfg, 's_dispatch_address1', ''));
+  const aspAddr2   = cfgGet(cfg, 's_address2', cfgGet(cfg, 's_dispatch_address2', ''));
+  const aspPlace   = cfgGet(cfg, 's_place',    cfgGet(cfg, 'tally_dispatch_place', 'NEDUMKANDAM'));
+  const aspPin     = cfgGet(cfg, 's_pin',      cfgGet(cfg, 'tally_dispatch_pin', '685553'));
+  const aspState   = cfgGet(cfg, 's_state',    cfgGet(cfg, 'tally_dispatch_state', 'Kerala'));
+  const aspGstin   = cfgGet(cfg, 's_gstin',    '');
+
+  // Address lines for the ASP party. Reference shows two lines:
+  //   line 1 = full street address
+  //   line 2 = town/place
+  const aspAddrLines = _addrLines(aspAddr1, aspPlace || aspAddr2);
+
+  // Place of supply for the receiving company (ISP = TN by default). Sale
+  // letter on the matching ASP sale voucher is always 'I' (inter-state),
+  // so place of supply = TN.
+  const ispPlaceOfSupply = cfgGet(cfg, 'tally_home_state', 'Tamil Nadu');
+
+  // CONSIGNEEPINNUMBER in the reference is the PAN-portion of the
+  // CONSIGNEEGSTIN (chars 3-12). Reference shows "ABDCA2636B" extracted
+  // from "32ABDCA2636B1ZE".
+  const aspPan = aspGstin ? String(aspGstin).slice(2, 12) : '';
+
+  let xml = '\n' + startEnvelope(company, 'Vouchers');
+
+  for (const row of rows) {
+    const dateval     = toTallyDate(row.date);
+    // Same voucher number as the matching ASP sale — this is the
+    // cross-reference. The builder already produced the per-row data
+    // including invo and sale='I' implicit; we re-derive the number here
+    // exactly like generSalesAspXML does, so the two stay in lockstep.
+    const ainvPrefix  = cfgGet(cfg, 'tally_ainv_prefix', 'ASP/');
+    const separator   = opts.separator || cfgGet(cfg, 'tally_separator', '/');
+    const season      = opts.season    || cfgGet(cfg, 'tally_season', cfgGet(cfg, 'season_code', '2026-27'));
+    const sale        = 'I';  // always inter-state for ASP→ISP
+    const invoNo      = String(row.invo || '').trim();
+    const taxNm       = `${sale}${separator}${invoNo}`;
+    const voucherNum  = `${ainvPrefix}${taxNm}/${season}`;
+
+    // Pre-round total (matches the ASP sale's pre-round total). The
+    // builder computed `total` as r2(taxableTotal + cgst + sgst + igst).
+    const preRound    = r2(row.total || 0);
+    const rounded     = r0(preRound);
+    // Purchase round-off has opposite sign vs sale (preRound − rounded)
+    const roundOff    = r2(preRound - rounded);
+
+    // For the party AMOUNT, Tally expects the rounded total (positive,
+    // since we owe ASP). The reference shows e.g. <AMOUNT>985352</AMOUNT>.
+    const partyAmt    = tlyrnd ? rounded : preRound;
+
+    // IGST always (Kerala→TN inter-state). The reference shows IGST
+    // ledger AMOUNT as negative (input tax). cgst/sgst should be 0 here
+    // for the standard ASP→ISP flow.
+    const igstAmt     = r2(row.igst || 0);
+    const cgstAmt     = r2(row.cgst || 0);
+    const sgstAmt     = r2(row.sgst || 0);
+
+    const startVoucher = `<VOUCHER VCHTYPE="Purchase" ACTION="Create" OBJVIEW="Invoice Voucher View">`;
+
+    xml += `\n${startVoucher}
+<PARTYNAME>${xe(aspName)}</PARTYNAME>
+<ADDRESS.LIST TYPE="String">
+${aspAddrLines.map(l => `<ADDRESS>${xe(l)}</ADDRESS>`).join('\n')}
+</ADDRESS.LIST>
+<PARTYGSTIN>${xe(aspGstin)}</PARTYGSTIN>
+<PARTYLEDGERNAME>${xe(aspName)}</PARTYLEDGERNAME>
+<PARTYMAILINGNAME>${xe(aspName)}</PARTYMAILINGNAME>
+<PARTYPINCODE>${xe(aspPin)}</PARTYPINCODE>
+<BASICBUYERNAME>${xe(aspName)}</BASICBUYERNAME>
+<BASICBUYERADDRESS.LIST TYPE="String">
+${aspAddrLines.map(l => `<BASICBUYERADDRESS>${xe(l)}</BASICBUYERADDRESS>`).join('\n')}
+</BASICBUYERADDRESS.LIST>
+<DATE>${dateval}</DATE>
+<REFERENCEDATE></REFERENCEDATE>
+<IRNACKDATE>${dateval}</IRNACKDATE>
+<VCHSTATUSDATE>${dateval}</VCHSTATUSDATE>
+<GSTREGISTRATIONTYPE>Regular</GSTREGISTRATIONTYPE>
+<STATENAME>${xe(aspState)}</STATENAME>
+<COUNTRYOFRESIDENCE>India</COUNTRYOFRESIDENCE>
+<PLACEOFSUPPLY>${xe(ispPlaceOfSupply)}</PLACEOFSUPPLY>
+<VOUCHERNUMBER>${xe(voucherNum)}</VOUCHERNUMBER>
+<REFERENCE></REFERENCE>
+<CONSIGNEEGSTIN>${xe(aspGstin)}</CONSIGNEEGSTIN>
+<CONSIGNEEMAILINGNAME>${xe(aspName)}</CONSIGNEEMAILINGNAME>
+<CONSIGNEEPINCODE>${xe(aspPin)}</CONSIGNEEPINCODE>
+<CONSIGNEESTATENAME>${xe(aspState)}</CONSIGNEESTATENAME>
+<CONSIGNEEPINNUMBER>${xe(aspPan)}</CONSIGNEEPINNUMBER>
+<CONSIGNEECOUNTRYNAME>India</CONSIGNEECOUNTRYNAME>
+<BASICBASEPARTYNAME>${xe(aspName)}</BASICBASEPARTYNAME>
+<NUMBERINGSTYLE>Manual</NUMBERINGSTYLE>
+<PERSISTEDVIEW>Invoice Voucher View</PERSISTEDVIEW>
+<VOUCHERTYPENAME>Purchase</VOUCHERTYPENAME>
+<BASICDATETIMEOFINVOICE>${dateval}</BASICDATETIMEOFINVOICE>
+<BASICDATETIMEOFREMOVAL>${dateval}</BASICDATETIMEOFREMOVAL>
+<VCHENTRYMODE>Item Invoice</VCHENTRYMODE>
+<DIFFACTUALQTY>Yes</DIFFACTUALQTY>
+<EFFECTIVEDATE>${dateval}</EFFECTIVEDATE>
+<ISELIGIBLEFORITC>Yes</ISELIGIBLEFORITC>
+<VCHSTATUSISREACCEPHSNSIXONEDONE>Yes</VCHSTATUSISREACCEPHSNSIXONEDONE>
+<VCHGSTSTATUSISAPPLICABLE>Yes</VCHGSTSTATUSISAPPLICABLE>
+<VCHGSTSTATUSISOVERRDN>Yes</VCHGSTSTATUSISOVERRDN>
+<ISINVOICE>Yes</ISINVOICE>
+<ISVATDUTYPAID>Yes</ISVATDUTYPAID>
+<LEDGERENTRIES.LIST>
+<LEDGERNAME>${xe(aspName)}</LEDGERNAME>
+<ISPARTYLEDGER>Yes</ISPARTYLEDGER>
+${TAGS.DEEMNO}
+<AMOUNT>${partyAmt}</AMOUNT>
+<BILLALLOCATIONS.LIST>
+<NAME>${xe(voucherNum)}</NAME>
+<BILLTYPE>New Ref</BILLTYPE>
+<AMOUNT>${partyAmt}</AMOUNT>
+</BILLALLOCATIONS.LIST>
+</LEDGERENTRIES.LIST>`;
+
+    // Tax ledger — IGST only for inter-state (the standard ASP→ISP path).
+    // CGST/SGST emitted only if the row was somehow computed as intra
+    // (rare; would happen only if ASP and ISP shared a state).
+    if (igstAmt) {
+      xml += `
+<LEDGERENTRIES.LIST>
+<LEDGERNAME>${xe(Tax_IGST_IN)}</LEDGERNAME>
+${TAGS.DEEMYES}
+<AMOUNT>${-igstAmt}</AMOUNT>
+<VATEXPAMOUNT>${-igstAmt}</VATEXPAMOUNT>
+</LEDGERENTRIES.LIST>`;
+    }
+    if (cgstAmt) {
+      const Tax_CGST_IN = cfgGet(cfg, 'tally_cgst_input', 'INPUT CGST 2.5%');
+      xml += `
+<LEDGERENTRIES.LIST>
+<LEDGERNAME>${xe(Tax_CGST_IN)}</LEDGERNAME>
+${TAGS.DEEMYES}
+<AMOUNT>${-cgstAmt}</AMOUNT>
+<VATEXPAMOUNT>${-cgstAmt}</VATEXPAMOUNT>
+</LEDGERENTRIES.LIST>`;
+    }
+    if (sgstAmt) {
+      const Tax_SGST_IN = cfgGet(cfg, 'tally_sgst_input', 'INPUT SGST 2.5%');
+      xml += `
+<LEDGERENTRIES.LIST>
+<LEDGERNAME>${xe(Tax_SGST_IN)}</LEDGERNAME>
+${TAGS.DEEMYES}
+<AMOUNT>${-sgstAmt}</AMOUNT>
+<VATEXPAMOUNT>${-sgstAmt}</VATEXPAMOUNT>
+</LEDGERENTRIES.LIST>`;
+    }
+
+    // Round-off: emitted only when there's a delta. Sign is preRound −
+    // rounded (opposite of the sale voucher). DEEMEDPOSITIVE=Yes for
+    // purchase round-off (matches reference).
+    if (roundOff !== 0) {
+      xml += `
+<LEDGERENTRIES.LIST>
+<LEDGERNAME>${xe(Round_LDR)}</LEDGERNAME>
+${TAGS.DEEMYES}
+<AMOUNT>${roundOff}</AMOUNT>
+<VATEXPAMOUNT>${roundOff}</VATEXPAMOUNT>
+</LEDGERENTRIES.LIST>`;
+    }
+
+    // Inventory entries — one per cardamom lot + one for gunny
+    // (aggregate, since gunny is sold by bag count not lot). All AMOUNTs
+    // negative (purchase debits stock).
+    xml += '\n';
+    for (const lot of (row.lots || [])) {
+      const amt = r2(lot.amount || 0);
+      if (!amt) continue;
+      xml += `
+<ALLINVENTORYENTRIES.LIST>
+<STOCKITEMNAME>${xe(Item_Card)}</STOCKITEMNAME>
+<GSTOVRDNTAXABILITY>Taxable</GSTOVRDNTAXABILITY>
+<HSNSOURCETYPE>Stock Item</HSNSOURCETYPE>
+<HSNITEMSOURCE>${xe(Item_Card)}</HSNITEMSOURCE>
+<GSTOVRDNSTOREDNATURE>Interstate Purchase - Taxable</GSTOVRDNSTOREDNATURE>
+<GSTOVRDNTYPEOFSUPPLY>Goods</GSTOVRDNTYPEOFSUPPLY>
+<GSTHSNNAME>${xe(HSN_Card)}</GSTHSNNAME>
+<GSTHSNDESCRIPTION>${xe(Item_Card)}</GSTHSNDESCRIPTION>
+<BASICPACKAGEMARKS>${xe(lot.lot || '')}</BASICPACKAGEMARKS>
+<BASICNUMPACKAGES>${r0(lot.bag)}</BASICNUMPACKAGES>
+${TAGS.DEEMYES}
+<RATE>${r0(lot.rate)}/Kgs.</RATE>
+<AMOUNT>${-amt}</AMOUNT>
+<ACTUALQTY>${r2(lot.qty)}Kgs.</ACTUALQTY>
+<BILLEDQTY>${r2(lot.qty)}Kgs.</BILLEDQTY>
+<BATCHALLOCATIONS.LIST>
+<GODOWNNAME>Main Location</GODOWNNAME>
+<BATCHNAME>Primary Batch</BATCHNAME>
+<DESTINATIONGODOWNNAME>Main Location</DESTINATIONGODOWNNAME>
+<AMOUNT>${-amt}</AMOUNT>
+<ACTUALQTY>${r2(lot.qty)}Kgs.</ACTUALQTY>
+<BILLEDQTY>${r2(lot.qty)}Kgs.</BILLEDQTY>
+</BATCHALLOCATIONS.LIST>
+<ACCOUNTINGALLOCATIONS.LIST>
+<LEDGERNAME>${xe(Purchase_LDR)}</LEDGERNAME>
+${TAGS.DEEMYES}
+<AMOUNT>${-amt}</AMOUNT>
+</ACCOUNTINGALLOCATIONS.LIST>
+<RATEDETAILS.LIST>
+<GSTRATEDUTYHEAD>IGST</GSTRATEDUTYHEAD>
+<GSTRATEVALUATIONTYPE>Based on Value</GSTRATEVALUATIONTYPE>
+<GSTRATE>5</GSTRATE>
+</RATEDETAILS.LIST>
+<RATEDETAILS.LIST>
+<GSTRATEDUTYHEAD>Cess</GSTRATEDUTYHEAD>
+<GSTRATEVALUATIONTYPE>Based on Value</GSTRATEVALUATIONTYPE>
+</RATEDETAILS.LIST>
+</ALLINVENTORYENTRIES.LIST>`;
+    }
+
+    // Gunny inventory — aggregate, with a few structural differences
+    // from cardamom (matches reference exactly):
+    //   • No HSNSOURCETYPE / HSNITEMSOURCE
+    //   • No BASICPACKAGEMARKS / BASICNUMPACKAGES
+    //   • No BILLEDQTY (only ACTUALQTY)
+    //   • AccAlloc has DEEMEDPOSITIVE=No (vs Yes for cardamom)
+    if (row.gunnyAmt && row.gunnyBags) {
+      const gAmt = r2(row.gunnyAmt);
+      const gBags = r0(row.gunnyBags);
+      const gunnyRate = cfgNum(cfg, 'tally_gunny_rate', 165);
+      xml += `
+<ALLINVENTORYENTRIES.LIST>
+<STOCKITEMNAME>${xe(Item_Gunny)}</STOCKITEMNAME>
+<GSTOVRDNTAXABILITY>Taxable</GSTOVRDNTAXABILITY>
+<GSTOVRDNSTOREDNATURE>Interstate Purchase - Taxable</GSTOVRDNSTOREDNATURE>
+<GSTOVRDNTYPEOFSUPPLY>Goods</GSTOVRDNTYPEOFSUPPLY>
+<GSTHSNNAME>${xe(HSN_Gunny)}</GSTHSNNAME>
+<GSTHSNDESCRIPTION>${xe(Item_Gunny)}</GSTHSNDESCRIPTION>
+${TAGS.DEEMYES}
+<RATE>${r0(gunnyRate)}/Nos.</RATE>
+<AMOUNT>${-gAmt}</AMOUNT>
+<ACTUALQTY>${gBags}Nos.</ACTUALQTY>
+<BATCHALLOCATIONS.LIST>
+<GODOWNNAME>Main Location</GODOWNNAME>
+<BATCHNAME>Primary Batch</BATCHNAME>
+<DESTINATIONGODOWNNAME>Main Location</DESTINATIONGODOWNNAME>
+<AMOUNT>${-gAmt}</AMOUNT>
+<ACTUALQTY>${gBags}Nos.</ACTUALQTY>
+</BATCHALLOCATIONS.LIST>
+<ACCOUNTINGALLOCATIONS.LIST>
+<LEDGERNAME>${xe(Purchase_LDR)}</LEDGERNAME>
+${TAGS.DEEMNO}
+<AMOUNT>${-gAmt}</AMOUNT>
+</ACCOUNTINGALLOCATIONS.LIST>
+<RATEDETAILS.LIST>
+<GSTRATEDUTYHEAD>IGST</GSTRATEDUTYHEAD>
+<GSTRATEVALUATIONTYPE>Based on Value</GSTRATEVALUATIONTYPE>
+<GSTRATE>5</GSTRATE>
+</RATEDETAILS.LIST>
+<RATEDETAILS.LIST>
+<GSTRATEDUTYHEAD>Cess</GSTRATEDUTYHEAD>
+<GSTRATEVALUATIONTYPE>Based on Value</GSTRATEVALUATIONTYPE>
+</RATEDETAILS.LIST>
+</ALLINVENTORYENTRIES.LIST>`;
+    }
+
+    xml += `\n${TAGS.ENDVOUCHER}`;
+  }
+
+  xml += '\n' + endEnvelope();
+  const BOM = '\uFEFF';
+  return BOM + xml.replace(/\r?\n/g, '\r\n');
+}
+
+// =====================================================================
 // 1. SALES (registered dealer sales — VBA generXML)  [LEGACY]
 // =====================================================================
 //
@@ -2727,6 +3031,7 @@ module.exports = {
   generSalesXML,
   generSalesIspXML,
   generSalesAspXML,
+  generIspPurchaseXML,
   generRDPurchaseXML,
   generURDPurchaseXML,
   generDebitNoteXML,
