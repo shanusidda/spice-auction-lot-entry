@@ -7880,6 +7880,17 @@ async function loadInvoiceDistances(){
     // Used to key route saves.
     const fromPin = data.dispatchPin || '685553';
 
+    // The server SHOULD have annotated each row with `resolved_km` and
+    // `distance_source` (manual / route / none). If those are missing —
+    // e.g. a partially-deployed server still on the old endpoint — fall
+    // back to whatever fields are present so the UI still functions.
+    // The "auto" badge will be missing in that case, but at least the
+    // values will display.
+    const hasResolved = data.invoices.some(inv => 'resolved_km' in inv);
+    if (!hasResolved) {
+      console.warn('Server response is missing resolved_km — using distance_km only. Update server.js to enable route-based auto-population.');
+    }
+
     let html='<div style="display:grid;grid-template-columns:60px 1fr 90px 230px;gap:0;font-size:12px">';
     // Header
     const h='padding:6px 8px;background:var(--bg);font-weight:700;font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--border)';
@@ -7888,10 +7899,12 @@ async function loadInvoiceDistances(){
     html+=`<div style="${h};text-align:right">Distance</div>`;
     html+=`<div style="${h};text-align:center">Lookup &amp; Save</div>`;
     for(const inv of data.invoices){
-      // Resolved value comes from the server: manual override wins over
-      // route-table lookup. Source tag tells us which one to badge.
-      const km=inv.resolved_km==null?'':String(inv.resolved_km);
-      const src=inv.distance_source||'none';
+      // Prefer the server-computed resolved value; fall back to manual
+      // distance_km if the server is on the old shape. Source tag drives
+      // the visual badge.
+      const resolvedKm = ('resolved_km' in inv) ? inv.resolved_km : inv.distance_km;
+      const km = resolvedKm == null ? '' : String(resolvedKm);
+      const src = inv.distance_source || (inv.distance_km != null ? 'manual' : 'none');
       const buyerPin=String(inv.buyer_pin||'').trim();
       const cellBg='padding:7px 8px;border-bottom:1px solid var(--border);background:#fff';
       html+=`<div style="${cellBg};font-family:monospace;font-weight:700;color:var(--spice-cardamom-dk)">${esc(inv.invo)}</div>`;
@@ -7938,6 +7951,8 @@ async function saveRouteDistance(fromPin, toPin, invoiceId){
   const inp=document.getElementById('invDist-'+invoiceId);
   if(!inp)return;
   const v=inp.value.trim();
+  // Disable the input while saving so the user can't double-click
+  inp.style.borderColor='var(--text3)';
   try{
     const r=await fetch(B+'/api/route-distances',{
       method:'PUT',
@@ -7948,19 +7963,44 @@ async function saveRouteDistance(fromPin, toPin, invoiceId){
         km: v===''?null:Number(v),
       }),
     });
-    const data=await r.json();
-    if(!r.ok){toast(data.error||'Save failed');return}
+    let data={};
+    try { data = await r.json(); } catch(_){}
+    if(!r.ok){
+      console.error('Route save failed', r.status, data);
+      toast(data.error||`Save failed (HTTP ${r.status})`);
+      inp.style.borderColor='#C62828';
+      return;
+    }
     if(v===''){
       toast(`Cleared route ${fromPin}↔${toPin}`);
     }else{
-      const n=Number(data.appliedCount||0);
-      toast(`Saved ${v} km for ${fromPin}↔${toPin}` + (n>1?` (applies to ${n} invoices)`:''));
+      // Always include the count if we got one back. Matches user
+      // expectation: "I saved a value, how many invoices did it apply to?"
+      // Falls back to a simple confirmation if appliedCount is missing
+      // (e.g. older server build that doesn't compute it).
+      const n=Number(data.appliedCount);
+      if(Number.isFinite(n) && n>0){
+        toast(`Saved ${v} km for ${fromPin}↔${toPin} — applies to ${n} invoice${n===1?'':'s'}`);
+      } else {
+        toast(`Saved ${v} km for ${fromPin}↔${toPin}`);
+      }
     }
-    // Visual confirmation, then reload so other rows on the same route
-    // pick up the new value.
     inp.style.borderColor='var(--green)';
-    setTimeout(()=>loadInvoiceDistances(),400);
-  }catch(e){toast(e.message)}
+    // Reload after a short delay so the user sees their input flash green
+    // before the list re-renders. The reload pulls fresh resolved_km
+    // values for every row, including the ones that just auto-populated
+    // from the new route entry.
+    setTimeout(()=>{
+      loadInvoiceDistances().catch(e=>{
+        console.error('Reload after save failed', e);
+        toast('Saved, but list reload failed — click Refresh');
+      });
+    },350);
+  }catch(e){
+    console.error('Route save threw', e);
+    toast(e.message);
+    inp.style.borderColor='#C62828';
+  }
 }
 
 function updateJournalSaleVisibility(){
