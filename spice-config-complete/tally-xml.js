@@ -692,9 +692,12 @@ function generSalesAspXML(rows, cfg, opts = {}) {
     const ispPlace    = xe(row.ispPlace || '');
     const ispAddrLines = _addrLines(row.ispAddress, row.ispPlace);
     const isIntra     = String(row.ispGstin || '').slice(0, 2) === String(intra);
-    const sale        = String(row.sale || 'I').toUpperCase();
-    // ASP→ISP internal transfer is never an export, but if upstream sale
-    // was 'E' we still treat as inter-state for rates (same as 'I').
+    // ASP→ISP transfer is always inter-state (Kerala→TN by default), so
+    // the voucher number's sale letter is always 'I'. The upstream
+    // invoice's `sale` (which reflects the ISP→outside-customer leg —
+    // could be L/I/E) is preserved on the row but not used in the
+    // voucher number. Reference uses ASP/I-61, ASP/I-62, ... regardless.
+    const sale        = 'I';
     const isExport    = false;
     const invoNo      = String(row.invo || '').trim();
     const taxNm       = `${sale}${separator}${invoNo}`;
@@ -1828,6 +1831,12 @@ function buildSalesIspRows(db, auctionId, cfg) {
       ? lotRows.reduce((s, l) => s + Number(l.bag || 0), 0)
       : Number(r.bag || 0);
 
+    // total = the PRE-round grand total (= rounded total minus the
+    // stored round-off adjustment). This is what the generator needs
+    // so the round-off ledger amount comes out to the right delta.
+    const totalRounded = r0(r.tot || 0);
+    const total = r2((r.tot || 0) - (r.rund || 0));
+
     out.push({
       ano: r.ano,
       date: r.date,
@@ -1858,8 +1867,8 @@ function buildSalesIspRows(db, auctionId, cfg) {
       sgst: r2(r.sgst || 0),
       igst: r2(r.igst || 0),
       tcsamt: r2(r.tcs || 0),
-      total: r2(r.tot || 0),
-      totalRounded: r0(r.tot || 0),
+      total,
+      totalRounded,
     });
   }
   return out;
