@@ -20,6 +20,8 @@
  * touch ExcelJS or PDF here — that's a separate path.
  */
 
+const { getDistance: _getDistance } = require('./distance');
+
 // ── Indian state code → name (matches FindState in VBA) ──────────
 const STATES = {
   '01': 'Jammu & Kashmir', '02': 'Himachal Pradesh', '03': 'Punjab',
@@ -1237,7 +1239,7 @@ function generRDPurchaseXML(rows, cfg, opts = {}) {
 <GSTOVRDNTYPEOFSUPPLY>Goods</GSTOVRDNTYPEOFSUPPLY>
 <GSTHSNNAME>${xe(HSN_Card)}</GSTHSNNAME>
 <GSTHSNDESCRIPTION>Cardamom</GSTHSNDESCRIPTION>
-<BASICPACKAGEMARKS></BASICPACKAGEMARKS>
+<BASICPACKAGEMARKS>${xe(lot.lot || '')}</BASICPACKAGEMARKS>
 <BASICNUMPACKAGES>${r0(lot.bag)} Bags</BASICNUMPACKAGES>
 ${TAGS.DEEMYES}
 <RATE>${r2(lot.rate)}/Kgs.</RATE>
@@ -1376,7 +1378,7 @@ ${TAGS.DEEMYES}
       xml += `
 <LEDGERENTRIES.LIST>
 <LEDGERNAME>${xe(TDS_LDR)}</LEDGERNAME>
-${TAGS.DEEMNO}
+${TAGS.DEEMYES}
 <AMOUNT>${tlyrnd ? r0(tdsamt) : tdsamt}</AMOUNT>
 <VATEXPAMOUNT>${tlyrnd ? r0(tdsamt) : tdsamt}</VATEXPAMOUNT>
 <TAXOBJECTALLOCATIONS.LIST>
@@ -1502,7 +1504,7 @@ function generURDPurchaseXML(rows, cfg, opts = {}) {
 <GSTOVRDNTYPEOFSUPPLY>Goods</GSTOVRDNTYPEOFSUPPLY>
 <GSTHSNNAME>${xe(HSN_Card)}</GSTHSNNAME>
 <GSTHSNDESCRIPTION>${xe(Item_Card)}</GSTHSNDESCRIPTION>
-<BASICPACKAGEMARKS></BASICPACKAGEMARKS>
+<BASICPACKAGEMARKS>${xe(lot.lot || '')}</BASICPACKAGEMARKS>
 <BASICNUMPACKAGES>${r0(lot.bag)} Bags</BASICNUMPACKAGES>
 ${TAGS.DEEMYES}
 <RATE>${r2(lot.rate)}/Kgs.</RATE>
@@ -1831,6 +1833,16 @@ function buildSalesIspRows(db, auctionId, cfg) {
     ORDER BY CAST(lot_no AS INTEGER), lot_no
   `);
 
+  // E-way bill DISTANCE — dispatch PIN (sister/ASP location) → consignee
+  // PIN (buyer). The manual override on `invoices.distance_km` always
+  // wins. Haversine auto-compute happens only when `distance_auto_enabled`
+  // is set in cfg — it's OFF by default because the estimate is rough
+  // for Western Ghats routes and a wrong DISTANCE on the e-way bill can
+  // be more painful than a blank one.
+  const dispatchPin   = String(cfgGet(cfg, 'tally_dispatch_pin', '685553')).trim();
+  const roadMult      = cfgNum(cfg, 'distance_road_multiplier', 1.50);
+  const autoCompute   = cfgBool(cfg, 'distance_auto_enabled', false);
+
   const out = [];
   for (const r of raw) {
     const lotRows = lotsStmt.all(auctionId, r.buyer);
@@ -1851,6 +1863,26 @@ function buildSalesIspRows(db, auctionId, cfg) {
     const totalRounded = r0(r.tot || 0);
     const total = r2((r.tot || 0) - (r.rund || 0));
 
+    // Resolve the e-way bill distance.
+    //   1. invoices.distance_km (manual override) wins if set
+    //   2. else if cfg.distance_auto_enabled, compute via haversine
+    //   3. else leave blank (Tally accepts empty <DISTANCE>)
+    //
+    // Auto-computed values are NOT persisted to invoices.distance_km —
+    // that column is reserved for manual overrides so the user can
+    // reliably distinguish them. Auto values are cached separately in
+    // pin_distances (PIN→PIN level), which is plenty fast on regen.
+    let distance = '';
+    const buyerPin = String(r.buyer_pin || '').trim();
+    if (r.distance_km != null && r.distance_km !== '') {
+      distance = String(r.distance_km);
+    } else if (autoCompute && dispatchPin && buyerPin) {
+      const dr = _getDistance(db, dispatchPin, buyerPin, { multiplier: roadMult });
+      if (dr.km != null) distance = String(dr.km);
+      // dr.error is silently swallowed; missing PINs surface in
+      // Settings → PIN Distances → Missing tab.
+    }
+
     out.push({
       ano: r.ano,
       date: r.date,
@@ -1870,6 +1902,7 @@ function buildSalesIspRows(db, auctionId, cfg) {
         rate: Number(l.rate || 0),
         amount: Number(l.amount || 0),
       })),
+      distance,
       // Aggregates straight from the (single) invoice row — already
       // pre-summed by the invoice writer in server.js.
       amounttot: r2(r.amount || 0),
