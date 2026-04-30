@@ -2993,6 +2993,154 @@ app.get('/api/tally/preview/:type/:auctionId', requireExport, (req, res) => {
   }
 });
 
+// ══════════════════════════════════════════════════════════════
+// PIN-CODE COORDINATE & DISTANCE MANAGEMENT
+// ══════════════════════════════════════════════════════════════
+// Used by the e-way bill DISTANCE field on ISP sales vouchers. The
+// distance module (./distance.js) provides haversine + multiplier
+// computation, cached in pin_distances. The endpoints below let the
+// admin UI inspect/edit the underlying data.
+const distanceMod = require('./distance');
+
+// List all pincodes we have coordinates for (for the management UI).
+app.get('/api/pincodes', requireView, (req, res) => {
+  try {
+    const rows = getDb().all(
+      'SELECT pin, lat, lon, place, state, source, updated_at FROM pincodes ORDER BY state, pin'
+    );
+    res.json({ count: rows.length, pincodes: rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// List PINs that show up in the data but are NOT in our table —
+// optionally scoped to one auction. UI uses this to surface PINs that
+// need user-supplied coordinates for the DISTANCE field to work.
+app.get('/api/pincodes/missing', requireView, (req, res) => {
+  try {
+    const auctionId = req.query.auctionId || null;
+    const rows = distanceMod.listMissingPins(getDb(), auctionId);
+    res.json({ count: rows.length, missing: rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Add or update a pincode's coordinates. Body: { pin, lat, lon, place?, state? }.
+// REPLACE semantics — re-posting the same PIN updates the row. Also
+// invalidates any cached distances involving this PIN so they get
+// recomputed against the new coordinates.
+app.post('/api/pincodes', requireExport, (req, res) => {
+  const { pin, lat, lon, place = '', state = '' } = req.body || {};
+  if (!pin || !/^\d{6}$/.test(String(pin).trim())) {
+    return res.status(400).json({ error: 'pin must be a 6-digit string' });
+  }
+  const latN = Number(lat), lonN = Number(lon);
+  if (!isFinite(latN) || !isFinite(lonN) || Math.abs(latN) > 90 || Math.abs(lonN) > 180) {
+    return res.status(400).json({ error: 'lat/lon must be valid numbers' });
+  }
+  try {
+    const db = getDb();
+    const p = String(pin).trim();
+    db.run(
+      `INSERT OR REPLACE INTO pincodes (pin, lat, lon, place, state, source, updated_at)
+       VALUES (?, ?, ?, ?, ?, 'manual', datetime('now','localtime'))`,
+      [p, latN, lonN, String(place).trim(), String(state).trim()]
+    );
+    // Bust any cache rows that referenced this PIN — the next voucher
+    // export will recompute with the new coordinates.
+    const cleared = db.run(
+      'DELETE FROM pin_distances WHERE from_pin = ? OR to_pin = ?',
+      [p, p]
+    );
+    res.json({ ok: true, pin: p, cacheCleared: cleared.changes });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Bulk-paste import. Body: { text: "pin,lat,lon,place,state\n..." }.
+// One PIN per line, comma-separated. Lines starting with # or empty
+// are skipped. Returns counts + per-line errors so the user sees what
+// failed.
+app.post('/api/pincodes/import-text', requireExport, (req, res) => {
+  const text = String((req.body || {}).text || '');
+  if (!text.trim()) return res.status(400).json({ error: 'No text provided' });
+  const db = getDb();
+  const ins = db.prepare(
+    `INSERT OR REPLACE INTO pincodes (pin, lat, lon, place, state, source, updated_at)
+     VALUES (?, ?, ?, ?, ?, 'import', datetime('now','localtime'))`
+  );
+  const lines = text.split(/\r?\n/);
+  let added = 0;
+  const errors = [];
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i].trim();
+    if (!raw || raw.startsWith('#')) continue;
+    const cells = raw.split(',').map(s => s.trim());
+    const [pin, lat, lon, place = '', state = ''] = cells;
+    if (!/^\d{6}$/.test(pin)) { errors.push({ line: i + 1, raw, error: 'invalid pin' }); continue; }
+    const latN = Number(lat), lonN = Number(lon);
+    if (!isFinite(latN) || !isFinite(lonN)) { errors.push({ line: i + 1, raw, error: 'invalid lat/lon' }); continue; }
+    try { ins.run(pin, latN, lonN, place, state); added++; }
+    catch (e) { errors.push({ line: i + 1, raw, error: e.message }); }
+  }
+  // Clear the entire distance cache so newly-added PINs surface real values
+  if (added > 0) db.run('DELETE FROM pin_distances');
+  res.json({ added, errors });
+});
+
+// Cached distances — view + clear. Useful for force-recompute when the
+// multiplier changes.
+app.get('/api/pin-distances', requireView, (req, res) => {
+  try {
+    const rows = getDb().all(
+      'SELECT from_pin, to_pin, road_km, source, updated_at FROM pin_distances ORDER BY from_pin, to_pin'
+    );
+    res.json({ count: rows.length, distances: rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/pin-distances', requireExport, (req, res) => {
+  try {
+    const r = getDb().run('DELETE FROM pin_distances');
+    res.json({ cleared: r.changes });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Per-invoice distance edit + listing — for the PIN Distances → Invoices
+// tab. Lets the user manually set the e-way bill <DISTANCE> per invoice
+// (the stored value wins over auto-compute on next export).
+app.get('/api/invoices/distances/:auctionId', requireView, (req, res) => {
+  try {
+    const rows = getDb().all(
+      `SELECT i.id, i.ano, i.invo, i.buyer, i.buyer1, i.gstin, i.state,
+              b.pin AS buyer_pin, b.pla AS buyer_pla,
+              i.distance_km
+       FROM invoices i
+       LEFT JOIN buyers b ON b.buyer = i.buyer
+       WHERE i.auction_id = ? AND UPPER(COALESCE(i.state,'')) = 'TAMIL NADU'
+       ORDER BY CAST(i.invo AS INTEGER), i.id`,
+      [req.params.auctionId]
+    );
+    res.json({ count: rows.length, invoices: rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/invoices/:id/distance', requireExport, (req, res) => {
+  const id = Number(req.params.id);
+  const { distance_km } = req.body || {};
+  // Empty/null = clear the override (auto-compute will fill it next time
+  // if enabled). Numeric = manual override.
+  let v = null;
+  if (distance_km !== '' && distance_km != null) {
+    v = Math.round(Number(distance_km));
+    if (!isFinite(v) || v < 0 || v > 5000) {
+      return res.status(400).json({ error: 'distance_km must be between 0 and 5000 km, or null to clear' });
+    }
+  }
+  try {
+    const r = getDb().run('UPDATE invoices SET distance_km = ? WHERE id = ?', [v, id]);
+    if (r.changes === 0) return res.status(404).json({ error: 'Invoice not found' });
+    res.json({ ok: true, id, distance_km: v });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // Party listing for an auction — used by the single-party picker UI.
 // Returns every distinct party (buyer/RD/URD) with the kind it would be
 // exported under so the frontend can group and filter.

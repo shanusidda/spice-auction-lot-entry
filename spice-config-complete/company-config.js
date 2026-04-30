@@ -259,6 +259,22 @@ const DEFAULTS = [
   { key: 'tally_dispatch_pin',    value: '',                           category: 'tally', label: 'Dispatch-From PIN (blank = use sister)',         type: 'text' },
   { key: 'tally_dispatch_state',  value: '',                           category: 'tally', label: 'Dispatch-From State (blank = use sister)',       type: 'text' },
   { key: 'tally_dispatch_gstin',  value: '',                           category: 'tally', label: 'Dispatch-From GSTIN (blank = use sister)',       type: 'text' },
+  // ── E-way bill DISTANCE estimation ────────────────────────────
+  // Auto-fills <DISTANCE> on ISP sales vouchers using haversine ×
+  // multiplier between dispatch PIN and consignee PIN. The multiplier
+  // converts straight-line km to road km — bump it for hilly terrain
+  // (Western Ghats), lower it for plains. Per-invoice manual override
+  // is supported via the invoices.distance_km column.
+  //
+  // CAVEAT: haversine × multiplier is a rough estimate. For Western
+  // Ghats routes (Kerala↔Tamil Nadu cardamom belt) it can under-shoot
+  // real road distance by 30–50%. The auto-compute is OFF by default
+  // — turn it on only if you've tuned the multiplier for your routes
+  // or you're OK with the estimate. The recommended workflow is to
+  // populate invoices.distance_km manually (or via an external tool)
+  // and let the generator use those values verbatim.
+  { key: 'distance_auto_enabled',    value: 'false',                   category: 'tally', label: 'Auto-fill <DISTANCE> from PIN coordinates (rough estimate — manual override always wins)', type: 'check' },
+  { key: 'distance_road_multiplier', value: '1.5',                     category: 'tally', label: 'Road-distance multiplier (haversine × this = road km)', type: 'number' },
 ];
 
 const CATEGORIES = {
