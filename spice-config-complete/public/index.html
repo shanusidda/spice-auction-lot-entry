@@ -2314,7 +2314,7 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
         <div class="tally-section-body">
         <div style="padding:14px;border:1px solid var(--border);border-radius:10px;background:#fff">
           <div style="font-size:11px;color:var(--text3);margin-bottom:10px;line-height:1.5">
-            ISP sales vouchers carry a <code style="background:var(--bg);padding:1px 4px;border-radius:3px">&lt;DISTANCE&gt;</code> field used by the e-way bill portal. Use the <strong>NIC Portal</strong> button on each row to open the official Pin-to-Pin Distance Search page (free, no login on the search page itself) — copy the result, paste here, click Save. The value sticks per invoice; once entered, regenerating the voucher uses your saved value as-is. Use <strong>Maps</strong> to sanity-check via Google Maps.
+            ISP sales vouchers carry a <code style="background:var(--bg);padding:1px 4px;border-radius:3px">&lt;DISTANCE&gt;</code> field used by the e-way bill portal. Click <strong>NIC</strong> to look up the distance on the official portal (captcha-gated; one route at a time), paste the result, click <strong>Save</strong>. <strong>The value is saved per route</strong>, so every other invoice between the same two PINs — this auction and all future ones — picks it up automatically. The <span style="font-size:9px;padding:1px 5px;background:var(--green-bg);color:var(--green);border-radius:8px;font-weight:700">auto</span> badge marks rows that resolved via the saved route table.
           </div>
 
           <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
@@ -7875,44 +7875,54 @@ async function loadInvoiceDistances(){
     if(cnt)cnt.textContent=`${data.count} ISP invoice${data.count===1?'':'s'}`;
     if(data.count===0){list.innerHTML='<div style="padding:14px;color:var(--text3);font-size:12px;text-align:center">No ISP invoices in this auction.</div>';return}
 
-    // Dispatch PIN — pulled from settings if available, with the same
-    // hardcoded fallback the voucher generator uses (Nedumkandam 685553,
-    // ASP's home town). Empty `_sdata` shouldn't disable the lookup
-    // buttons — the NIC page is captcha-gated so the URL takes no
-    // params anyway, and Maps still works with any one valid PIN.
-    const fromPin = (window._sdata?.tally?.find(f=>f.key==='tally_dispatch_pin')?.value)
-                  || (window._sdata?.sister?.find(f=>f.key==='s_pin')?.value)
-                  || '685553';
+    // Dispatch PIN comes from the server response — same fallback chain
+    // the voucher generator uses (cfg.tally_dispatch_pin → s_pin → 685553).
+    // Used to key route saves.
+    const fromPin = data.dispatchPin || '685553';
 
-    let html='<div style="display:grid;grid-template-columns:60px 1fr 80px 220px;gap:0;font-size:12px">';
+    let html='<div style="display:grid;grid-template-columns:60px 1fr 90px 230px;gap:0;font-size:12px">';
     // Header
     const h='padding:6px 8px;background:var(--bg);font-weight:700;font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--border)';
     html+=`<div style="${h}">Inv#</div>`;
     html+=`<div style="${h}">Buyer · PIN</div>`;
-    html+=`<div style="${h};text-align:right">Saved km</div>`;
-    html+=`<div style="${h};text-align:center">Lookup &amp; Edit</div>`;
+    html+=`<div style="${h};text-align:right">Distance</div>`;
+    html+=`<div style="${h};text-align:center">Lookup &amp; Save</div>`;
     for(const inv of data.invoices){
-      const km=inv.distance_km==null?'':String(inv.distance_km);
+      // Resolved value comes from the server: manual override wins over
+      // route-table lookup. Source tag tells us which one to badge.
+      const km=inv.resolved_km==null?'':String(inv.resolved_km);
+      const src=inv.distance_source||'none';
       const buyerPin=String(inv.buyer_pin||'').trim();
       const cellBg='padding:7px 8px;border-bottom:1px solid var(--border);background:#fff';
       html+=`<div style="${cellBg};font-family:monospace;font-weight:700;color:var(--spice-cardamom-dk)">${esc(inv.invo)}</div>`;
       html+=`<div style="${cellBg};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(inv.buyer1||inv.buyer)} <span style="color:var(--text3);font-family:monospace">${esc(buyerPin||'(no pin)')}</span></div>`;
-      html+=`<div style="${cellBg};text-align:right;font-family:monospace;color:${km?'var(--green)':'var(--text3)'}">${km||'—'}</div>`;
-      // NIC button is always active — its URL takes no params, the user
-      // types the PINs into the captcha form. The toast reminds them
-      // which two PINs to use, with a "(no pin)" fallback if buyerPin
-      // is missing (uncommon — most invoices have a buyer PIN). The
-      // Maps button needs at least one valid PIN to plot a route; falls
-      // back to "search for the buyer's town" if buyerPin is missing.
+      // Distance cell with source badge (route / manual / —). Route
+      // values get a subtle "auto" pill so the user can see at a glance
+      // which rows came from the lookup table vs being typed manually.
+      const srcBadge=src==='route'
+        ? `<span title="From saved route ${esc(fromPin)}↔${esc(buyerPin)}" style="font-size:9px;padding:1px 5px;background:var(--green-bg);color:var(--green);border-radius:8px;margin-left:6px;font-weight:700">auto</span>`
+        : src==='manual'
+        ? `<span title="Per-invoice override" style="font-size:9px;padding:1px 5px;background:#FEF3C7;color:#B45309;border-radius:8px;margin-left:6px;font-weight:700">manual</span>`
+        : '';
+      html+=`<div style="${cellBg};text-align:right;font-family:monospace;color:${km?'var(--green)':'var(--text3)'};display:flex;align-items:center;justify-content:flex-end">${km||'—'}${srcBadge}</div>`;
+      // NIC button always works (page is captcha-gated, takes no params).
+      // Toast reminds the user which PINs to enter. Maps needs both PINs.
       const nicBtn=`<button class="btn-sm" onclick="openNicDistance('${esc(fromPin)}','${esc(buyerPin||'(unknown)')}')" title="Open NIC Pin-to-Pin Distance Search in new tab — captcha-gated, paste the two PINs there" style="padding:3px 7px;font-size:10px;background:var(--green);color:#fff;border-color:var(--green)">NIC</button>`;
       const mapsBtn=buyerPin
         ? `<button class="btn-sm" onclick="openMapsDistance('${esc(fromPin)}','${esc(buyerPin)}')" title="Open Google Maps directions in new tab" style="padding:3px 7px;font-size:10px">Maps</button>`
         : `<button class="btn-sm" disabled title="Buyer PIN missing — fix the buyer record first" style="padding:3px 7px;font-size:10px;opacity:.4;cursor:not-allowed">Maps</button>`;
+      // Save writes to the route table (from_pin, to_pin) — applies to
+      // every invoice on this route. Disabled if buyer PIN missing
+      // (no route key to save under).
+      const saveDisabled = !buyerPin;
+      const saveBtn = saveDisabled
+        ? `<button class="btn-sm" disabled title="Need buyer PIN to save a route" style="padding:3px 7px;font-size:10px;opacity:.4;cursor:not-allowed">Save</button>`
+        : `<button class="btn-sm" onclick="saveRouteDistance('${esc(fromPin)}','${esc(buyerPin)}',${inv.id})" style="padding:3px 7px;font-size:10px">Save</button>`;
       html+=`<div style="padding:5px 8px;border-bottom:1px solid var(--border);background:#fff;text-align:center;display:flex;gap:4px;align-items:center;justify-content:flex-end">
         ${nicBtn}
         ${mapsBtn}
         <input type="number" min="0" max="5000" value="${esc(km)}" id="invDist-${inv.id}" style="width:60px;padding:3px 5px;border:1px solid var(--border);border-radius:3px;font-size:12px;font-family:monospace;text-align:right">
-        <button class="btn-sm" onclick="saveInvoiceDistance(${inv.id})" style="padding:3px 7px;font-size:10px">Save</button>
+        ${saveBtn}
       </div>`;
     }
     html+='</div>';
@@ -7920,21 +7930,36 @@ async function loadInvoiceDistances(){
   }catch(e){list.innerHTML=`<div style="padding:14px;color:#C62828;font-size:12px;text-align:center">${esc(e.message)}</div>`}
 }
 
-async function saveInvoiceDistance(id){
-  const inp=document.getElementById('invDist-'+id);
+// Save a route distance from the inline edit. Posts to the route table
+// keyed by (dispatch PIN, buyer PIN) — the value applies to every
+// invoice on the same route. After saving, we reload the list so all
+// affected rows show the new value with the "auto" badge.
+async function saveRouteDistance(fromPin, toPin, invoiceId){
+  const inp=document.getElementById('invDist-'+invoiceId);
   if(!inp)return;
   const v=inp.value.trim();
   try{
-    const r=await fetch(B+`/api/invoices/${id}/distance`,{
+    const r=await fetch(B+'/api/route-distances',{
       method:'PUT',
       headers:{'Authorization':'Bearer '+T,'Content-Type':'application/json'},
-      body:JSON.stringify({distance_km: v===''?null:Number(v)}),
+      body:JSON.stringify({
+        from_pin: fromPin,
+        to_pin: toPin,
+        km: v===''?null:Number(v),
+      }),
     });
     const data=await r.json();
     if(!r.ok){toast(data.error||'Save failed');return}
-    toast(v===''?`Cleared distance for invoice ${id}`:`Saved ${v} km for invoice ${id}`);
+    if(v===''){
+      toast(`Cleared route ${fromPin}↔${toPin}`);
+    }else{
+      const n=Number(data.appliedCount||0);
+      toast(`Saved ${v} km for ${fromPin}↔${toPin}` + (n>1?` (applies to ${n} invoices)`:''));
+    }
+    // Visual confirmation, then reload so other rows on the same route
+    // pick up the new value.
     inp.style.borderColor='var(--green)';
-    setTimeout(()=>{inp.style.borderColor='var(--border)'},800);
+    setTimeout(()=>loadInvoiceDistances(),400);
   }catch(e){toast(e.message)}
 }
 

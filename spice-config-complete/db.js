@@ -363,6 +363,22 @@ async function initDb() {
     created_at TEXT DEFAULT (datetime('now','localtime'))
   )`);
 
+  // ── ROUTE DISTANCES ───────────────────────────────────────
+  // Maps (dispatch PIN, consignee PIN) → road km, populated manually by
+  // the user via the To Tally → E-way Bill Distance UI. The user looks
+  // up a route once on NIC's portal, saves it here, and every future
+  // invoice between the same two PINs gets the value automatically.
+  //
+  // Keys are normalised: we always store the lexicographically smaller
+  // PIN as `from_pin` so A→B and B→A share a single row.
+  wrapped.exec(`CREATE TABLE IF NOT EXISTS route_distances (
+    from_pin TEXT NOT NULL,
+    to_pin   TEXT NOT NULL,
+    km       INTEGER NOT NULL,
+    updated_at TEXT DEFAULT (datetime('now','localtime')),
+    PRIMARY KEY (from_pin, to_pin)
+  )`);
+
   // ── INDEXES ────────────────────────────────────────────────
   const indexes = [
     'CREATE INDEX IF NOT EXISTS idx_traders_name ON traders(name)',

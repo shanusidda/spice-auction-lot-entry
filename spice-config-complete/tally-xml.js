@@ -20,8 +20,6 @@
  * touch ExcelJS or PDF here — that's a separate path.
  */
 
-const { getDistance: _getDistance } = require('./distance');
-
 // ── Indian state code → name (matches FindState in VBA) ──────────
 const STATES = {
   '01': 'Jammu & Kashmir', '02': 'Himachal Pradesh', '03': 'Punjab',
@@ -2154,15 +2152,23 @@ function buildSalesIspRows(db, auctionId, cfg) {
     ORDER BY CAST(lot_no AS INTEGER), lot_no
   `);
 
-  // E-way bill DISTANCE — dispatch PIN (sister/ASP location) → consignee
-  // PIN (buyer). The manual override on `invoices.distance_km` always
-  // wins. Haversine auto-compute happens only when `distance_auto_enabled`
-  // is set in cfg — it's OFF by default because the estimate is rough
-  // for Western Ghats routes and a wrong DISTANCE on the e-way bill can
-  // be more painful than a blank one.
-  const dispatchPin   = String(cfgGet(cfg, 'tally_dispatch_pin', '685553')).trim();
-  const roadMult      = cfgNum(cfg, 'distance_road_multiplier', 1.50);
-  const autoCompute   = cfgBool(cfg, 'distance_auto_enabled', false);
+  // E-way bill DISTANCE resolution. Priority order:
+  //   1. invoices.distance_km — manual per-invoice override
+  //   2. route_distances[(dispatch, buyer)] — saved route value
+  //   3. blank (Tally accepts empty <DISTANCE>)
+  // The dispatch PIN comes from cfg with the same fallback chain the
+  // header generator uses, so the route lookup keys match what the user
+  // sees on the screen. Route table keys are normalised — we always
+  // store the lexicographically smaller PIN as `from_pin`, so we have
+  // to do the same when looking up.
+  const dispatchPin = String(
+    cfgGet(cfg, 'tally_dispatch_pin', '') ||
+    cfgGet(cfg, 's_pin', '') ||
+    '685553'
+  ).trim();
+  const routeStmt = db.prepare(
+    'SELECT km FROM route_distances WHERE from_pin = ? AND to_pin = ?'
+  );
 
   const out = [];
   for (const r of raw) {
@@ -2184,24 +2190,21 @@ function buildSalesIspRows(db, auctionId, cfg) {
     const totalRounded = r0(r.tot || 0);
     const total = r2((r.tot || 0) - (r.rund || 0));
 
-    // Resolve the e-way bill distance.
-    //   1. invoices.distance_km (manual override) wins if set
-    //   2. else if cfg.distance_auto_enabled, compute via haversine
-    //   3. else leave blank (Tally accepts empty <DISTANCE>)
-    //
-    // Auto-computed values are NOT persisted to invoices.distance_km —
-    // that column is reserved for manual overrides so the user can
-    // reliably distinguish them. Auto values are cached separately in
-    // pin_distances (PIN→PIN level), which is plenty fast on regen.
+    // Resolve <DISTANCE> per the priority above.
     let distance = '';
-    const buyerPin = String(r.buyer_pin || '').trim();
     if (r.distance_km != null && r.distance_km !== '') {
       distance = String(r.distance_km);
-    } else if (autoCompute && dispatchPin && buyerPin) {
-      const dr = _getDistance(db, dispatchPin, buyerPin, { multiplier: roadMult });
-      if (dr.km != null) distance = String(dr.km);
-      // dr.error is silently swallowed; missing PINs surface in
-      // Settings → PIN Distances → Missing tab.
+    } else {
+      const buyerPin = String(r.buyer_pin || '').trim();
+      if (buyerPin && dispatchPin) {
+        const [k1, k2] = dispatchPin < buyerPin
+          ? [dispatchPin, buyerPin]
+          : [buyerPin, dispatchPin];
+        try {
+          const hit = routeStmt.get(k1, k2);
+          if (hit && hit.km != null) distance = String(hit.km);
+        } catch (e) { /* table may not exist on very old DBs */ }
+      }
     }
 
     out.push({

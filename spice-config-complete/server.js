@@ -2999,121 +2999,45 @@ app.get('/api/tally/preview/:type/:auctionId', requireExport, (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════
-// PIN-CODE COORDINATE & DISTANCE MANAGEMENT
+// E-WAY BILL DISTANCE — route table + per-invoice override
 // ══════════════════════════════════════════════════════════════
-// Used by the e-way bill DISTANCE field on ISP sales vouchers. The
-// distance module (./distance.js) provides haversine + multiplier
-// computation, cached in pin_distances. The endpoints below let the
-// admin UI inspect/edit the underlying data.
-const distanceMod = require('./distance');
+// Two storage paths feed the <DISTANCE> field on ISP sales vouchers:
+//
+//   1. invoices.distance_km — per-invoice override. Wins when set.
+//   2. route_distances[(from_pin, to_pin)] — saved route value, applied
+//      to every invoice between the same two PINs.
+//
+// Workflow: user clicks NIC, looks up dispatch→consignee distance on
+// the portal, types it in, clicks Save. We write to route_distances —
+// every other invoice between the same two PINs (this auction and all
+// future ones) auto-resolves.
 
-// List all pincodes we have coordinates for (for the management UI).
-app.get('/api/pincodes', requireView, (req, res) => {
-  try {
-    const rows = getDb().all(
-      'SELECT pin, lat, lon, place, state, source, updated_at FROM pincodes ORDER BY state, pin'
-    );
-    res.json({ count: rows.length, pincodes: rows });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
+// Resolve the configured dispatch PIN with the same fallback chain the
+// voucher generator uses. Used for normalising route lookups.
+function getDispatchPin(db) {
+  const cfg = require('./company-config').getSettingsFlat(db);
+  return String(
+    cfg.tally_dispatch_pin || cfg.s_pin || '685553'
+  ).trim();
+}
 
-// List PINs that show up in the data but are NOT in our table —
-// optionally scoped to one auction. UI uses this to surface PINs that
-// need user-supplied coordinates for the DISTANCE field to work.
-app.get('/api/pincodes/missing', requireView, (req, res) => {
-  try {
-    const auctionId = req.query.auctionId || null;
-    const rows = distanceMod.listMissingPins(getDb(), auctionId);
-    res.json({ count: rows.length, missing: rows });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
+// Normalise a (from, to) pair so A↔B share a single route_distances row.
+// Always returns the lexicographically smaller PIN first.
+function normalizeRouteKey(fromPin, toPin) {
+  const a = String(fromPin || '').trim();
+  const b = String(toPin || '').trim();
+  return a < b ? [a, b] : [b, a];
+}
 
-// Add or update a pincode's coordinates. Body: { pin, lat, lon, place?, state? }.
-// REPLACE semantics — re-posting the same PIN updates the row. Also
-// invalidates any cached distances involving this PIN so they get
-// recomputed against the new coordinates.
-app.post('/api/pincodes', requireExport, (req, res) => {
-  const { pin, lat, lon, place = '', state = '' } = req.body || {};
-  if (!pin || !/^\d{6}$/.test(String(pin).trim())) {
-    return res.status(400).json({ error: 'pin must be a 6-digit string' });
-  }
-  const latN = Number(lat), lonN = Number(lon);
-  if (!isFinite(latN) || !isFinite(lonN) || Math.abs(latN) > 90 || Math.abs(lonN) > 180) {
-    return res.status(400).json({ error: 'lat/lon must be valid numbers' });
-  }
-  try {
-    const db = getDb();
-    const p = String(pin).trim();
-    db.run(
-      `INSERT OR REPLACE INTO pincodes (pin, lat, lon, place, state, source, updated_at)
-       VALUES (?, ?, ?, ?, ?, 'manual', datetime('now','localtime'))`,
-      [p, latN, lonN, String(place).trim(), String(state).trim()]
-    );
-    // Bust any cache rows that referenced this PIN — the next voucher
-    // export will recompute with the new coordinates.
-    const cleared = db.run(
-      'DELETE FROM pin_distances WHERE from_pin = ? OR to_pin = ?',
-      [p, p]
-    );
-    res.json({ ok: true, pin: p, cacheCleared: cleared.changes });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// Bulk-paste import. Body: { text: "pin,lat,lon,place,state\n..." }.
-// One PIN per line, comma-separated. Lines starting with # or empty
-// are skipped. Returns counts + per-line errors so the user sees what
-// failed.
-app.post('/api/pincodes/import-text', requireExport, (req, res) => {
-  const text = String((req.body || {}).text || '');
-  if (!text.trim()) return res.status(400).json({ error: 'No text provided' });
-  const db = getDb();
-  const ins = db.prepare(
-    `INSERT OR REPLACE INTO pincodes (pin, lat, lon, place, state, source, updated_at)
-     VALUES (?, ?, ?, ?, ?, 'import', datetime('now','localtime'))`
-  );
-  const lines = text.split(/\r?\n/);
-  let added = 0;
-  const errors = [];
-  for (let i = 0; i < lines.length; i++) {
-    const raw = lines[i].trim();
-    if (!raw || raw.startsWith('#')) continue;
-    const cells = raw.split(',').map(s => s.trim());
-    const [pin, lat, lon, place = '', state = ''] = cells;
-    if (!/^\d{6}$/.test(pin)) { errors.push({ line: i + 1, raw, error: 'invalid pin' }); continue; }
-    const latN = Number(lat), lonN = Number(lon);
-    if (!isFinite(latN) || !isFinite(lonN)) { errors.push({ line: i + 1, raw, error: 'invalid lat/lon' }); continue; }
-    try { ins.run(pin, latN, lonN, place, state); added++; }
-    catch (e) { errors.push({ line: i + 1, raw, error: e.message }); }
-  }
-  // Clear the entire distance cache so newly-added PINs surface real values
-  if (added > 0) db.run('DELETE FROM pin_distances');
-  res.json({ added, errors });
-});
-
-// Cached distances — view + clear. Useful for force-recompute when the
-// multiplier changes.
-app.get('/api/pin-distances', requireView, (req, res) => {
-  try {
-    const rows = getDb().all(
-      'SELECT from_pin, to_pin, road_km, source, updated_at FROM pin_distances ORDER BY from_pin, to_pin'
-    );
-    res.json({ count: rows.length, distances: rows });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.delete('/api/pin-distances', requireExport, (req, res) => {
-  try {
-    const r = getDb().run('DELETE FROM pin_distances');
-    res.json({ cleared: r.changes });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// Per-invoice distance edit + listing — for the PIN Distances → Invoices
-// tab. Lets the user manually set the e-way bill <DISTANCE> per invoice
-// (the stored value wins over auto-compute on next export).
+// List ISP invoices for an auction with their resolved distance + source
+// tag. The UI uses this to render the table — `km` is the value to
+// display, `source` tells the user where it came from ('manual' = per-
+// invoice override, 'route' = looked up by PIN pair, 'none' = blank).
 app.get('/api/invoices/distances/:auctionId', requireView, (req, res) => {
   try {
-    const rows = getDb().all(
+    const db = getDb();
+    const dispatchPin = getDispatchPin(db);
+    const rows = db.all(
       `SELECT i.id, i.ano, i.invo, i.buyer, i.buyer1, i.gstin, i.state,
               b.pin AS buyer_pin, b.pla AS buyer_pla,
               i.distance_km
@@ -3123,15 +3047,115 @@ app.get('/api/invoices/distances/:auctionId', requireView, (req, res) => {
        ORDER BY CAST(i.invo AS INTEGER), i.id`,
       [req.params.auctionId]
     );
-    res.json({ count: rows.length, invoices: rows });
+
+    // Pre-fetch all route distances for this dispatch PIN — one query
+    // instead of N. The set is small (a few dozen routes max) so it
+    // fits comfortably in memory.
+    const routes = {};
+    try {
+      const allRoutes = db.all(
+        `SELECT from_pin, to_pin, km FROM route_distances
+         WHERE from_pin = ? OR to_pin = ?`,
+        [dispatchPin, dispatchPin]
+      );
+      for (const r of allRoutes) {
+        // The "other PIN" — whichever side isn't the dispatch PIN
+        const other = r.from_pin === dispatchPin ? r.to_pin : r.from_pin;
+        routes[other] = r.km;
+      }
+    } catch (e) { /* table may not exist on very old DBs */ }
+
+    // Annotate each row with resolved distance + source
+    const enriched = rows.map(r => {
+      let km = null, source = 'none';
+      if (r.distance_km != null) {
+        km = r.distance_km;
+        source = 'manual';
+      } else if (r.buyer_pin && routes[String(r.buyer_pin).trim()] != null) {
+        km = routes[String(r.buyer_pin).trim()];
+        source = 'route';
+      }
+      return { ...r, resolved_km: km, distance_source: source };
+    });
+
+    res.json({
+      count: enriched.length,
+      dispatchPin,
+      invoices: enriched,
+    });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Save a route distance. Body: { from_pin, to_pin, km }. The pair gets
+// normalised (smaller PIN first) before write, so subsequent lookups
+// find it regardless of direction. Empty/null `km` deletes the row.
+//
+// Returns: how many ISP invoices now resolve via this route (so the
+// UI can show "applied to N invoices" feedback).
+app.put('/api/route-distances', requireExport, (req, res) => {
+  const { from_pin, to_pin, km } = req.body || {};
+  if (!from_pin || !to_pin) {
+    return res.status(400).json({ error: 'from_pin and to_pin required' });
+  }
+  if (!/^\d{6}$/.test(String(from_pin).trim()) || !/^\d{6}$/.test(String(to_pin).trim())) {
+    return res.status(400).json({ error: 'PINs must be 6-digit strings' });
+  }
+  const [k1, k2] = normalizeRouteKey(from_pin, to_pin);
+
+  // Empty km = delete
+  if (km === '' || km == null) {
+    try {
+      const r = getDb().run(
+        'DELETE FROM route_distances WHERE from_pin = ? AND to_pin = ?',
+        [k1, k2]
+      );
+      return res.json({ ok: true, deleted: r.changes > 0, from_pin: k1, to_pin: k2 });
+    } catch (e) { return res.status(500).json({ error: e.message }); }
+  }
+
+  const v = Math.round(Number(km));
+  if (!isFinite(v) || v < 0 || v > 5000) {
+    return res.status(400).json({ error: 'km must be between 0 and 5000' });
+  }
+
+  try {
+    const db = getDb();
+    db.run(
+      `INSERT INTO route_distances (from_pin, to_pin, km, updated_at)
+       VALUES (?, ?, ?, datetime('now','localtime'))
+       ON CONFLICT(from_pin, to_pin) DO UPDATE
+         SET km = excluded.km, updated_at = excluded.updated_at`,
+      [k1, k2, v]
+    );
+
+    // How many invoices now resolve via this route? Count buyers whose
+    // PIN matches the non-dispatch side of the route, then count their
+    // ISP invoices that don't already have a manual override.
+    const dispatchPin = getDispatchPin(db);
+    const otherPin = k1 === dispatchPin ? k2 : (k2 === dispatchPin ? k1 : null);
+    let appliedCount = 0;
+    if (otherPin) {
+      const r = db.get(
+        `SELECT COUNT(*) AS n FROM invoices i
+         LEFT JOIN buyers b ON b.buyer = i.buyer
+         WHERE UPPER(COALESCE(i.state,'')) = 'TAMIL NADU'
+           AND b.pin = ?
+           AND i.distance_km IS NULL`,
+        [otherPin]
+      );
+      appliedCount = r ? r.n : 0;
+    }
+
+    res.json({ ok: true, from_pin: k1, to_pin: k2, km: v, appliedCount });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Per-invoice override (kept in the API even though no UI button wires
+// to it directly — useful for one-off exceptions where a single invoice
+// needs a different distance than the route. Set null to clear.)
 app.put('/api/invoices/:id/distance', requireExport, (req, res) => {
   const id = Number(req.params.id);
   const { distance_km } = req.body || {};
-  // Empty/null = clear the override (auto-compute will fill it next time
-  // if enabled). Numeric = manual override.
   let v = null;
   if (distance_km !== '' && distance_km != null) {
     v = Math.round(Number(distance_km));
