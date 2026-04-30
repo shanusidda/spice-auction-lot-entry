@@ -1810,16 +1810,24 @@ function buildSalesIspRows(db, auctionId, cfg) {
 
   // Per-lot details for ISP voucher inventory entries. ISP voucher uses
   // the SALES rate (lots.price / lots.amount), not the planter rate.
+  //
+  // We deliberately do NOT filter on `lots.invo = invoice.invo`. The
+  // `lots.invo` column gets overwritten by whichever side (ISP or ASP)
+  // ran most recently, so it can hold either invoice number — meaning
+  // a strict equality filter silently drops all lots when the ASP step
+  // was last to write. Since each buyer has at most ONE invoice per
+  // auction per state, scoping by (auction_id, buyer) and `amount > 0`
+  // is enough to pick the right lots.
   const lotsStmt = db.prepare(`
     SELECT lot_no AS lot, bags AS bag, qty, price AS rate, amount, asp_invo
     FROM lots
-    WHERE auction_id = ? AND buyer = ? AND invo = ?
+    WHERE auction_id = ? AND buyer = ? AND amount > 0
     ORDER BY CAST(lot_no AS INTEGER), lot_no
   `);
 
   const out = [];
   for (const r of raw) {
-    const lotRows = lotsStmt.all(auctionId, r.buyer, String(r.invo));
+    const lotRows = lotsStmt.all(auctionId, r.buyer);
     // Pick the first non-empty asp_invo from the matching lots — used by
     // generSalesIspXML to build BASICORDERREF (the matching ASP voucher).
     const aspInvoRow = lotRows.find(l => l.asp_invo && String(l.asp_invo).trim());
@@ -1899,13 +1907,19 @@ function buildSalesAspRows(db, auctionId, cfg) {
   // ASP-side per-lot data. Prefer the dual-storage asp_* columns; fall
   // back to legacy (puramt/prate/pqty) for rows that pre-date the
   // dual-storage migration.
+  //
+  // Like the ISP builder, we don't filter on `lots.asp_invo = invoice.invo`
+  // — each buyer has at most ONE ASP invoice per auction, so scoping by
+  // (auction_id, buyer) plus a positive asp_puramt is sufficient. This
+  // avoids surprises when asp_invo was cleared/changed by a regen.
   const lotsStmt = db.prepare(`
     SELECT lot_no AS lot, bags AS bag,
            CASE WHEN asp_puramt > 0 THEN asp_pqty   ELSE pqty   END AS asp_qty,
            CASE WHEN asp_puramt > 0 THEN asp_prate  ELSE prate  END AS asp_rate,
            CASE WHEN asp_puramt > 0 THEN asp_puramt ELSE puramt END AS asp_amount
     FROM lots
-    WHERE auction_id = ? AND buyer = ? AND asp_invo = ?
+    WHERE auction_id = ? AND buyer = ?
+      AND (asp_puramt > 0 OR puramt > 0)
     ORDER BY CAST(lot_no AS INTEGER), lot_no
   `);
 
@@ -1924,7 +1938,7 @@ function buildSalesAspRows(db, auctionId, cfg) {
 
   const out = [];
   for (const r of raw) {
-    const lotRows = lotsStmt.all(auctionId, r.buyer, String(r.invo));
+    const lotRows = lotsStmt.all(auctionId, r.buyer);
     const lots = lotRows.map(l => ({
       lot: l.lot,
       bag: Number(l.bag || 0),
