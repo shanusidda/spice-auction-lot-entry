@@ -191,7 +191,7 @@ const DEFAULTS = [
   { key: 'tally_dealer_sale_intra', value: 'Local Dealer-Purchase',      category: 'tally', label: 'Local Dealer-Purcha (sales-side)',      type: 'text' },
 
   // RD Purchase ledgers (when ISP buys from a dealer)
-  { key: 'tally_purchase_dealer',     value: 'Trade Purchase from Dealer',category: 'tally', label: 'Trade Purchase From Dealer (base; gets -Local / -Inter_State suffix)', type: 'text' },
+  { key: 'tally_purchase_dealer',     value: 'Trade Purchase From Dealer',category: 'tally', label: 'Trade Purchase From Dealer (base; gets -Local / -Inter_State suffix)', type: 'text' },
   { key: 'tally_purchase_dealer_inter', value: 'Interstate Dealer',      category: 'tally', label: 'Interstate Dealer (purchase-side)',     type: 'text' },
   { key: 'tally_purchase_dealer_intra', value: 'Local Dealer',           category: 'tally', label: 'Local Dealer (purchase-side)',          type: 'text' },
 
@@ -207,7 +207,7 @@ const DEFAULTS = [
   { key: 'tally_sgst_input',      value: 'INPUT SGST 2.5%',            category: 'tally', label: 'INPUT SGST 2.5%',             type: 'text' },
   { key: 'tally_igst_input',      value: 'INPUT IGST 5%',              category: 'tally', label: 'INPUT IGST 5%',               type: 'text' },
   { key: 'tally_tcs',             value: 'TCS on Sale of Goods',       category: 'tally', label: 'TCS on Sale of Goods',        type: 'text' },
-  { key: 'tally_tds_ledger',      value: 'TDS on Purchase of Goods 194Q', category: 'tally', label: 'TDS on Purchase of Goods', type: 'text' },
+  { key: 'tally_tds_ledger',      value: 'TDS on Purchase of Goods',   category: 'tally', label: 'TDS on Purchase of Goods', type: 'text' },
 
   // Tax Ledger Names — Debit Note 18%
   { key: 'tally_dn_discount',     value: 'Discount on Purchase',       category: 'tally', label: 'Discount on Purch (Debit Note ledger)', type: 'text' },
@@ -224,7 +224,7 @@ const DEFAULTS = [
   { key: 'tally_sample_planter',  value: 'Sample Refund to Planter',   category: 'tally', label: 'Sample Refund to Planter',    type: 'text' },
   { key: 'tally_sample_dealer',   value: 'Sample Refund to Dealer',    category: 'tally', label: 'Sample Refund to Dealer',     type: 'text' },
   { key: 'tally_sample_stock',    value: 'false',                      category: 'tally', label: 'Stock (track sample refund as inventory)', type: 'boolean' },
-  { key: 'tally_round',           value: 'Round Off',                  category: 'tally', label: 'Round On/Off Ledger',         type: 'text' },
+  { key: 'tally_round',           value: 'Round On/Off',               category: 'tally', label: 'Round On/Off Ledger',         type: 'text' },
   { key: 'tally_transport',       value: 'Transport Charges',          category: 'tally', label: 'Transport Charges Ledger',    type: 'text' },
   { key: 'tally_insurance',       value: 'Insurance Charges',          category: 'tally', label: 'Insurance Charges Ledger',    type: 'text' },
 

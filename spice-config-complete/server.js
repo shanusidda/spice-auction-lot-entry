@@ -2899,18 +2899,25 @@ const TALLY_EXPORTS = {
   ledger_urd_purchase: { label: 'URD Purchase Party Ledgers (Agriculturist)',       name: 'URDPartyLedgers',    builder: buildURDPartyLedgerRows,   generator: generLedgerXML, isLedger: true, company: 'asp' },
   ledger:              { label: 'All Ledger Masters (parties + tax + sales + purchase)', name: 'AllLedgers',  builder: buildLedgerRows,           generator: generLedgerXML, isLedger: true, company: 'isp' },
   sales:               { label: 'Sales Vouchers',                                   name: 'Sales',              builder: buildSalesRows,            generator: generSalesXML,        company: 'isp' },
-  rd_purchase:         { label: 'RD Purchase Vouchers',                             name: 'RDPurchase',         builder: buildRDPurchaseRows,       generator: generRDPurchaseXML,   company: 'isp' },
+  rd_purchase:         { label: 'RD Purchase Vouchers',                             name: 'RDPurchase',         builder: buildRDPurchaseRows,       generator: generRDPurchaseXML,   company: 'asp' },
   urd_purchase:        { label: 'URD Purchase Vouchers (Agriculturist)',            name: 'URDPurchase',        builder: buildURDPurchaseRows,      generator: generURDPurchaseXML,  company: 'asp' },
   debit_note:          { label: 'Debit Notes (Discount)',                           name: 'DebitNote',          builder: buildDebitNoteRows,        generator: generDebitNoteXML,    company: 'isp' },
 };
 
 // Resolve the Tally company name for a given export type.
 // 'isp' → tally_company_name; 'asp' → tally_asp_company_name (falls
-// back to ISP if the ASP name is blank, so existing setups keep working).
+// back to ISP if the ASP name is blank, but logs a warning so misconfig
+// is visible — silently falling back has caused confusion when a user
+// sees ISP in <SVCURRENTCOMPANY> but expected ASP).
 function resolveTallyCompanyName(cfg, target) {
   const isp = (cfg.tally_company_name || '').trim();
   const asp = (cfg.tally_asp_company_name || '').trim();
-  if (target === 'asp') return asp || isp;
+  if (target === 'asp') {
+    if (!asp) {
+      console.warn('[tally] tally_asp_company_name is empty — falling back to ISP company name. Set it via Settings → To Tally → "ASP Tally Company Name".');
+    }
+    return asp || isp;
+  }
   return isp;
 }
 
