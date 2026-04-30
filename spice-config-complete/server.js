@@ -14,8 +14,10 @@ const { exportPdf: exportAnyPdf } = require('./exports-pdf');
 const { DBF_EXPORTS } = require('./dbf-exports');
 const { REPORTS: LORRY_REPORTS } = require('./lorry-reports');
 const {
-  generSalesXML, generRDPurchaseXML, generURDPurchaseXML, generDebitNoteXML, generLedgerXML,
-  buildSalesRows, buildRDPurchaseRows, buildURDPurchaseRows, buildDebitNoteRows, buildLedgerRows,
+  generSalesXML, generSalesIspXML, generSalesAspXML,
+  generRDPurchaseXML, generURDPurchaseXML, generDebitNoteXML, generLedgerXML,
+  buildSalesRows, buildSalesIspRows, buildSalesAspRows,
+  buildRDPurchaseRows, buildURDPurchaseRows, buildDebitNoteRows, buildLedgerRows,
   buildSalesPartyLedgerRows, buildRDPartyLedgerRows, buildURDPartyLedgerRows,
   listAuctionParties,
 } = require('./tally-xml');
@@ -2898,7 +2900,16 @@ const TALLY_EXPORTS = {
   ledger_rd_purchase:  { label: 'RD Purchase Party Ledgers',                        name: 'RDPartyLedgers',     builder: buildRDPartyLedgerRows,    generator: generLedgerXML, isLedger: true, company: 'asp' },
   ledger_urd_purchase: { label: 'URD Purchase Party Ledgers (Agriculturist)',       name: 'URDPartyLedgers',    builder: buildURDPartyLedgerRows,   generator: generLedgerXML, isLedger: true, company: 'asp' },
   ledger:              { label: 'All Ledger Masters (parties + tax + sales + purchase)', name: 'AllLedgers',  builder: buildLedgerRows,           generator: generLedgerXML, isLedger: true, company: 'isp' },
-  sales:               { label: 'Sales Vouchers',                                   name: 'Sales',              builder: buildSalesRows,            generator: generSalesXML,        company: 'isp' },
+  // ── Sales Vouchers — split into two purpose-built exports ────
+  // sales_isp = ISP→outside-customer sales (full e-way bill, dispatch
+  //   from sister, BASICORDERREF to matching ASP voucher).
+  // sales_asp = ASP→ISP internal transfers (lean format, no e-way
+  //   bill, customer is always ISP, lot rates from asp_prate/asp_puramt).
+  // The legacy `sales` key is kept as an alias for sales_isp so any old
+  // bookmarks / API callers don't break; new UI buttons use the split keys.
+  sales_isp:           { label: 'Sales Vouchers — ISP',                             name: 'SalesISP',           builder: buildSalesIspRows,         generator: generSalesIspXML,     company: 'isp' },
+  sales_asp:           { label: 'Sales Vouchers — ASP',                             name: 'SalesASP',           builder: buildSalesAspRows,         generator: generSalesAspXML,     company: 'asp' },
+  sales:               { label: 'Sales Vouchers (legacy alias for ISP)',            name: 'Sales',              builder: buildSalesIspRows,         generator: generSalesIspXML,     company: 'isp' },
   rd_purchase:         { label: 'RD Purchase Vouchers',                             name: 'RDPurchase',         builder: buildRDPurchaseRows,       generator: generRDPurchaseXML,   company: 'asp' },
   urd_purchase:        { label: 'URD Purchase Vouchers (Agriculturist)',            name: 'URDPurchase',        builder: buildURDPurchaseRows,      generator: generURDPurchaseXML,  company: 'asp' },
   debit_note:          { label: 'Debit Notes (Discount)',                           name: 'DebitNote',          builder: buildDebitNoteRows,        generator: generDebitNoteXML,    company: 'isp' },

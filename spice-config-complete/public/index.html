@@ -2103,14 +2103,29 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
               <span style="width:32px;height:32px;border-radius:8px;background:var(--green-bg);display:inline-flex;align-items:center;justify-content:center;font-size:18px">💰</span>
               <div>
-                <div style="font-weight:700;color:var(--text);font-size:14px">Sales Vouchers <span class="tally-co-badge tally-co-isp">ISP</span></div>
-                <div style="font-size:11px;color:var(--text3)">Registered dealer sales — output GST, party ledgers, inventory</div>
+                <div style="font-weight:700;color:var(--text);font-size:14px">Sales Vouchers — ISP <span class="tally-co-badge tally-co-isp">ISP</span></div>
+                <div style="font-size:11px;color:var(--text3)">ISP → outside customers — full e-way bill, dispatch from ASP, BASICORDERREF</div>
               </div>
             </div>
-            <div id="tally-preview-sales" style="font-size:11px;color:var(--text3);min-height:18px;margin:6px 0"></div>
+            <div id="tally-preview-sales_isp" style="font-size:11px;color:var(--text3);min-height:18px;margin:6px 0"></div>
             <div style="display:flex;gap:6px;margin-top:8px">
-              <button class="btn btn-a" onclick="tallyPreview('sales')" style="flex:1;padding:7px;font-size:12px">Preview</button>
-              <button class="btn btn-g" onclick="tallyDownload('sales')" style="flex:1;padding:7px;font-size:12px">Download XML</button>
+              <button class="btn btn-a" onclick="tallyPreview('sales_isp')" style="flex:1;padding:7px;font-size:12px">Preview</button>
+              <button class="btn btn-g" onclick="tallyDownload('sales_isp')" style="flex:1;padding:7px;font-size:12px">Download XML</button>
+            </div>
+          </div>
+
+          <div style="padding:14px;border:1px solid var(--border);border-radius:10px;background:#fff">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+              <span style="width:32px;height:32px;border-radius:8px;background:#FEF3C7;display:inline-flex;align-items:center;justify-content:center;font-size:18px">🔁</span>
+              <div>
+                <div style="font-weight:700;color:var(--text);font-size:14px">Sales Vouchers — ASP <span class="tally-co-badge tally-co-asp">ASP</span></div>
+                <div style="font-size:11px;color:var(--text3)">ASP → ISP internal transfer — uses ASP planter rates (asp_puramt)</div>
+              </div>
+            </div>
+            <div id="tally-preview-sales_asp" style="font-size:11px;color:var(--text3);min-height:18px;margin:6px 0"></div>
+            <div style="display:flex;gap:6px;margin-top:8px">
+              <button class="btn btn-a" onclick="tallyPreview('sales_asp')" style="flex:1;padding:7px;font-size:12px">Preview</button>
+              <button class="btn btn-g" onclick="tallyDownload('sales_asp')" style="flex:1;padding:7px;font-size:12px">Download XML</button>
             </div>
           </div>
 
@@ -7230,6 +7245,8 @@ const TALLY_LABELS={
   ledger_rd_purchase:'RD Purchase Party Ledgers',
   ledger_urd_purchase:'URD Purchase Party Ledgers',
   ledger:'All Ledgers',
+  sales_isp:'Sales ISP',
+  sales_asp:'Sales ASP',
   sales:'Sales',
   rd_purchase:'RD Purchase',
   urd_purchase:'URD Purchase',

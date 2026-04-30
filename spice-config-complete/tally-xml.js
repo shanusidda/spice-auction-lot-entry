@@ -162,8 +162,688 @@ const HAS_GSTIN_SQL = `(UPPER(COALESCE(cr,'')) LIKE 'GSTIN%' OR cr GLOB '[0-9][0
 const NO_GSTIN_SQL  = `(cr IS NULL OR cr = '' OR (UPPER(cr) NOT LIKE 'GSTIN%' AND cr NOT GLOB '[0-9][0-9]*'))`;
 
 // =====================================================================
-// 1. SALES (registered dealer sales — VBA generXML)
+// Helpers shared by ISP/ASP sales generators
 // =====================================================================
+
+// Two-line "BASICBUYERADDRESS" / "ADDRESS.LIST" — exactly what the
+// reference XMLs do: line 1 = the joined address line, line 2 = place.
+const _addrLines = (address, place) => {
+  const a = String(address || '').trim();
+  const p = String(place || '').trim();
+  return [a, p].filter(Boolean);
+};
+
+// Pull the PAN out of a 15-char GSTIN (chars 3..12 inclusive, 1-indexed
+// chars 3..12 = 0-indexed 2..11). Reference uses this as
+// <CONSIGNEEPINNUMBER>HZSPM0006E</CONSIGNEEPINNUMBER>.
+const _panFromGstin = (gstin) => {
+  const s = String(gstin || '').replace(/\s+/g, '').toUpperCase();
+  if (s.length < 15) return '';
+  return s.slice(2, 12);
+};
+
+// Sale type letter ("L"/"I"/"E") → human label used in dispatch terms /
+// fallbacks. Currently unused but handy.
+const _saleLabel = (s) => {
+  const u = String(s || '').toUpperCase();
+  if (u === 'L') return 'Local';
+  if (u === 'I') return 'Inter-state';
+  if (u === 'E') return 'Export';
+  return u;
+};
+
+// =====================================================================
+// 1A. ISP SALES VOUCHERS (sales to outside customer)
+// =====================================================================
+//
+// Matches reference SALE_TRANS-03.xml — full format with consignee,
+// e-way bill, dispatch-from (sister company), BASICORDERREF (= the
+// matching ASP voucher), order terms list.
+//
+// Input shape (rows from buildSalesIspRows):
+//   rows = [{
+//     ano, date, sale ('L'|'I'|'E'), invo, aspInvo (optional, used in
+//     BASICORDERREF if present), partyName, address, place, pin,
+//     partyGstin, lots: [{lot, bag, qty, rate, amount}, ...],
+//     amounttot, gunnyAmt, gunnyBags (optional, count of gunny bags
+//     across all lots), cgst, sgst, igst, tcsamt, total, totalRounded,
+//     vehicleNo (optional), shippedBy (optional), distance (optional),
+//     finalDestination (optional, defaults to place),
+//   }, ...]
+//
+function generSalesIspXML(rows, cfg, opts = {}) {
+  const company       = opts.companyName || cfgGet(cfg, 'tally_company_name', cfgGet(cfg, 'short_name', 'Ideal Spices Private Limited'));
+  const season        = opts.season || cfgGet(cfg, 'tally_season', cfgGet(cfg, 'season_code', '2026-27'));
+  const separator     = opts.separator || cfgGet(cfg, 'tally_separator', '/');
+  const invPrefix     = cfgGet(cfg, 'tally_inv_prefix', 'ISP/');
+  const ainvPrefix    = cfgGet(cfg, 'tally_ainv_prefix', 'ASP/');
+  const detailed      = cfgBool(cfg, 'tally_detailed', true);
+  const dispatchEnabled = cfgBool(cfg, 'tally_dispatch_from', true);
+  const tcs           = cfgBool(cfg, 'tally_tcs_enabled', false);
+  const shipToOverride = cfgBool(cfg, 'tally_ship_to', false);
+  const intra         = cfgGet(cfg, 'tally_state_code', '33');
+  const homeState     = cfgGet(cfg, 'tally_home_state', 'Tamil Nadu');
+
+  // Ledgers
+  const SalesInter   = cfgGet(cfg, 'tally_sales_inter',  'Cardamom Inter-State Sales');
+  const SalesIntra   = cfgGet(cfg, 'tally_sales_intra',  'Cardamom Local Sales');
+  const SalesExport  = cfgGet(cfg, 'tally_sales_export', 'Cardamom Sales - Export');
+  const GunnyInter   = cfgGet(cfg, 'tally_gunny_inter',  'Gunny Interstate Sales');
+  const GunnyIntra   = cfgGet(cfg, 'tally_gunny_intra',  'Gunny Local Sales');
+  const GunnyExport  = cfgGet(cfg, 'tally_gunny_export', 'Gunny Sales - Export');
+  const Tax_CGST     = cfgGet(cfg, 'tally_cgst', 'OUTPUT CGST 2.5%');
+  const Tax_SGST     = cfgGet(cfg, 'tally_sgst', 'OUTPUT SGST 2.5%');
+  const Tax_IGST     = cfgGet(cfg, 'tally_igst', 'OUTPUT IGST 5%');
+  const Tax_TCS      = cfgGet(cfg, 'tally_tcs',  'TCS on Sale of Goods');
+  const Round_LDR    = cfgGet(cfg, 'tally_round', 'Round On/Off');
+  const Item_Card    = cfgGet(cfg, 'tally_item_cardamom', 'Cardamom');
+  const Item_Gunny   = cfgGet(cfg, 'tally_item_gunny',    'Gunny');
+  const HSN_Card     = cfgGet(cfg, 'tally_hsn_cardamom',  '09083120');
+  const HSN_Gunny    = cfgGet(cfg, 'tally_hsn_gunny',     '63051040');
+  const GunnyRate    = cfgNum(cfg, 'tally_gunny_rate',     165);
+
+  // Dispatch-from (sister company by default — ASP)
+  const d_company    = cfgGet(cfg, 'tally_dispatch_company', cfgGet(cfg, 's_company', cfgGet(cfg, 's_short_name', '')));
+  const d_add        = cfgGet(cfg, 'tally_dispatch_address', cfgGet(cfg, 's_address1', ''));
+  const d_add2       = cfgGet(cfg, 's_address2', '');
+  const d_place      = cfgGet(cfg, 'tally_dispatch_place',   cfgGet(cfg, 'kl_branch', 'NEDUMKANDAM'));
+  const d_pin        = cfgGet(cfg, 'tally_dispatch_pin',     '685553');
+  const d_state      = cfgGet(cfg, 'tally_dispatch_state',   'Kerala');
+  const d_state_code = cfgGet(cfg, 'tally_state_code_amazing', '32');
+  const d_gstin      = cfgGet(cfg, 'tally_dispatch_gstin',   cfgGet(cfg, 's_gstin', ''));
+
+  // E-way bill consignor type — reference uses "Amazing"
+  const consignorType = cfgGet(cfg, 'tally_consignor_type', 'Amazing');
+
+  let xml = '\n' + startEnvelope(company, 'Vouchers');
+
+  for (const row of rows) {
+    const dateval     = toTallyDate(row.date);
+    const partyName   = xe(row.partyName);
+    const buyerAddrLines = _addrLines(row.address, row.place);
+    const partyGstin  = xe(row.partyGstin);
+    const partyState  = xe(findState(row.partyGstin));
+    const partyPin    = xe(row.pin || '');
+    const partyPlace  = xe(row.place || '');
+    const consigneePAN = _panFromGstin(row.partyGstin);
+    const isIntra     = String(row.partyGstin || '').slice(0, 2) === String(intra);
+    const sale        = String(row.sale || 'L').toUpperCase();
+    const isExport    = sale === 'E';
+    const invoNo      = String(row.invo || '').trim();
+    const taxNm       = `${sale}${separator}${invoNo}`;
+    const voucherNum  = `${invPrefix}${taxNm}/${season}`;
+    const aspVoucherRef = row.aspInvo
+      ? `${ainvPrefix}${sale}${separator}${String(row.aspInvo).trim()}/${season}`
+      : '';
+
+    const rates       = rateDetails(cfgNum(cfg, 'tally_gst_rate', 5));
+
+    // Cardamom ledger + nature
+    const cardLedger = isExport ? SalesExport : (isIntra ? SalesIntra : SalesInter);
+    const cardNature = isExport
+      ? 'Exports - Taxable'
+      : (isIntra ? 'Local Sales - Taxable' : 'Interstate Sales - Taxable');
+    const gunnyLedger = isExport ? GunnyExport : (isIntra ? GunnyIntra : GunnyInter);
+
+    // Final destination defaults to buyer's place
+    const finalDest = xe(row.finalDestination || row.place || '');
+    const shippedBy = xe(row.shippedBy || '');
+    const vehicleNo = xe(row.vehicleNo || '');
+    const distance  = xe(row.distance || '');
+    const transportMode = isExport ? '4 - Ship' : '1 - Road';
+    const vehicleType   = 'R - Regular';
+
+    const startVoucher = `<VOUCHER VCHTYPE="Sales" ACTION="Create" OBJVIEW="Invoice Voucher View">`;
+
+    xml += `\n${startVoucher}
+<PARTYNAME>${partyName}</PARTYNAME>
+<ADDRESS.LIST TYPE="String">
+${buyerAddrLines.map(l => `<ADDRESS>${xe(l)}</ADDRESS>`).join('\n')}
+</ADDRESS.LIST>
+<PARTYGSTIN>${partyGstin}</PARTYGSTIN>
+<PARTYLEDGERNAME>${partyName}</PARTYLEDGERNAME>
+<PARTYMAILINGNAME>${partyName}</PARTYMAILINGNAME>
+<PARTYPINCODE>${partyPin}</PARTYPINCODE>
+<BASICBUYERNAME>${partyName}</BASICBUYERNAME>
+<BASICBUYERADDRESS.LIST TYPE="String">
+${buyerAddrLines.map(l => `<BASICBUYERADDRESS>${xe(l)}</BASICBUYERADDRESS>`).join('\n')}
+</BASICBUYERADDRESS.LIST>`;
+
+    if (dispatchEnabled) {
+      // Dispatch-from address — 5 lines as in reference, blanks for unused
+      const dispatchLines = [
+        d_add,
+        d_add2 || `${d_place}-${d_pin}`,
+        '', '', '',
+      ];
+      xml += `
+<DISPATCHFROMADDRESS.LIST TYPE="String">
+${dispatchLines.map(l => `<DISPATCHFROMADDRESS>${xe(l)}</DISPATCHFROMADDRESS>`).join('\n')}
+</DISPATCHFROMADDRESS.LIST>`;
+    }
+
+    xml += `
+<DATE>${dateval}</DATE>
+<REFERENCEDATE></REFERENCEDATE>
+<IRNACKDATE>${dateval}</IRNACKDATE>
+<VCHSTATUSDATE>${dateval}</VCHSTATUSDATE>
+<GSTREGISTRATIONTYPE>Regular</GSTREGISTRATIONTYPE>
+<STATENAME>${partyState}</STATENAME>
+<COUNTRYOFRESIDENCE>India</COUNTRYOFRESIDENCE>
+<PLACEOFSUPPLY>${partyState}</PLACEOFSUPPLY>
+<VOUCHERNUMBER>${xe(voucherNum)}</VOUCHERNUMBER>
+<REFERENCE></REFERENCE>
+<BILLTOPLACE>${partyPlace}</BILLTOPLACE>`;
+
+    if (dispatchEnabled) {
+      xml += `
+<DISPATCHFROMNAME>${xe(d_company)}</DISPATCHFROMNAME>
+<DISPATCHFROMSTATENAME>${xe(d_state)}</DISPATCHFROMSTATENAME>
+<DISPATCHFROMPINCODE>${xe(d_pin)}</DISPATCHFROMPINCODE>
+<DISPATCHFROMPLACE>${xe(d_place)}</DISPATCHFROMPLACE>`;
+    }
+
+    xml += `
+<SHIPTOPLACE>${partyPlace}</SHIPTOPLACE>
+<CONSIGNEEGSTIN>${partyGstin}</CONSIGNEEGSTIN>
+<CONSIGNEEMAILINGNAME>${partyName}</CONSIGNEEMAILINGNAME>
+<CONSIGNEEPINCODE>${partyPin}</CONSIGNEEPINCODE>
+<CONSIGNEESTATENAME>${partyState}</CONSIGNEESTATENAME>
+<CONSIGNEEPINNUMBER>${xe(consigneePAN)}</CONSIGNEEPINNUMBER>
+<CONSIGNEECOUNTRYNAME>India</CONSIGNEECOUNTRYNAME>`;
+
+    if (dispatchEnabled) {
+      xml += `
+<BASICORDERTERMS.LIST TYPE="String">
+<BASICORDERTERMS>Dispatch From:</BASICORDERTERMS>
+<BASICORDERTERMS>${xe(d_company)}</BASICORDERTERMS>
+<BASICORDERTERMS>${xe(d_add)}</BASICORDERTERMS>
+<BASICORDERTERMS>${xe(d_place)}-${xe(d_pin)}</BASICORDERTERMS>
+<BASICORDERTERMS>${xe(d_state)} Code:${xe(d_state_code)}</BASICORDERTERMS>
+<BASICORDERTERMS>GSTIN.${xe(d_gstin)}</BASICORDERTERMS>
+</BASICORDERTERMS.LIST>`;
+    }
+
+    xml += `
+<BASICBASEPARTYNAME>${partyName}</BASICBASEPARTYNAME>
+<NUMBERINGSTYLE>Manual</NUMBERINGSTYLE>
+<PERSISTEDVIEW>Invoice Voucher View</PERSISTEDVIEW>
+<VOUCHERTYPENAME>Sales</VOUCHERTYPENAME>
+<BASICDATETIMEOFINVOICE>${dateval}</BASICDATETIMEOFINVOICE>
+<BASICDATETIMEOFREMOVAL>${dateval}</BASICDATETIMEOFREMOVAL>
+<BASICFINALDESTINATION>${finalDest}</BASICFINALDESTINATION>
+<BASICSHIPPEDBY>${shippedBy}</BASICSHIPPEDBY>
+<BASICORDERREF>${xe(aspVoucherRef)}</BASICORDERREF>
+<BASICSHIPVESSELNO>${vehicleNo}</BASICSHIPVESSELNO>
+<VCHENTRYMODE>Item Invoice</VCHENTRYMODE>
+<DIFFACTUALQTY>Yes</DIFFACTUALQTY>
+<ISSECURITYONWHENENTERED>Yes</ISSECURITYONWHENENTERED>
+<EFFECTIVEDATE>${dateval}</EFFECTIVEDATE>
+<ISGSTOVERRIDDEN>Yes</ISGSTOVERRIDDEN>
+<ISELIGIBLEFORITC>Yes</ISELIGIBLEFORITC>
+<VCHGSTSTATUSISINCLUDED>Yes</VCHGSTSTATUSISINCLUDED>
+<VCHGSTSTATUSISAPPLICABLE>Yes</VCHGSTSTATUSISAPPLICABLE>
+<VCHSTATUSISREACCEPHSNSIXONEDONE>Yes</VCHSTATUSISREACCEPHSNSIXONEDONE>
+<ISINVOICE>Yes</ISINVOICE>
+<ISVATDUTYPAID>Yes</ISVATDUTYPAID>`;
+
+    // E-way bill block — only when dispatch is enabled (matches reference)
+    if (dispatchEnabled) {
+      const consignorAddrFlat = `${d_company} ${d_add} GSTIN:${d_gstin}`.replace(/\s+/g, ' ').trim();
+      xml += `
+<EWAYBILLDETAILS.LIST>
+<CONSIGNORADDRESSTYPE>${xe(consignorType)}</CONSIGNORADDRESSTYPE>
+<CONSIGNORADDRESS.LIST TYPE="String">
+<CONSIGNORADDRESS>${xe(consignorAddrFlat)}</CONSIGNORADDRESS>
+</CONSIGNORADDRESS.LIST>
+<CONSIGNEEADDRESS.LIST TYPE="String">
+<CONSIGNEEADDRESS>${xe(buyerAddrLines[0] || '')}</CONSIGNEEADDRESS>
+</CONSIGNEEADDRESS.LIST>
+<DOCUMENTTYPE>Tax Invoice</DOCUMENTTYPE>
+<SUBTYPE>Supply</SUBTYPE>
+<CONSIGNEEPINCODE>${partyPin}</CONSIGNEEPINCODE>
+<CONSIGNORPLACE>${xe(d_place)}</CONSIGNORPLACE>
+<CONSIGNORPINCODE>${xe(d_pin)}</CONSIGNORPINCODE>
+<SHIPPEDFROMSTATE>${xe(d_state)}</SHIPPEDFROMSTATE>
+<CONSIGNEEPLACE>${partyPlace}</CONSIGNEEPLACE>
+<SHIPPEDTOSTATE>${partyState}</SHIPPEDTOSTATE>
+<ISCANCELLED>No</ISCANCELLED>
+<TRANSPORTDETAILS.LIST>
+<TRANSPORTMODE>${transportMode}</TRANSPORTMODE>
+<VEHICLENUMBER>${vehicleNo}</VEHICLENUMBER>
+<OLDVEHICLETYPE>${vehicleType}</OLDVEHICLETYPE>
+<VEHICLETYPE>${vehicleType}</VEHICLETYPE>
+<DISTANCE>${distance}</DISTANCE>
+</TRANSPORTDETAILS.LIST>
+</EWAYBILLDETAILS.LIST>`;
+    }
+
+    // Party (debtor) ledger — negative amount (party owes us)
+    const totalRound = r0(row.totalRounded || row.total);
+    const totalAmt   = r2(row.total);
+    const rnd        = r2(totalRound - totalAmt);
+
+    xml += `
+<LEDGERENTRIES.LIST>
+<LEDGERNAME>${partyName}</LEDGERNAME>
+<ISPARTYLEDGER>Yes</ISPARTYLEDGER>
+${TAGS.DEEMYES}
+<AMOUNT>${-totalRound}</AMOUNT>
+<BILLALLOCATIONS.LIST>
+<NAME>${xe(voucherNum)}</NAME>
+<BILLTYPE>New Ref</BILLTYPE>
+<AMOUNT>${-totalRound}</AMOUNT>
+</BILLALLOCATIONS.LIST>
+</LEDGERENTRIES.LIST>`;
+
+    // Tax ledgers
+    if (isExport) {
+      // Export — no tax ledger (rate 0)
+    } else if (isIntra) {
+      xml += `
+<LEDGERENTRIES.LIST>
+<LEDGERNAME>${xe(Tax_CGST)}</LEDGERNAME>
+${TAGS.DEEMNO}
+<AMOUNT>${r2(row.cgst || 0)}</AMOUNT>
+<VATEXPAMOUNT>${r2(row.cgst || 0)}</VATEXPAMOUNT>
+</LEDGERENTRIES.LIST>
+<LEDGERENTRIES.LIST>
+<LEDGERNAME>${xe(Tax_SGST)}</LEDGERNAME>
+${TAGS.DEEMNO}
+<AMOUNT>${r2(row.sgst || 0)}</AMOUNT>
+<VATEXPAMOUNT>${r2(row.sgst || 0)}</VATEXPAMOUNT>
+</LEDGERENTRIES.LIST>`;
+    } else {
+      xml += `
+<LEDGERENTRIES.LIST>
+<LEDGERNAME>${xe(Tax_IGST)}</LEDGERNAME>
+${TAGS.DEEMNO}
+<AMOUNT>${r2(row.igst || 0)}</AMOUNT>
+<VATEXPAMOUNT>${r2(row.igst || 0)}</VATEXPAMOUNT>
+</LEDGERENTRIES.LIST>`;
+    }
+
+    // TCS
+    if (tcs && row.tcsamt && row.tcsamt > 0) {
+      xml += `
+<LEDGERENTRIES.LIST>
+<LEDGERNAME>${xe(Tax_TCS)}</LEDGERNAME>
+${TAGS.DEEMNO}
+<AMOUNT>${r2(row.tcsamt)}</AMOUNT>
+<VATEXPAMOUNT>${r2(row.tcsamt)}</VATEXPAMOUNT>
+</LEDGERENTRIES.LIST>`;
+    }
+
+    // Round-off — always emit (matches reference; sign reflects the
+    // adjustment to reach the rounded total). Reference always uses
+    // ISDEEMEDPOSITIVE=No and lets the AMOUNT carry the sign.
+    if (Math.abs(rnd) > 0.001) {
+      xml += `
+<LEDGERENTRIES.LIST>
+<LEDGERNAME>${xe(Round_LDR)}</LEDGERNAME>
+${TAGS.DEEMNO}
+<AMOUNT>${r2(rnd)}</AMOUNT>
+<VATEXPAMOUNT>${r2(rnd)}</VATEXPAMOUNT>
+</LEDGERENTRIES.LIST>`;
+    }
+
+    // Inventory — one entry per lot (Cardamom) when detailed; else one aggregate
+    xml += '\n';
+    if (detailed && Array.isArray(row.lots)) {
+      for (const lot of row.lots) {
+        xml += `
+<ALLINVENTORYENTRIES.LIST>
+<STOCKITEMNAME>${xe(Item_Card)}</STOCKITEMNAME>
+<GSTOVRDNTAXABILITY>Taxable</GSTOVRDNTAXABILITY>
+<HSNSOURCETYPE>Stock Item</HSNSOURCETYPE>
+<HSNITEMSOURCE>${xe(Item_Card)}</HSNITEMSOURCE>
+<GSTOVRDNSTOREDNATURE>${cardNature}</GSTOVRDNSTOREDNATURE>
+<GSTOVRDNTYPEOFSUPPLY>Goods</GSTOVRDNTYPEOFSUPPLY>
+<GSTHSNNAME>${xe(HSN_Card)}</GSTHSNNAME>
+<GSTHSNDESCRIPTION>${xe(Item_Card)}</GSTHSNDESCRIPTION>
+<BASICPACKAGEMARKS>${xe(lot.lot || '')}</BASICPACKAGEMARKS>
+<BASICNUMPACKAGES>${r0(lot.bag)}</BASICNUMPACKAGES>
+${TAGS.DEEMNO}
+<RATE>${r2(lot.rate)}/Kgs.</RATE>
+<AMOUNT>${r2(lot.amount)}</AMOUNT>
+<ACTUALQTY>${r2(lot.qty)}Kgs.</ACTUALQTY>
+<BILLEDQTY>${r2(lot.qty)}Kgs.</BILLEDQTY>
+<BATCHALLOCATIONS.LIST>
+<GODOWNNAME>Main Location</GODOWNNAME>
+<BATCHNAME>Primary Batch</BATCHNAME>
+<DESTINATIONGODOWNNAME>Main Location</DESTINATIONGODOWNNAME>
+<AMOUNT>${r2(lot.amount)}</AMOUNT>
+<ACTUALQTY>${r2(lot.qty)}Kgs.</ACTUALQTY>
+<BILLEDQTY>${r2(lot.qty)}Kgs.</BILLEDQTY>
+</BATCHALLOCATIONS.LIST>
+<ACCOUNTINGALLOCATIONS.LIST>
+<LEDGERNAME>${xe(cardLedger)}</LEDGERNAME>
+${TAGS.DEEMNO}
+<AMOUNT>${r2(lot.amount)}</AMOUNT>
+</ACCOUNTINGALLOCATIONS.LIST>
+${isIntra && !isExport ? `${rates.cgst}\n${rates.sgst}` : (isExport ? '' : rates.igst)}
+${rates.cess}
+</ALLINVENTORYENTRIES.LIST>`;
+      }
+    }
+
+    // Gunny inventory — one aggregate entry across all lots if any
+    const totalGunnyBags = r0(row.gunnyBags || (Array.isArray(row.lots) ? row.lots.reduce((s, l) => s + Number(l.bag || 0), 0) : 0));
+    const totalGunnyAmt  = r2(row.gunnyAmt || (totalGunnyBags * GunnyRate));
+    if (totalGunnyAmt > 0) {
+      xml += `
+<ALLINVENTORYENTRIES.LIST>
+<STOCKITEMNAME>${xe(Item_Gunny)}</STOCKITEMNAME>
+<GSTOVRDNTAXABILITY>Taxable</GSTOVRDNTAXABILITY>
+<GSTOVRDNSTOREDNATURE>${cardNature}</GSTOVRDNSTOREDNATURE>
+<GSTOVRDNTYPEOFSUPPLY>Goods</GSTOVRDNTYPEOFSUPPLY>
+<GSTHSNNAME>${xe(HSN_Gunny)}</GSTHSNNAME>
+<GSTHSNDESCRIPTION>${xe(Item_Gunny)}</GSTHSNDESCRIPTION>
+${TAGS.DEEMNO}
+<RATE>${r0(GunnyRate)}/Nos.</RATE>
+<AMOUNT>${totalGunnyAmt}</AMOUNT>
+<ACTUALQTY>${totalGunnyBags}Nos.</ACTUALQTY>
+<BATCHALLOCATIONS.LIST>
+<GODOWNNAME>Main Location</GODOWNNAME>
+<BATCHNAME>Primary Batch</BATCHNAME>
+<DESTINATIONGODOWNNAME>Main Location</DESTINATIONGODOWNNAME>
+<AMOUNT>${totalGunnyAmt}</AMOUNT>
+<ACTUALQTY>${totalGunnyBags}Nos.</ACTUALQTY>
+</BATCHALLOCATIONS.LIST>
+<ACCOUNTINGALLOCATIONS.LIST>
+<LEDGERNAME>${xe(gunnyLedger)}</LEDGERNAME>
+${TAGS.DEEMNO}
+<AMOUNT>${totalGunnyAmt}</AMOUNT>
+</ACCOUNTINGALLOCATIONS.LIST>
+${isIntra && !isExport ? `${rates.cgst}\n${rates.sgst}` : (isExport ? '' : rates.igst)}
+${rates.cess}
+</ALLINVENTORYENTRIES.LIST>`;
+    }
+
+    xml += `\n${TAGS.ENDVOUCHER}`;
+  }
+
+  xml += '\n' + endEnvelope();
+  const BOM = '\uFEFF';
+  return BOM + xml.replace(/\r?\n/g, '\r\n');
+}
+
+// =====================================================================
+// 1B. ASP SALES VOUCHERS (sister-company internal transfer to ISP)
+// =====================================================================
+//
+// Matches reference ASP_SALE_TRANS-03.xml — leaner format. The buyer
+// is ALWAYS ISP (the sister/main company), so address/GSTIN come from
+// the home-company config. Lot rates/amounts come from the ASP-side
+// planter calculation (`lots.asp_prate` / `lots.asp_puramt`).
+//
+// Input shape (rows from buildSalesAspRows):
+//   rows = [{
+//     ano, date, sale ('L'|'I'|'E'), invo (= ASP invoice number),
+//     ispPartyName, ispAddress (joined string), ispPlace, ispPin,
+//     ispGstin, lots: [{lot, bag, qty, rate, amount}, ...],
+//     amounttot, gunnyAmt, gunnyBags, igst, cgst, sgst,
+//     total, totalRounded,
+//   }, ...]
+//
+function generSalesAspXML(rows, cfg, opts = {}) {
+  const company       = opts.companyName || cfgGet(cfg, 'tally_asp_company_name', 'Amazing Spice Park Private Limited');
+  const season        = opts.season || cfgGet(cfg, 'tally_season', cfgGet(cfg, 'season_code', '2026-27'));
+  const separator     = opts.separator || cfgGet(cfg, 'tally_separator', '/');
+  const ainvPrefix    = cfgGet(cfg, 'tally_ainv_prefix', 'ASP/');
+  const detailed      = cfgBool(cfg, 'tally_detailed', true);
+
+  // ASP's home-state code (for intra/inter detection w.r.t. the buyer)
+  const intra         = cfgGet(cfg, 'tally_state_code_amazing', '32');
+
+  // Ledgers — ASP's books use the same names by convention; if user
+  // wants ASP-specific ledger names, add tally_asp_* keys later.
+  const SalesInter   = cfgGet(cfg, 'tally_sales_inter',  'Cardamom Inter-State Sales');
+  const SalesIntra   = cfgGet(cfg, 'tally_sales_intra',  'Cardamom Local Sales');
+  const SalesExport  = cfgGet(cfg, 'tally_sales_export', 'Cardamom Sales - Export');
+  const GunnyInter   = cfgGet(cfg, 'tally_gunny_inter',  'Gunny Interstate Sales');
+  const GunnyIntra   = cfgGet(cfg, 'tally_gunny_intra',  'Gunny Local Sales');
+  const GunnyExport  = cfgGet(cfg, 'tally_gunny_export', 'Gunny Sales - Export');
+  const Tax_CGST     = cfgGet(cfg, 'tally_cgst', 'OUTPUT CGST 2.5%');
+  const Tax_SGST     = cfgGet(cfg, 'tally_sgst', 'OUTPUT SGST 2.5%');
+  const Tax_IGST     = cfgGet(cfg, 'tally_igst', 'OUTPUT IGST 5%');
+  const Round_LDR    = cfgGet(cfg, 'tally_round', 'Round On/Off');
+  const Item_Card    = cfgGet(cfg, 'tally_item_cardamom', 'Cardamom');
+  const Item_Gunny   = cfgGet(cfg, 'tally_item_gunny',    'Gunny');
+  const HSN_Card     = cfgGet(cfg, 'tally_hsn_cardamom',  '09083120');
+  const HSN_Gunny    = cfgGet(cfg, 'tally_hsn_gunny',     '63051040');
+  const GunnyRate    = cfgNum(cfg, 'tally_gunny_rate',     165);
+
+  // ASP's own dispatch-from address (own premises in Kerala). Reference
+  // shows full address with SBL line. We reuse the home company's KL
+  // address fields for this.
+  const own_addr1    = cfgGet(cfg, 's_dispatch_address1', '650,Ward 6, Ellikkanam, Nedumkandam');
+  const own_addr2    = cfgGet(cfg, 's_dispatch_address2', 'Idukki, Kerala, 685553');
+  const own_sbl      = cfgGet(cfg, 's_sbl', '');
+  const own_place    = cfgGet(cfg, 'tally_dispatch_place', 'NEDUMKANDAM');
+  const own_pin      = cfgGet(cfg, 'tally_dispatch_pin', '685553');
+  const own_state    = cfgGet(cfg, 'tally_dispatch_state', 'Kerala');
+  const own_company  = cfgGet(cfg, 's_company', cfgGet(cfg, 's_short_name', 'AMAZING SPICE PARK PRIVATE LIMITED'));
+
+  let xml = '\n' + startEnvelope(company, 'Vouchers');
+
+  for (const row of rows) {
+    const dateval     = toTallyDate(row.date);
+    const ispName     = xe(row.ispPartyName);
+    const ispGstin    = xe(row.ispGstin);
+    const ispState    = xe(findState(row.ispGstin));
+    const ispPin      = xe(row.ispPin || '');
+    const ispPlace    = xe(row.ispPlace || '');
+    const ispAddrLines = _addrLines(row.ispAddress, row.ispPlace);
+    const isIntra     = String(row.ispGstin || '').slice(0, 2) === String(intra);
+    const sale        = String(row.sale || 'I').toUpperCase();
+    // ASP→ISP internal transfer is never an export, but if upstream sale
+    // was 'E' we still treat as inter-state for rates (same as 'I').
+    const isExport    = false;
+    const invoNo      = String(row.invo || '').trim();
+    const taxNm       = `${sale}${separator}${invoNo}`;
+    const voucherNum  = `${ainvPrefix}${taxNm}/${season}`;
+
+    const rates       = rateDetails(cfgNum(cfg, 'tally_gst_rate', 5));
+
+    const cardLedger = isIntra ? SalesIntra : SalesInter;
+    const cardNature = isIntra ? 'Local Sales - Taxable' : 'Interstate Sales - Taxable';
+    const gunnyLedger = isIntra ? GunnyIntra : GunnyInter;
+
+    const startVoucher = `<VOUCHER VCHTYPE="Sales" ACTION="Create" OBJVIEW="Invoice Voucher View">`;
+
+    xml += `\n${startVoucher}
+<PARTYNAME>${ispName}</PARTYNAME>
+<ADDRESS.LIST TYPE="String">
+${ispAddrLines.map(l => `<ADDRESS>${xe(l)}</ADDRESS>`).join('\n')}
+</ADDRESS.LIST>
+<PARTYGSTIN>${ispGstin}</PARTYGSTIN>
+<PARTYLEDGERNAME>${ispName}</PARTYLEDGERNAME>
+<PARTYMAILINGNAME>${ispName}</PARTYMAILINGNAME>
+<PARTYPINCODE>${ispPin}</PARTYPINCODE>
+<DISPATCHFROMADDRESS.LIST TYPE="String">
+<DISPATCHFROMADDRESS>${xe(own_addr1)}</DISPATCHFROMADDRESS>
+<DISPATCHFROMADDRESS>${xe(own_addr2)}</DISPATCHFROMADDRESS>
+<DISPATCHFROMADDRESS>${xe(own_sbl ? 'SBL:' + own_sbl : '')}</DISPATCHFROMADDRESS>
+<DISPATCHFROMADDRESS> </DISPATCHFROMADDRESS>
+<DISPATCHFROMADDRESS> </DISPATCHFROMADDRESS>
+</DISPATCHFROMADDRESS.LIST>
+<DATE>${dateval}</DATE>
+<REFERENCEDATE></REFERENCEDATE>
+<VCHSTATUSDATE>${dateval}</VCHSTATUSDATE>
+<GSTREGISTRATIONTYPE>Regular</GSTREGISTRATIONTYPE>
+<STATENAME>${ispState}</STATENAME>
+<COUNTRYOFRESIDENCE>India</COUNTRYOFRESIDENCE>
+<PLACEOFSUPPLY>${ispState}</PLACEOFSUPPLY>
+<VOUCHERNUMBER>${xe(voucherNum)}</VOUCHERNUMBER>
+<REFERENCE></REFERENCE>
+<BILLTOPLACE>${ispPlace}</BILLTOPLACE>
+<DISPATCHFROMNAME>${xe(own_company)}</DISPATCHFROMNAME>
+<DISPATCHFROMSTATENAME>${xe(own_state)}</DISPATCHFROMSTATENAME>
+<DISPATCHFROMPINCODE>${xe(own_pin)}</DISPATCHFROMPINCODE>
+<DISPATCHFROMPLACE>${xe(own_place)}</DISPATCHFROMPLACE>
+<BASICBASEPARTYNAME>${ispName}</BASICBASEPARTYNAME>
+<NUMBERINGSTYLE>Manual</NUMBERINGSTYLE>
+<PERSISTEDVIEW>Invoice Voucher View</PERSISTEDVIEW>
+<VOUCHERTYPENAME>Sales</VOUCHERTYPENAME>
+<BASICDATETIMEOFINVOICE>${dateval}</BASICDATETIMEOFINVOICE>
+<BASICDATETIMEOFREMOVAL>${dateval}</BASICDATETIMEOFREMOVAL>
+<BASICFINALDESTINATION>${xe(own_place)}</BASICFINALDESTINATION>
+<BASICSHIPVESSELNO></BASICSHIPVESSELNO>
+<VCHENTRYMODE>Item Invoice</VCHENTRYMODE>
+<DIFFACTUALQTY>Yes</DIFFACTUALQTY>
+<ISSECURITYONWHENENTERED>Yes</ISSECURITYONWHENENTERED>
+<EFFECTIVEDATE>${dateval}</EFFECTIVEDATE>
+<ISGSTOVERRIDDEN>Yes</ISGSTOVERRIDDEN>
+<ISELIGIBLEFORITC>Yes</ISELIGIBLEFORITC>
+<VCHGSTSTATUSISINCLUDED>Yes</VCHGSTSTATUSISINCLUDED>
+<VCHGSTSTATUSISAPPLICABLE>Yes</VCHGSTSTATUSISAPPLICABLE>
+<VCHSTATUSISREACCEPHSNSIXONEDONE>Yes</VCHSTATUSISREACCEPHSNSIXONEDONE>
+<ISINVOICE>Yes</ISINVOICE>
+<ISVATDUTYPAID>Yes</ISVATDUTYPAID>`;
+
+    // Party (debtor = ISP) ledger
+    const totalRound = r0(row.totalRounded || row.total);
+    const totalAmt   = r2(row.total);
+    const rnd        = r2(totalRound - totalAmt);
+
+    xml += `
+<LEDGERENTRIES.LIST>
+<LEDGERNAME>${ispName}</LEDGERNAME>
+<ISPARTYLEDGER>Yes</ISPARTYLEDGER>
+${TAGS.DEEMYES}
+<AMOUNT>${-totalRound}</AMOUNT>
+<BILLALLOCATIONS.LIST>
+<NAME>${xe(voucherNum)}</NAME>
+<BILLTYPE>New Ref</BILLTYPE>
+<AMOUNT>${-totalRound}</AMOUNT>
+</BILLALLOCATIONS.LIST>
+</LEDGERENTRIES.LIST>`;
+
+    // Tax ledgers
+    if (isIntra) {
+      xml += `
+<LEDGERENTRIES.LIST>
+<LEDGERNAME>${xe(Tax_CGST)}</LEDGERNAME>
+${TAGS.DEEMNO}
+<AMOUNT>${r2(row.cgst || 0)}</AMOUNT>
+<VATEXPAMOUNT>${r2(row.cgst || 0)}</VATEXPAMOUNT>
+</LEDGERENTRIES.LIST>
+<LEDGERENTRIES.LIST>
+<LEDGERNAME>${xe(Tax_SGST)}</LEDGERNAME>
+${TAGS.DEEMNO}
+<AMOUNT>${r2(row.sgst || 0)}</AMOUNT>
+<VATEXPAMOUNT>${r2(row.sgst || 0)}</VATEXPAMOUNT>
+</LEDGERENTRIES.LIST>`;
+    } else {
+      xml += `
+<LEDGERENTRIES.LIST>
+<LEDGERNAME>${xe(Tax_IGST)}</LEDGERNAME>
+${TAGS.DEEMNO}
+<AMOUNT>${r2(row.igst || 0)}</AMOUNT>
+<VATEXPAMOUNT>${r2(row.igst || 0)}</VATEXPAMOUNT>
+</LEDGERENTRIES.LIST>`;
+    }
+
+    // Round-off
+    if (Math.abs(rnd) > 0.001) {
+      xml += `
+<LEDGERENTRIES.LIST>
+<LEDGERNAME>${xe(Round_LDR)}</LEDGERNAME>
+${TAGS.DEEMNO}
+<AMOUNT>${r2(rnd)}</AMOUNT>
+<VATEXPAMOUNT>${r2(rnd)}</VATEXPAMOUNT>
+</LEDGERENTRIES.LIST>`;
+    }
+
+    // Inventory — one entry per lot
+    xml += '\n';
+    if (detailed && Array.isArray(row.lots)) {
+      for (const lot of row.lots) {
+        xml += `
+<ALLINVENTORYENTRIES.LIST>
+<STOCKITEMNAME>${xe(Item_Card)}</STOCKITEMNAME>
+<GSTOVRDNTAXABILITY>Taxable</GSTOVRDNTAXABILITY>
+<HSNSOURCETYPE>Stock Item</HSNSOURCETYPE>
+<HSNITEMSOURCE>${xe(Item_Card)}</HSNITEMSOURCE>
+<GSTOVRDNSTOREDNATURE>${cardNature}</GSTOVRDNSTOREDNATURE>
+<GSTOVRDNTYPEOFSUPPLY>Goods</GSTOVRDNTYPEOFSUPPLY>
+<GSTHSNNAME>${xe(HSN_Card)}</GSTHSNNAME>
+<GSTHSNDESCRIPTION>${xe(Item_Card)}</GSTHSNDESCRIPTION>
+<BASICPACKAGEMARKS>${xe(lot.lot || '')}</BASICPACKAGEMARKS>
+<BASICNUMPACKAGES>${r0(lot.bag)}</BASICNUMPACKAGES>
+${TAGS.DEEMNO}
+<RATE>${r2(lot.rate)}/Kgs.</RATE>
+<AMOUNT>${r2(lot.amount)}</AMOUNT>
+<ACTUALQTY>${r2(lot.qty)}Kgs.</ACTUALQTY>
+<BILLEDQTY>${r2(lot.qty)}Kgs.</BILLEDQTY>
+<BATCHALLOCATIONS.LIST>
+<GODOWNNAME>Main Location</GODOWNNAME>
+<BATCHNAME>Primary Batch</BATCHNAME>
+<DESTINATIONGODOWNNAME>Main Location</DESTINATIONGODOWNNAME>
+<AMOUNT>${r2(lot.amount)}</AMOUNT>
+<ACTUALQTY>${r2(lot.qty)}Kgs.</ACTUALQTY>
+<BILLEDQTY>${r2(lot.qty)}Kgs.</BILLEDQTY>
+</BATCHALLOCATIONS.LIST>
+<ACCOUNTINGALLOCATIONS.LIST>
+<LEDGERNAME>${xe(cardLedger)}</LEDGERNAME>
+${TAGS.DEEMNO}
+<AMOUNT>${r2(lot.amount)}</AMOUNT>
+</ACCOUNTINGALLOCATIONS.LIST>
+${isIntra ? `${rates.cgst}\n${rates.sgst}` : rates.igst}
+${rates.cess}
+</ALLINVENTORYENTRIES.LIST>`;
+      }
+    }
+
+    // Gunny aggregate
+    const totalGunnyBags = r0(row.gunnyBags || (Array.isArray(row.lots) ? row.lots.reduce((s, l) => s + Number(l.bag || 0), 0) : 0));
+    const totalGunnyAmt  = r2(row.gunnyAmt || (totalGunnyBags * GunnyRate));
+    if (totalGunnyAmt > 0) {
+      xml += `
+<ALLINVENTORYENTRIES.LIST>
+<STOCKITEMNAME>${xe(Item_Gunny)}</STOCKITEMNAME>
+<GSTOVRDNTAXABILITY>Taxable</GSTOVRDNTAXABILITY>
+<GSTOVRDNSTOREDNATURE>${cardNature}</GSTOVRDNSTOREDNATURE>
+<GSTOVRDNTYPEOFSUPPLY>Goods</GSTOVRDNTYPEOFSUPPLY>
+<GSTHSNNAME>${xe(HSN_Gunny)}</GSTHSNNAME>
+<GSTHSNDESCRIPTION>${xe(Item_Gunny)}</GSTHSNDESCRIPTION>
+${TAGS.DEEMNO}
+<RATE>${r0(GunnyRate)}/Nos.</RATE>
+<AMOUNT>${totalGunnyAmt}</AMOUNT>
+<ACTUALQTY>${totalGunnyBags}Nos.</ACTUALQTY>
+<BATCHALLOCATIONS.LIST>
+<GODOWNNAME>Main Location</GODOWNNAME>
+<BATCHNAME>Primary Batch</BATCHNAME>
+<DESTINATIONGODOWNNAME>Main Location</DESTINATIONGODOWNNAME>
+<AMOUNT>${totalGunnyAmt}</AMOUNT>
+<ACTUALQTY>${totalGunnyBags}Nos.</ACTUALQTY>
+</BATCHALLOCATIONS.LIST>
+<ACCOUNTINGALLOCATIONS.LIST>
+<LEDGERNAME>${xe(gunnyLedger)}</LEDGERNAME>
+${TAGS.DEEMNO}
+<AMOUNT>${totalGunnyAmt}</AMOUNT>
+</ACCOUNTINGALLOCATIONS.LIST>
+${isIntra ? `${rates.cgst}\n${rates.sgst}` : rates.igst}
+${rates.cess}
+</ALLINVENTORYENTRIES.LIST>`;
+    }
+
+    xml += `\n${TAGS.ENDVOUCHER}`;
+  }
+
+  xml += '\n' + endEnvelope();
+  const BOM = '\uFEFF';
+  return BOM + xml.replace(/\r?\n/g, '\r\n');
+}
+
+// =====================================================================
+// 1. SALES (registered dealer sales — VBA generXML)  [LEGACY]
+// =====================================================================
+//
+// Kept for back-compat; new callers should use generSalesIspXML or
+// generSalesAspXML. This original generator is unchanged and still
+// referenced by the deprecated `sales` Tally export key in server.js.
 //
 // Input shape (what the route layer should pass us — already grouped by
 // invoice from the invoices table):
@@ -1040,6 +1720,251 @@ ${TAGS.DEEMNO}
 // Data builders — convert DB rows into the {rows} shape each XML fn wants
 // =====================================================================
 
+// ── ISP / ASP invoice classification ──────────────────────────
+// `invoices.state` is stamped with the *business context* state at the
+// time of invoice generation (TAMIL NADU=ISP, KERALA=ASP). For legacy
+// rows that pre-date the state stamping, we fall back to a heuristic:
+// if the invoice's `invo` matches `lots.asp_invo` for any lot of that
+// buyer/auction → ASP, else ISP.
+const ISP_STATE_SQL = `(UPPER(COALESCE(i.state,'')) = 'TAMIL NADU' OR UPPER(COALESCE(i.state,'')) = '')`;
+const ASP_STATE_SQL = `UPPER(COALESCE(i.state,'')) = 'KERALA'`;
+
+/**
+ * Pull ISP sales (state = TAMIL NADU) for an auction, group by buyer,
+ * attach lots and matching ASP invoice ref. Used by Sales (ISP) export.
+ *
+ * For each lot row we also attach `aspInvo` from `lots.asp_invo` so the
+ * generator can emit BASICORDERREF pointing to the ASP voucher.
+ */
+function buildSalesIspRows(db, auctionId, cfg) {
+  const stmt = db.prepare(`
+    SELECT i.*, b.add1, b.add2, b.pla AS buyer_pla, b.pin AS buyer_pin
+    FROM invoices i
+    LEFT JOIN buyers b ON b.buyer = i.buyer
+    WHERE i.auction_id = ? AND ${ISP_STATE_SQL}
+    ORDER BY i.buyer, i.sale, CAST(i.invo AS INTEGER), i.id
+  `);
+  const raw = stmt.all(auctionId);
+
+  // For each (buyer, ISP invo) pair, look up the lot rows so we can:
+  //   1. emit per-lot inventory entries (using the SALES rate from invoices)
+  //   2. surface the corresponding asp_invo (first non-empty wins)
+  const lotsStmt = db.prepare(`
+    SELECT lot_no AS lot, bags AS bag, asp_invo
+    FROM lots
+    WHERE auction_id = ? AND buyer = ? AND invo = ?
+    ORDER BY lot_no
+  `);
+
+  const grouped = {};
+  for (const r of raw) {
+    const partyKey = `${r.buyer}|${r.gstin}|${r.sale || 'L'}`;
+    if (!grouped[partyKey]) {
+      grouped[partyKey] = {
+        ano: r.ano,
+        date: r.date,
+        sale: r.sale,
+        invo: r.invo,
+        aspInvo: '',
+        buyer: r.buyer,
+        partyName: r.buyer1 || r.buyer || '',
+        address: [r.add1, r.add2].filter(Boolean).join(', '),
+        place: r.place || r.buyer_pla || '',
+        pin: r.buyer_pin || '',
+        partyGstin: r.gstin || '',
+        lots: [],
+        gunnyBags: 0,
+        amounttot: 0,
+        gunnyAmt: 0,
+        cgst: 0, sgst: 0, igst: 0, tcsamt: 0,
+        total: 0,
+      };
+    }
+    const g = grouped[partyKey];
+
+    // Pull bag count from lots table for this invoice (more reliable
+    // than the invoices.bag aggregate, which is per-buyer not per-lot)
+    const lotRows = lotsStmt.all(auctionId, r.buyer, r.invo);
+    // Find a bag count for this specific lot
+    const lotMatch = lotRows.find(l => String(l.lot) === String(r.lot));
+    const bagCount = lotMatch ? Number(lotMatch.bag || 0) : Number(r.bag || 0);
+    // Capture aspInvo (first non-empty across all matching lots)
+    if (!g.aspInvo) {
+      const withAsp = lotRows.find(l => l.asp_invo && String(l.asp_invo).trim());
+      if (withAsp) g.aspInvo = String(withAsp.asp_invo).trim();
+    }
+
+    g.lots.push({
+      lot: r.lot,
+      bag: bagCount,
+      qty: r.qty,
+      rate: r.price,
+      amount: r.amount,
+    });
+    g.gunnyBags += bagCount;
+    g.amounttot += Number(r.amount || 0);
+    g.gunnyAmt  += Number(r.gunny || 0);
+    g.cgst      += Number(r.cgst || 0);
+    g.sgst      += Number(r.sgst || 0);
+    g.igst      += Number(r.igst || 0);
+    g.tcsamt    += Number(r.tcs || 0);
+    g.total     += Number(r.tot || 0);
+  }
+
+  const out = Object.values(grouped);
+  for (const g of out) {
+    g.amounttot = r2(g.amounttot);
+    g.gunnyAmt  = r2(g.gunnyAmt);
+    g.cgst = r2(g.cgst); g.sgst = r2(g.sgst); g.igst = r2(g.igst);
+    g.tcsamt = r2(g.tcsamt);
+    g.total = r2(g.total);
+    g.totalRounded = r0(g.total);
+  }
+  return out;
+}
+
+/**
+ * Pull ASP sales (state = KERALA) for an auction. Each ASP voucher
+ * represents an ASP→ISP internal transfer: ASP is selling its lot
+ * inventory to the sister company (ISP). The buyer is therefore always
+ * ISP itself, so we read the ISP party fields from cfg (tn_address1,
+ * tn_address2, tn_gstin, tn_branch).
+ *
+ * Lot rates/amounts come from `lots.asp_prate` / `lots.asp_puramt` (the
+ * ASP-side planter calc). Bag counts come from the lots table.
+ */
+function buildSalesAspRows(db, auctionId, cfg) {
+  const stmt = db.prepare(`
+    SELECT i.*
+    FROM invoices i
+    WHERE i.auction_id = ? AND ${ASP_STATE_SQL}
+    ORDER BY i.buyer, i.sale, CAST(i.invo AS INTEGER), i.id
+  `);
+  const raw = stmt.all(auctionId);
+
+  // Read ASP-side per-lot data. asp_puramt > 0 means dual-storage was
+  // populated; legacy rows (asp_puramt = 0) fall back to the active
+  // puramt/prate fields. asp_invo links back to the invoice.
+  const lotsStmt = db.prepare(`
+    SELECT lot_no AS lot, bags AS bag, qty,
+           CASE WHEN asp_puramt > 0 THEN asp_pqty   ELSE pqty   END AS asp_qty,
+           CASE WHEN asp_puramt > 0 THEN asp_prate  ELSE prate  END AS asp_rate,
+           CASE WHEN asp_puramt > 0 THEN asp_puramt ELSE puramt END AS asp_amount,
+           bilamt
+    FROM lots
+    WHERE auction_id = ? AND buyer = ? AND asp_invo = ?
+    ORDER BY lot_no
+  `);
+
+  // ISP party identity — the ASP voucher's customer is always ISP.
+  // Pull from the home-company / address-tn config.
+  const ispPartyName = cfgGet(cfg, 'tally_company_name', cfgGet(cfg, 'short_name', 'IDEAL SPICES PRIVATE LIMITED'));
+  const ispAddr1     = cfgGet(cfg, 'tn_address1', '');
+  const ispAddr2     = cfgGet(cfg, 'tn_address2', '');
+  // Address line 2 in tn_address2 contains city/state/code/mobile in one
+  // string; pick out just the place portion (everything before the comma)
+  // so the second ADDRESS line in the XML is short like "BODINAYAKANUR".
+  const ispBranch    = cfgGet(cfg, 'tn_branch', cfgGet(cfg, 'br1', ''));
+  const ispGstin     = cfgGet(cfg, 'tn_gstin', '');
+  // ISP PIN — extract from tn_address2 if present (e.g. "...THENI-625582 TAMIL NADU...")
+  const pinMatch     = String(ispAddr2).match(/-(\d{6})/);
+  const ispPin       = cfgGet(cfg, 'tn_pin', pinMatch ? pinMatch[1] : '');
+
+  const grouped = {};
+  for (const r of raw) {
+    const partyKey = `${r.buyer}|${r.invo}`;
+    if (!grouped[partyKey]) {
+      grouped[partyKey] = {
+        ano: r.ano,
+        date: r.date,
+        sale: r.sale,
+        invo: r.invo,
+        buyer: r.buyer,
+        // ASP voucher's customer is always ISP, regardless of the
+        // ultimate downstream buyer.
+        ispPartyName,
+        ispAddress: ispAddr1,
+        ispPlace: ispBranch,
+        ispPin,
+        ispGstin,
+        lots: [],
+        gunnyBags: 0,
+        amounttot: 0,
+        gunnyAmt: 0,
+        cgst: 0, sgst: 0, igst: 0,
+        total: 0,
+      };
+    }
+    const g = grouped[partyKey];
+
+    // Pull asp-side lot data for this invoice
+    const lotRows = lotsStmt.all(auctionId, r.buyer, r.invo);
+    const lotMatch = lotRows.find(l => String(l.lot) === String(r.lot));
+    if (lotMatch) {
+      const aspQty    = Number(lotMatch.asp_qty || lotMatch.qty || r.qty || 0);
+      const aspRate   = Number(lotMatch.asp_rate || 0);
+      const aspAmount = Number(lotMatch.asp_amount || lotMatch.bilamt || 0);
+      g.lots.push({
+        lot: r.lot,
+        bag: Number(lotMatch.bag || r.bag || 0),
+        qty: aspQty,
+        rate: aspRate,
+        amount: aspAmount,
+      });
+      g.gunnyBags += Number(lotMatch.bag || r.bag || 0);
+      g.amounttot += aspAmount;
+    } else {
+      // Fallback: no lot row found; use invoice numbers (legacy)
+      g.lots.push({
+        lot: r.lot,
+        bag: Number(r.bag || 0),
+        qty: Number(r.qty || 0),
+        rate: Number(r.price || 0),
+        amount: Number(r.amount || 0),
+      });
+      g.gunnyBags += Number(r.bag || 0);
+      g.amounttot += Number(r.amount || 0);
+    }
+    g.gunnyAmt += Number(r.gunny || 0);
+    g.cgst     += Number(r.cgst || 0);
+    g.sgst     += Number(r.sgst || 0);
+    g.igst     += Number(r.igst || 0);
+  }
+
+  // Compute the ASP voucher total from scratch — it's the sum of
+  // asp-side lot amounts + gunny + (i)gst on (cardamom + gunny).
+  // ASP→ISP transfer is always inter-state Kerala→Tamil Nadu, so IGST
+  // applies. We recompute GST here because invoices.cgst/sgst/igst hold
+  // the ISP-side GST (computed against ISP rates), not the ASP-side.
+  const gstRate = cfgNum(cfg, 'tally_gst_rate', 5);
+  const gunnyRate = cfgNum(cfg, 'tally_gunny_rate', 165);
+  const aspIntraCode = String(cfgGet(cfg, 'tally_state_code_amazing', '32'));
+
+  const out = Object.values(grouped);
+  for (const g of out) {
+    g.amounttot = r2(g.amounttot);
+    const gunnyBaseAmt = r2(g.gunnyBags * gunnyRate);
+    g.gunnyAmt = gunnyBaseAmt;
+
+    const taxableTotal = r2(g.amounttot + g.gunnyAmt);
+    const isIntra = String(g.ispGstin || '').slice(0, 2) === aspIntraCode;
+    if (isIntra) {
+      const half = r2(taxableTotal * (gstRate / 2) / 100);
+      g.cgst = half;
+      g.sgst = half;
+      g.igst = 0;
+    } else {
+      g.cgst = 0;
+      g.sgst = 0;
+      g.igst = r2(taxableTotal * gstRate / 100);
+    }
+
+    g.total = r2(taxableTotal + g.cgst + g.sgst + g.igst);
+    g.totalRounded = r0(g.total);
+  }
+  return out;
+}
+
 /**
  * Pull invoices for an auction, group by invoice number, attach lots.
  * Used by Sales export.
@@ -1714,11 +2639,15 @@ function buildLedgerRows(db, auctionId, cfg) {
 
 module.exports = {
   generSalesXML,
+  generSalesIspXML,
+  generSalesAspXML,
   generRDPurchaseXML,
   generURDPurchaseXML,
   generDebitNoteXML,
   generLedgerXML,
   buildSalesRows,
+  buildSalesIspRows,
+  buildSalesAspRows,
   buildRDPurchaseRows,
   buildURDPurchaseRows,
   buildDebitNoteRows,
