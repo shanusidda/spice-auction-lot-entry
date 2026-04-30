@@ -1857,37 +1857,52 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
     <!-- EXPORTS -->
     <div class="tc" id="tc-exports">
       <div class="card">
-        <h2>Export Center — XLSX</h2>
-        <div class="fg" style="max-width:300px"><label>Select Auction</label><select id="exp-auction" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px"></select></div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;margin-top:12px" id="export-btns"></div>
+        <div class="tally-section" id="exp-sec-center" style="margin:0">
+          <h3 class="tally-section-head" onclick="toggleTallySection('exp-sec-center')">
+            <span class="tally-section-chev">▼</span>
+            <span>Export Center — XLSX</span>
+          </h3>
+          <div class="tally-section-body">
+            <div class="fg" style="max-width:300px;margin-top:12px"><label>Select Auction</label><select id="exp-auction" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px"></select></div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;margin-top:12px" id="export-btns"></div>
+          </div>
+        </div>
       </div>
 
       <div class="card">
-        <h2>DBF Exports <span style="font-weight:400;font-size:12px;color:var(--text3)">FoxPro-compatible format for legacy integration</span></h2>
-        <p style="font-size:12px;color:var(--text2);margin-bottom:12px">These exports produce .dbf files that your dad's FoxPro application can read directly. Date format: DD/MM/YYYY. Lot numbers preserve leading zeros.</p>
-        
-        <h3 style="font-size:13px;margin:16px 0 8px 0;color:var(--spice)">Per Auction</h3>
-        <div style="display:flex;gap:8px;align-items:end;margin-bottom:12px;flex-wrap:wrap">
-          <div class="fg" style="margin:0;flex:1;min-width:200px"><label>Auction</label><select id="dbf-auction" style="padding:8px;border:1px solid var(--border);border-radius:6px;width:100%"></select></div>
-          <button class="btn btn-a" onclick="downloadDbf('lots',{auctionId:document.getElementById('dbf-auction').value})">Lots (CPA1.DBF)</button>
-        </div>
+        <div class="tally-section" id="exp-sec-dbf" style="margin:0">
+          <h3 class="tally-section-head" onclick="toggleTallySection('exp-sec-dbf')">
+            <span class="tally-section-chev">▼</span>
+            <span>DBF Exports</span>
+            <span style="font-weight:400;font-size:12px;color:var(--text3);margin-left:8px">FoxPro-compatible format for legacy integration</span>
+          </h3>
+          <div class="tally-section-body">
+            <p style="font-size:12px;color:var(--text2);margin:12px 0">These exports produce .dbf files that your dad's FoxPro application can read directly. Date format: DD/MM/YYYY. Lot numbers preserve leading zeros.</p>
 
-        <h3 style="font-size:13px;margin:16px 0 8px 0;color:var(--spice)">Date Range</h3>
-        <div style="display:flex;gap:8px;align-items:end;margin-bottom:10px;flex-wrap:wrap">
-          <div class="fg" style="margin:0"><label>From</label><input type="date" id="dbf-from"></div>
-          <div class="fg" style="margin:0"><label>To</label><input type="date" id="dbf-to"></div>
-        </div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px">
-          <button class="btn btn-a" onclick="downloadDbfRange('invoices')">Sales Invoices (INV.DBF)</button>
-          <button class="btn btn-a" onclick="downloadDbfRange('purchases')">Purchases (PURCHASE.DBF)</button>
-          <button class="btn btn-a" onclick="downloadDbfRange('bills')">Bills of Supply (BILL.DBF)</button>
-          <button class="btn btn-a" onclick="downloadDbfRange('debit_notes')">Debit Notes</button>
-        </div>
+            <h3 style="font-size:13px;margin:16px 0 8px 0;color:var(--spice)">Per Auction</h3>
+            <div style="display:flex;gap:8px;align-items:end;margin-bottom:12px;flex-wrap:wrap">
+              <div class="fg" style="margin:0;flex:1;min-width:200px"><label>Auction</label><select id="dbf-auction" style="padding:8px;border:1px solid var(--border);border-radius:6px;width:100%"></select></div>
+              <button class="btn btn-a" onclick="downloadDbf('lots',{auctionId:document.getElementById('dbf-auction').value})">Lots (CPA1.DBF)</button>
+            </div>
 
-        <h3 style="font-size:13px;margin:16px 0 8px 0;color:var(--spice)">Master Data</h3>
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px">
-          <button class="btn btn-a" onclick="downloadDbf('traders')">Sellers (NAM.DBF)</button>
-          <button class="btn btn-a" onclick="downloadDbf('buyers')">Buyers (SBL.DBF)</button>
+            <h3 style="font-size:13px;margin:16px 0 8px 0;color:var(--spice)">Date Range</h3>
+            <div style="display:flex;gap:8px;align-items:end;margin-bottom:10px;flex-wrap:wrap">
+              <div class="fg" style="margin:0"><label>From</label><input type="date" id="dbf-from"></div>
+              <div class="fg" style="margin:0"><label>To</label><input type="date" id="dbf-to"></div>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px">
+              <button class="btn btn-a" onclick="downloadDbfRange('invoices')">Sales Invoices (INV.DBF)</button>
+              <button class="btn btn-a" onclick="downloadDbfRange('purchases')">Purchases (PURCHASE.DBF)</button>
+              <button class="btn btn-a" onclick="downloadDbfRange('bills')">Bills of Supply (BILL.DBF)</button>
+              <button class="btn btn-a" onclick="downloadDbfRange('debit_notes')">Debit Notes</button>
+            </div>
+
+            <h3 style="font-size:13px;margin:16px 0 8px 0;color:var(--spice)">Master Data</h3>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px">
+              <button class="btn btn-a" onclick="downloadDbf('traders')">Sellers (NAM.DBF)</button>
+              <button class="btn btn-a" onclick="downloadDbf('buyers')">Buyers (SBL.DBF)</button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -2062,7 +2077,7 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
         <h3 class="tally-section-head" onclick="toggleTallySection('tally-sec-ledgers')">
           <span class="tally-section-chev">▼</span>
           <span>📚 Party Ledgers</span>
-          <span class="tally-section-count">4</span>
+          <span class="tally-section-count">3</span>
         </h3>
         <div class="tally-section-body">
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px">
@@ -2111,20 +2126,6 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
             </div>
           </div>
 
-          <div data-tally-keep="1" style="padding:14px;border:1px dashed var(--border);border-radius:10px;background:var(--bg)">
-            <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
-              <span style="width:32px;height:32px;border-radius:8px;background:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:18px">📦</span>
-              <div>
-                <div style="font-weight:700;color:var(--text);font-size:14px">All Ledgers (everything) <span class="tally-co-badge tally-co-isp">ISP</span></div>
-                <div style="font-size:11px;color:var(--text3)">All 3 party groups + tax + sales + purchase + service ledgers. Use this when priming a fresh Tally company. Imports into the ISP company; for ASP-only ledgers use the RD/URD cards above.</div>
-              </div>
-            </div>
-            <div id="tally-preview-ledger" style="font-size:11px;color:var(--text3);min-height:18px;margin:6px 0"></div>
-            <div style="display:flex;gap:6px;margin-top:8px">
-              <button class="btn btn-a" onclick="tallyPreview('ledger')" style="flex:1;padding:7px;font-size:12px">Preview</button>
-              <button class="btn btn-g" onclick="tallyDownload('ledger')" style="flex:1;padding:7px;font-size:12px">Download XML</button>
-            </div>
-          </div>
         </div>
 
         </div>
@@ -4453,6 +4454,18 @@ function applyTallyCompanyVisibility(){
         sel.dispatchEvent(new Event('change'));
       }
     }
+  }
+
+  // Re-render the single-party lists if they're already populated. Even
+  // when the dropdown selection didn't change (e.g. user was on "All
+  // kinds"), the per-row buttons need to refresh to drop off-mode actions.
+  // We call the renderers directly — they no-op cleanly if the list
+  // hasn't been loaded yet.
+  if (typeof renderTallyPartyList === 'function') {
+    try { renderTallyPartyList(); } catch (_) {}
+  }
+  if (typeof renderTallyPartyVoucherList === 'function') {
+    try { renderTallyPartyVoucherList(); } catch (_) {}
   }
 }
 
@@ -7292,7 +7305,7 @@ async function loadPayments(){
 // ── Exports ───────────────────────────────────────────────
 const EXP_LABELS={lot_slip:'Lot Slip',lot_slip_after:'Lot Slip (After)',praman_csv:'e-Trade CSV (Praman)',price_list:'Price List',bank_payment:'Bank Payment (RTGS/NEFT)',
   pooler_register:'Pooler Register',full_file:'Full File',collection:'Collection',trade_report:'Trade Report',dealer_list:'Dealer List',
-  sales_taxes:'Sales & Taxes',payment:'Payment Summary',tally_purchase:'Tally Purchase'};
+  payment:'Payment Summary'};
 // Export types that only support a specific format (no XLSX/PDF choice).
 // e.g., Praman is a CSV-only upload format for the Praman auction platform.
 const EXP_CSV_ONLY = new Set(['praman_csv']);
@@ -7831,11 +7844,24 @@ function renderTallyPartyVoucherList(){
   const byKind={sales:[],rd_purchase:[],urd_purchase:[]};
   for(const p of filtered)(byKind[p.kind]||(byKind[p.kind]=[])).push(p);
   let html='';
+  // Current mode (ISP or ASP) — used to filter the per-row action buttons
+  // so the user only sees voucher types relevant to the active company.
+  // Rows that end up with zero buttons (e.g. an RD-purchase party in ISP
+  // mode) are skipped entirely. Kind headers with zero visible rows are
+  // also skipped.
+  const currentCo = (typeof getCurrentLogoCode === 'function')
+    ? String(getCurrentLogoCode() || 'isp').toLowerCase()
+    : 'isp';
+
   for(const kind of ['sales','rd_purchase','urd_purchase']){
     const arr=byKind[kind];if(!arr||arr.length===0)continue;
+    const allTypes=TALLY_PV_TYPES_BY_KIND[kind]||[];
+    // Filter buttons by current mode. If no buttons survive for THIS kind,
+    // skip the entire group — there's nothing actionable here.
+    const types=allTypes.filter(t => String(t.co).toLowerCase() === currentCo);
+    if (types.length === 0) continue;
     const co=TALLY_PARTY_KIND_CO[kind]||'isp';
     html+=`<div style="padding:6px 12px;background:${TALLY_PARTY_KIND_BG[kind]};font-size:11px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px">${TALLY_PARTY_KIND_LABEL[kind]} · ${arr.length}</div>`;
-    const types=TALLY_PV_TYPES_BY_KIND[kind]||[];
     for(const p of arr){
       const safeName=(p.name||'').replace(/'/g,"\\'");
       let btns='';
