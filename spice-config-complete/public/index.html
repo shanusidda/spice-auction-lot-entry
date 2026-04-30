@@ -2066,7 +2066,7 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
         </h3>
         <div class="tally-section-body">
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px">
-          <div style="padding:14px;border:1px solid var(--border);border-radius:10px;background:#fff">
+          <div data-tally-co="isp" style="padding:14px;border:1px solid var(--border);border-radius:10px;background:#fff">
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
               <span style="width:32px;height:32px;border-radius:8px;background:var(--green-bg);display:inline-flex;align-items:center;justify-content:center;font-size:18px">🛒</span>
               <div>
@@ -2081,7 +2081,7 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
             </div>
           </div>
 
-          <div style="padding:14px;border:1px solid var(--border);border-radius:10px;background:#fff">
+          <div data-tally-co="asp" style="padding:14px;border:1px solid var(--border);border-radius:10px;background:#fff">
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
               <span style="width:32px;height:32px;border-radius:8px;background:var(--spice-saffron-lt);display:inline-flex;align-items:center;justify-content:center;font-size:18px">🏢</span>
               <div>
@@ -2096,7 +2096,7 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
             </div>
           </div>
 
-          <div style="padding:14px;border:1px solid var(--border);border-radius:10px;background:#fff">
+          <div data-tally-co="asp" style="padding:14px;border:1px solid var(--border);border-radius:10px;background:#fff">
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
               <span style="width:32px;height:32px;border-radius:8px;background:var(--spice-cardamom-lt);display:inline-flex;align-items:center;justify-content:center;font-size:18px">🌾</span>
               <div>
@@ -2111,7 +2111,7 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
             </div>
           </div>
 
-          <div style="padding:14px;border:1px dashed var(--border);border-radius:10px;background:var(--bg)">
+          <div data-tally-keep="1" style="padding:14px;border:1px dashed var(--border);border-radius:10px;background:var(--bg)">
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
               <span style="width:32px;height:32px;border-radius:8px;background:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:18px">📦</span>
               <div>
@@ -2150,9 +2150,9 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
             <div style="flex:1;min-width:160px"><label style="font-size:11px;color:var(--text2);font-weight:600">Filter by kind</label>
               <select id="tally-party-kind" onchange="renderTallyPartyList()" style="width:100%;padding:7px;border:1px solid var(--border);border-radius:6px;font-size:13px">
                 <option value="">All kinds</option>
-                <option value="sales">Sales (buyer)</option>
-                <option value="rd_purchase">RD Purchase (dealer)</option>
-                <option value="urd_purchase">URD Purchase (agriculturist)</option>
+                <option value="sales" data-tally-co="isp">Sales (buyer)</option>
+                <option value="rd_purchase" data-tally-co="asp">RD Purchase (dealer)</option>
+                <option value="urd_purchase" data-tally-co="asp">URD Purchase (agriculturist)</option>
               </select>
             </div>
             <button class="btn btn-a" onclick="loadTallyParties()" style="padding:7px 14px;font-size:12px">Refresh List</button>
@@ -2184,9 +2184,9 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
             <div style="flex:1;min-width:160px"><label style="font-size:11px;color:var(--text2);font-weight:600">Filter by kind</label>
               <select id="tally-pv-kind" onchange="renderTallyPartyVoucherList()" style="width:100%;padding:7px;border:1px solid var(--border);border-radius:6px;font-size:13px">
                 <option value="">All kinds</option>
-                <option value="sales">Sales (buyer)</option>
-                <option value="rd_purchase">RD Purchase (dealer)</option>
-                <option value="urd_purchase">URD Purchase (agriculturist)</option>
+                <option value="sales" data-tally-co="isp">Sales (buyer)</option>
+                <option value="rd_purchase" data-tally-co="asp">RD Purchase (dealer)</option>
+                <option value="urd_purchase" data-tally-co="asp">URD Purchase (agriculturist)</option>
               </select>
             </div>
             <button class="btn btn-a" onclick="loadTallyParties()" style="padding:7px 14px;font-size:12px">Refresh List</button>
@@ -2206,7 +2206,7 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
         </h3>
         <div class="tally-section-body">
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px">
-          <div style="padding:14px;border:1px solid var(--border);border-radius:10px;background:#fff">
+          <div data-tally-co="isp" style="padding:14px;border:1px solid var(--border);border-radius:10px;background:#fff">
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
               <span style="width:32px;height:32px;border-radius:8px;background:var(--green-bg);display:inline-flex;align-items:center;justify-content:center;font-size:18px">💰</span>
               <div>
@@ -2221,7 +2221,7 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
             </div>
           </div>
 
-          <div style="padding:14px;border:1px solid var(--border);border-radius:10px;background:#fff">
+          <div data-tally-co="asp" style="padding:14px;border:1px solid var(--border);border-radius:10px;background:#fff">
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
               <span style="width:32px;height:32px;border-radius:8px;background:#FEF3C7;display:inline-flex;align-items:center;justify-content:center;font-size:18px">🔁</span>
               <div>
@@ -2236,7 +2236,7 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
             </div>
           </div>
 
-          <div style="padding:14px;border:1px solid var(--border);border-radius:10px;background:#fff">
+          <div data-tally-co="asp" style="padding:14px;border:1px solid var(--border);border-radius:10px;background:#fff">
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
               <span style="width:32px;height:32px;border-radius:8px;background:var(--spice-saffron-lt);display:inline-flex;align-items:center;justify-content:center;font-size:18px">📥</span>
               <div>
@@ -2251,7 +2251,7 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
             </div>
           </div>
 
-          <div style="padding:14px;border:1px solid var(--border);border-radius:10px;background:#fff">
+          <div data-tally-co="asp" style="padding:14px;border:1px solid var(--border);border-radius:10px;background:#fff">
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
               <span style="width:32px;height:32px;border-radius:8px;background:var(--spice-cardamom-lt);display:inline-flex;align-items:center;justify-content:center;font-size:18px">🌾</span>
               <div>
@@ -2266,7 +2266,7 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
             </div>
           </div>
 
-          <div style="padding:14px;border:1px solid var(--border);border-radius:10px;background:#fff">
+          <div data-tally-co="isp" style="padding:14px;border:1px solid var(--border);border-radius:10px;background:#fff">
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
               <span style="width:32px;height:32px;border-radius:8px;background:#FCEBEB;display:inline-flex;align-items:center;justify-content:center;font-size:18px">📝</span>
               <div>
@@ -4274,6 +4274,9 @@ function applyLogoBadge(){
   // Purchase" button on the Sales tab) gets a visibility refresh here so
   // there's a single place that needs to fire on logo/state changes.
   applyAspContextVisibility();
+  // Tally tab — hide off-mode (ISP/ASP) widgets so dad only sees what
+  // applies to the active company.
+  applyTallyCompanyVisibility();
 }
 async function loadSettings(){
   const root=document.getElementById('settings-root');
@@ -4385,6 +4388,57 @@ function applyAspContextVisibility(){
   const state = String(getCurrentBusinessState() || '').toUpperCase();
   const isASP = (mode === 'e-Trade' && state === 'KERALA');
   btn.style.display = isASP ? '' : 'none';
+}
+
+// Hide the off-mode widgets in the To Tally tab. When the active company
+// is ISP (Tamil Nadu / non-Kerala), hide cards tagged data-tally-co="asp"
+// and vice versa. Cards marked data-tally-keep="1" (e.g. the bulk "All
+// Ledgers" card) are always shown — they're not exclusive to one company.
+//
+// Also filters the Single Party kind dropdowns so the user doesn't see
+// off-mode options. The widget itself stays visible (so they can flip
+// to "All kinds" if they really need a one-off cross-company action),
+// but the default selection moves to the active mode's primary kind.
+function applyTallyCompanyVisibility(){
+  const co = (typeof getCurrentLogoCode === 'function')
+    ? String(getCurrentLogoCode() || 'isp').toLowerCase()
+    : 'isp';
+
+  // Cards
+  document.querySelectorAll('[data-tally-co]').forEach(el => {
+    if (el.dataset.tallyKeep === '1') { el.style.display = ''; return; }
+    // <option> elements use the same attribute; their hide rule differs
+    // (option visibility doesn't always honor display:none in some
+    // browsers — we set `hidden` and `disabled` to be robust).
+    if (el.tagName === 'OPTION') return;
+    const tag = String(el.dataset.tallyCo || '').toLowerCase();
+    el.style.display = (tag === co) ? '' : 'none';
+  });
+
+  // Filter <option> entries inside the kind dropdowns + reset selection
+  // if the currently-selected option is now hidden.
+  for (const selId of ['tally-party-kind', 'tally-pv-kind']) {
+    const sel = document.getElementById(selId);
+    if (!sel) continue;
+    let needReset = false;
+    for (const opt of sel.options) {
+      const tag = String(opt.dataset.tallyCo || '').toLowerCase();
+      if (!tag) { opt.hidden = false; opt.disabled = false; continue; }
+      const hide = tag !== co;
+      opt.hidden = hide;
+      opt.disabled = hide;
+      if (hide && opt.selected) needReset = true;
+    }
+    if (needReset) {
+      // Pick the first non-hidden option for the active company
+      const firstVisible = Array.from(sel.options).find(o => !o.hidden);
+      if (firstVisible) {
+        sel.value = firstVisible.value;
+        // Trigger the onchange handler so the list re-renders
+        sel.dispatchEvent(new Event('change'));
+      }
+    }
+  }
 }
 
 function isFieldHiddenByMode(fieldKey){
@@ -7499,6 +7553,10 @@ const TALLY_TYPES=Object.keys(TALLY_LABELS);
 const TALLY_LEDGER_TYPES=['ledger_sales','ledger_rd_purchase','ledger_urd_purchase','ledger'];
 function loadTallyAuctions(){
   fillAucSelect('tally-auction');
+  // Hide off-mode (ISP/ASP) widgets based on the current business state.
+  // Re-runs every entry to the tab so a state change in another tab is
+  // reflected as soon as the user lands here.
+  applyTallyCompanyVisibility();
   // Clear preview text + party list when auction changes
   const sel=document.getElementById('tally-auction');
   if(sel&&!sel.dataset.tallyBound){
