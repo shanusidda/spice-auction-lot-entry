@@ -7875,12 +7875,14 @@ async function loadInvoiceDistances(){
     if(cnt)cnt.textContent=`${data.count} ISP invoice${data.count===1?'':'s'}`;
     if(data.count===0){list.innerHTML='<div style="padding:14px;color:var(--text3);font-size:12px;text-align:center">No ISP invoices in this auction.</div>';return}
 
-    // Dispatch PIN comes from cfg (sister/ASP location). Without it, the
-    // lookup buttons can't open with a meaningful from-PIN — fall back
-    // to the buyer PIN alone in the URL hint.
+    // Dispatch PIN — pulled from settings if available, with the same
+    // hardcoded fallback the voucher generator uses (Nedumkandam 685553,
+    // ASP's home town). Empty `_sdata` shouldn't disable the lookup
+    // buttons — the NIC page is captcha-gated so the URL takes no
+    // params anyway, and Maps still works with any one valid PIN.
     const fromPin = (window._sdata?.tally?.find(f=>f.key==='tally_dispatch_pin')?.value)
                   || (window._sdata?.sister?.find(f=>f.key==='s_pin')?.value)
-                  || '';
+                  || '685553';
 
     let html='<div style="display:grid;grid-template-columns:60px 1fr 80px 220px;gap:0;font-size:12px">';
     // Header
@@ -7896,14 +7898,16 @@ async function loadInvoiceDistances(){
       html+=`<div style="${cellBg};font-family:monospace;font-weight:700;color:var(--spice-cardamom-dk)">${esc(inv.invo)}</div>`;
       html+=`<div style="${cellBg};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(inv.buyer1||inv.buyer)} <span style="color:var(--text3);font-family:monospace">${esc(buyerPin||'(no pin)')}</span></div>`;
       html+=`<div style="${cellBg};text-align:right;font-family:monospace;color:${km?'var(--green)':'var(--text3)'}">${km||'—'}</div>`;
-      // Quick-link buttons — disabled when buyer PIN is missing
-      const lookupDisabled=!buyerPin||!fromPin;
-      const nicBtn=lookupDisabled
-        ? `<button class="btn-sm" disabled title="Need both dispatch PIN (Settings) and buyer PIN" style="padding:3px 7px;font-size:10px;opacity:.4;cursor:not-allowed">NIC</button>`
-        : `<button class="btn-sm" onclick="openNicDistance('${esc(fromPin)}','${esc(buyerPin)}')" title="Open NIC Pin-to-Pin Distance Search in new tab" style="padding:3px 7px;font-size:10px;background:var(--green);color:#fff;border-color:var(--green)">NIC</button>`;
-      const mapsBtn=lookupDisabled
-        ? `<button class="btn-sm" disabled title="Need both dispatch PIN (Settings) and buyer PIN" style="padding:3px 7px;font-size:10px;opacity:.4;cursor:not-allowed">Maps</button>`
-        : `<button class="btn-sm" onclick="openMapsDistance('${esc(fromPin)}','${esc(buyerPin)}')" title="Open Google Maps directions in new tab" style="padding:3px 7px;font-size:10px">Maps</button>`;
+      // NIC button is always active — its URL takes no params, the user
+      // types the PINs into the captcha form. The toast reminds them
+      // which two PINs to use, with a "(no pin)" fallback if buyerPin
+      // is missing (uncommon — most invoices have a buyer PIN). The
+      // Maps button needs at least one valid PIN to plot a route; falls
+      // back to "search for the buyer's town" if buyerPin is missing.
+      const nicBtn=`<button class="btn-sm" onclick="openNicDistance('${esc(fromPin)}','${esc(buyerPin||'(unknown)')}')" title="Open NIC Pin-to-Pin Distance Search in new tab — captcha-gated, paste the two PINs there" style="padding:3px 7px;font-size:10px;background:var(--green);color:#fff;border-color:var(--green)">NIC</button>`;
+      const mapsBtn=buyerPin
+        ? `<button class="btn-sm" onclick="openMapsDistance('${esc(fromPin)}','${esc(buyerPin)}')" title="Open Google Maps directions in new tab" style="padding:3px 7px;font-size:10px">Maps</button>`
+        : `<button class="btn-sm" disabled title="Buyer PIN missing — fix the buyer record first" style="padding:3px 7px;font-size:10px;opacity:.4;cursor:not-allowed">Maps</button>`;
       html+=`<div style="padding:5px 8px;border-bottom:1px solid var(--border);background:#fff;text-align:center;display:flex;gap:4px;align-items:center;justify-content:flex-end">
         ${nicBtn}
         ${mapsBtn}
