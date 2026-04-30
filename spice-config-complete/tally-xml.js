@@ -1184,12 +1184,24 @@ function generRDPurchaseXML(rows, cfg, opts = {}) {
     const state      = xe(findState(partyGstin));
     const isIntra    = String(partyGstin).slice(0, 2) === String(intra);
     const rates      = rateDetails(cfgNum(cfg, 'gst_goods', 5));
-    // RD vouchers always go to ASP, so prefix is always ASP/, e.g. ASP/P-1/2026-27
-    const voucherRef = `${ainvPrefix}P-${taxNm}/${season}`;
+    // Voucher number / reference = <tradeno>/<lotno>/<season>. Each
+    // voucher groups every lot for a dealer in this trade, but the
+    // voucher number itself is keyed off the FIRST (lowest) lot — Tally
+    // requires a unique voucher number per voucher and this matches the
+    // existing per-lot bill-allocation naming below.
+    const firstLot   = (Array.isArray(row.lots) && row.lots.length)
+      ? String(row.lots[0].lot || '').trim()
+      : '';
+    const voucherRef = firstLot
+      ? `${row.ano}/${firstLot}/${season}`
+      : `${ainvPrefix}P-${taxNm}/${season}`;  // fallback when no lots
 
     const startVoucher = `<VOUCHER VCHTYPE="Purchase" ACTION="Create" OBJVIEW="Invoice Voucher View">`;
     const total       = r2(row.total);
-    const totalRound  = tlyrnd ? r0(total) : total;
+    // Prefer the builder-supplied rounded total (matches purchases.total
+    // exactly so Tally's audit trail reconciles). Falls back to a fresh
+    // round when the row doesn't carry it.
+    const totalRound  = tlyrnd ? r0(row.totalRounded != null ? row.totalRounded : total) : total;
     const rnd         = tlyrnd ? r2(totalRound - total) : 0;
     const cgst        = r2(row.cgst || 0);
     const sgst        = r2(row.sgst || 0);
@@ -1914,7 +1926,7 @@ function buildSalesAspRows(db, auctionId, cfg) {
   // avoids surprises when asp_invo was cleared/changed by a regen.
   const lotsStmt = db.prepare(`
     SELECT lot_no AS lot, bags AS bag,
-           CASE WHEN asp_puramt > 0 THEN asp_pqty   ELSE pqty   END AS asp_qty,
+           qty AS asp_qty,
            CASE WHEN asp_puramt > 0 THEN asp_prate  ELSE prate  END AS asp_rate,
            CASE WHEN asp_puramt > 0 THEN asp_puramt ELSE puramt END AS asp_amount
     FROM lots
@@ -2113,8 +2125,12 @@ function buildRDPurchaseRows(db, auctionId, cfg) {
       bilamttot: r2(bilamttot || p.amount),
       cgst: p.cgst, sgst: p.sgst, igst: p.igst,
       tdsamt: p.tds,
-      total: p.total,
-      totalRounded: r0(p.total),
+      // total = PRE-round grand total (= rounded total minus the stored
+      // round-off adjustment). The generator computes rnd = totalRounded
+      // - total, so if both are equal the Round Off ledger gets a zero
+      // amount and may be skipped. Reading p.total directly broke that.
+      total: r2((p.total || 0) - (p.rund || 0)),
+      totalRounded: r0(p.total || 0),
       voucherNum: p.invo || String(p.id),
     };
   });
