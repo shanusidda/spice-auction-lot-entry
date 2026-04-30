@@ -2300,113 +2300,35 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
         </div>
         </div><!-- /tally-sec-vouchers -->
 
-        <!-- PIN Distances — for e-way bill <DISTANCE> auto-fill -->
-        <div class="tally-section is-collapsed" id="tally-sec-pin-distances">
-        <h3 class="tally-section-head" onclick="toggleTallySection('tally-sec-pin-distances')">
+        <!-- E-way bill <DISTANCE> — Per-invoice manual override.
+             The user looks up the actual distance on the NIC portal's free
+             Pin-to-Pin Distance Search page (or Google Maps for a sanity
+             check) and types it in here. The value lands on the next ISP
+             sales voucher's <DISTANCE> field verbatim. -->
+        <div class="tally-section is-collapsed" id="tally-sec-distance">
+        <h3 class="tally-section-head" onclick="toggleTallySection('tally-sec-distance')">
           <span class="tally-section-chev">▼</span>
-          <span>🗺️ PIN Distances</span>
-          <span style="font-weight:400;font-size:11px;color:var(--text3);margin-left:auto">For e-way bill auto-fill</span>
+          <span>🗺️ E-way Bill Distance</span>
+          <span style="font-weight:400;font-size:11px;color:var(--text3);margin-left:auto">Per-invoice override</span>
         </h3>
         <div class="tally-section-body">
         <div style="padding:14px;border:1px solid var(--border);border-radius:10px;background:#fff">
           <div style="font-size:11px;color:var(--text3);margin-bottom:10px;line-height:1.5">
-            ISP sales vouchers carry a <code style="background:var(--bg);padding:1px 4px;border-radius:3px">&lt;DISTANCE&gt;</code> field used by the e-way bill portal. This section auto-fills it via haversine × multiplier between dispatch PIN and consignee PIN. The result is cached and persisted on each invoice — manual override possible by editing <code style="background:var(--bg);padding:1px 4px;border-radius:3px">invoices.distance_km</code> directly. <strong>Note:</strong> for hilly Western Ghats routes, the haversine estimate may under-shoot real road distance by 30–50%. Tune the multiplier in <a href="javascript:go('settings');setTimeout(()=>selectCat('tally'),100)" style="color:var(--green)">Settings → To Tally</a> or override individual invoices.
+            ISP sales vouchers carry a <code style="background:var(--bg);padding:1px 4px;border-radius:3px">&lt;DISTANCE&gt;</code> field used by the e-way bill portal. Use the <strong>NIC Portal</strong> button on each row to open the official Pin-to-Pin Distance Search page (free, no login on the search page itself) — copy the result, paste here, click Save. The value sticks per invoice; once entered, regenerating the voucher uses your saved value as-is. Use <strong>Maps</strong> to sanity-check via Google Maps.
           </div>
 
-          <!-- Tabs across the top -->
-          <div class="tally-viewbar" style="margin-bottom:8px">
-            <button class="btn-sm is-active" onclick="pinDistTab('known',this)">Known PINs</button>
-            <button class="btn-sm" onclick="pinDistTab('missing',this)">Missing PINs</button>
-            <button class="btn-sm" onclick="pinDistTab('cache',this)">Cached Distances</button>
-            <button class="btn-sm" onclick="pinDistTab('invoices',this)">Per-invoice Override</button>
-            <button class="btn-sm" onclick="pinDistTab('add',this)">Add / Import</button>
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+            <button class="btn btn-a" onclick="loadInvoiceDistances()" style="padding:6px 12px;font-size:12px">Refresh</button>
+            <label style="font-size:11px;color:var(--text2);font-weight:600">Auction:</label>
+            <select id="dist-inv-auction" style="padding:5px;border:1px solid var(--border);border-radius:4px;font-size:12px"></select>
+            <span id="dist-inv-count" style="font-size:11px;color:var(--text3);margin-left:auto"></span>
           </div>
-
-          <!-- Known PINs tab -->
-          <div id="pinDist-pane-known" class="pinDist-pane">
-            <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
-              <button class="btn btn-a" onclick="loadKnownPins()" style="padding:6px 12px;font-size:12px">Refresh</button>
-              <span id="pinDist-known-count" style="font-size:11px;color:var(--text3)"></span>
-            </div>
-            <div id="pinDist-known-list" style="max-height:340px;overflow:auto;border:1px solid var(--border);border-radius:6px;background:var(--bg)">
-              <div style="padding:14px;color:var(--text3);font-size:12px;text-align:center">Click <strong>Refresh</strong> to load known PINs.</div>
-            </div>
-          </div>
-
-          <!-- Missing PINs tab -->
-          <div id="pinDist-pane-missing" class="pinDist-pane" style="display:none">
-            <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
-              <button class="btn btn-a" onclick="loadMissingPins()" style="padding:6px 12px;font-size:12px">Refresh</button>
-              <label style="font-size:11px;color:var(--text2);font-weight:600">Auction:</label>
-              <select id="pinDist-missing-auction" style="padding:5px;border:1px solid var(--border);border-radius:4px;font-size:12px"></select>
-              <span id="pinDist-missing-count" style="font-size:11px;color:var(--text3);margin-left:auto"></span>
-            </div>
-            <div style="font-size:11px;color:var(--text3);margin-bottom:6px">PINs found in your invoices/lots that don't have coordinates yet. Add them below to enable auto-distance.</div>
-            <div id="pinDist-missing-list" style="max-height:340px;overflow:auto;border:1px solid var(--border);border-radius:6px;background:var(--bg)">
-              <div style="padding:14px;color:var(--text3);font-size:12px;text-align:center">Pick an auction (or leave blank for "all") and click <strong>Refresh</strong>.</div>
-            </div>
-          </div>
-
-          <!-- Cached Distances tab -->
-          <div id="pinDist-pane-cache" class="pinDist-pane" style="display:none">
-            <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
-              <button class="btn btn-a" onclick="loadCachedDistances()" style="padding:6px 12px;font-size:12px">Refresh</button>
-              <button class="btn" onclick="clearDistanceCache()" style="padding:6px 12px;font-size:12px;background:#FEF3C7;color:#B45309;border:1px solid #F59E0B">Clear Cache</button>
-              <span id="pinDist-cache-count" style="font-size:11px;color:var(--text3);margin-left:auto"></span>
-            </div>
-            <div style="font-size:11px;color:var(--text3);margin-bottom:6px">Computed PIN→PIN distances. Clearing the cache forces a full recompute on the next voucher export — useful after changing the multiplier or fixing PIN coordinates.</div>
-            <div id="pinDist-cache-list" style="max-height:340px;overflow:auto;border:1px solid var(--border);border-radius:6px;background:var(--bg)">
-              <div style="padding:14px;color:var(--text3);font-size:12px;text-align:center">Click <strong>Refresh</strong> to load.</div>
-            </div>
-          </div>
-
-          <!-- Per-invoice override tab -->
-          <div id="pinDist-pane-invoices" class="pinDist-pane" style="display:none">
-            <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
-              <button class="btn btn-a" onclick="loadInvoiceDistances()" style="padding:6px 12px;font-size:12px">Refresh</button>
-              <label style="font-size:11px;color:var(--text2);font-weight:600">Auction:</label>
-              <select id="pinDist-inv-auction" style="padding:5px;border:1px solid var(--border);border-radius:4px;font-size:12px"></select>
-              <span id="pinDist-inv-count" style="font-size:11px;color:var(--text3);margin-left:auto"></span>
-            </div>
-            <div style="font-size:11px;color:var(--text3);margin-bottom:6px">Set the e-way bill distance per ISP invoice. Manual values stick — they override the auto-compute on every regen. Clear the field (or enter blank) to revert to auto.</div>
-            <div id="pinDist-inv-list" style="max-height:380px;overflow:auto;border:1px solid var(--border);border-radius:6px;background:var(--bg)">
-              <div style="padding:14px;color:var(--text3);font-size:12px;text-align:center">Pick an auction and click <strong>Refresh</strong>.</div>
-            </div>
-          </div>
-
-          <!-- Add / Import tab -->
-          <div id="pinDist-pane-add" class="pinDist-pane" style="display:none">
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
-              <div style="padding:12px;border:1px solid var(--border);border-radius:6px;background:var(--bg)">
-                <div style="font-weight:700;font-size:13px;margin-bottom:8px">Add a single PIN</div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
-                  <div><label style="font-size:11px;color:var(--text2);font-weight:600">PIN (6 digits)</label>
-                    <input type="text" id="pinAdd-pin" placeholder="685553" maxlength="6" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:4px;font-size:13px"></div>
-                  <div><label style="font-size:11px;color:var(--text2);font-weight:600">Place</label>
-                    <input type="text" id="pinAdd-place" placeholder="NEDUMKANDAM" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:4px;font-size:13px"></div>
-                  <div><label style="font-size:11px;color:var(--text2);font-weight:600">Latitude</label>
-                    <input type="number" step="0.000001" id="pinAdd-lat" placeholder="9.8350" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:4px;font-size:13px"></div>
-                  <div><label style="font-size:11px;color:var(--text2);font-weight:600">Longitude</label>
-                    <input type="number" step="0.000001" id="pinAdd-lon" placeholder="77.1486" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:4px;font-size:13px"></div>
-                  <div style="grid-column:1/-1"><label style="font-size:11px;color:var(--text2);font-weight:600">State</label>
-                    <input type="text" id="pinAdd-state" placeholder="Kerala" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:4px;font-size:13px"></div>
-                </div>
-                <button class="btn btn-g" onclick="addPincode()" style="margin-top:8px;padding:7px 14px;font-size:12px">Save PIN</button>
-                <div style="font-size:11px;color:var(--text3);margin-top:6px">Tip: get coordinates from Google Maps — right-click any town centroid → click the lat/lon to copy.</div>
-              </div>
-
-              <div style="padding:12px;border:1px solid var(--border);border-radius:6px;background:var(--bg)">
-                <div style="font-weight:700;font-size:13px;margin-bottom:8px">Bulk paste (CSV)</div>
-                <div style="font-size:11px;color:var(--text3);margin-bottom:6px">One per line: <code style="background:#fff;padding:1px 4px;border-radius:3px">pin,lat,lon,place,state</code>. Lines starting with <code style="background:#fff;padding:1px 4px;border-radius:3px">#</code> are ignored.</div>
-                <textarea id="pinImport-text" rows="8" placeholder="685553,9.8350,77.1486,NEDUMKANDAM,Kerala
-625513,10.0103,77.3517,BODINAYAKANUR,Tamil Nadu" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:monospace;resize:vertical"></textarea>
-                <button class="btn btn-g" onclick="importPincodes()" style="margin-top:8px;padding:7px 14px;font-size:12px">Import</button>
-              </div>
-            </div>
+          <div id="dist-inv-list" style="max-height:420px;overflow:auto;border:1px solid var(--border);border-radius:6px;background:var(--bg)">
+            <div style="padding:14px;color:var(--text3);font-size:12px;text-align:center">Pick an auction and click <strong>Refresh</strong>.</div>
           </div>
         </div>
         </div>
-        </div><!-- /tally-sec-pin-distances -->
+        </div><!-- /tally-sec-distance -->
 
         <div style="margin-top:16px;padding:12px 14px;background:var(--spice-saffron-lt);border-radius:8px;font-size:12px;color:var(--text2);line-height:1.6">
           <strong style="color:var(--text)">How to import into Tally:</strong>
@@ -7899,151 +7821,48 @@ async function tallyDownloadPartyVoucher(type,partyName){
   });
 }
 
-// ── PIN Distances UI ────────────────────────────────────────────
-// Tab switcher between Known/Missing/Cache/Add panes inside the
-// 🗺️ PIN Distances collapsible section.
-function pinDistTab(name,btn){
-  document.querySelectorAll('.pinDist-pane').forEach(p=>p.style.display='none');
-  const pane=document.getElementById('pinDist-pane-'+name);
-  if(pane)pane.style.display='';
-  document.querySelectorAll('.tally-section .tally-viewbar .btn-sm').forEach(b=>b.classList.remove('is-active'));
-  if(btn)btn.classList.add('is-active');
-  // Auto-load on first switch (lazy)
-  if(name==='known'&&!document.getElementById('pinDist-known-list').dataset.loaded)loadKnownPins();
-  if(name==='missing'){
-    syncPinDistAuctionSelect('pinDist-missing-auction');
-    if(!document.getElementById('pinDist-missing-list').dataset.loaded)loadMissingPins();
-  }
-  if(name==='cache'&&!document.getElementById('pinDist-cache-list').dataset.loaded)loadCachedDistances();
-  if(name==='invoices'){
-    syncPinDistAuctionSelect('pinDist-inv-auction');
-    if(!document.getElementById('pinDist-inv-list').dataset.loaded)loadInvoiceDistances();
-  }
+// ── E-way bill DISTANCE — Per-invoice override UI ──────────────
+// One pane: list ISP invoices, edit invoices.distance_km inline. Each
+// row gets quick-link buttons to look up the actual distance:
+//   • NIC Portal — opens the official Pin-to-Pin Distance Search page
+//                  (free, captcha-gated; no API access needed). Copy the
+//                  shown distance, paste into our input, click Save.
+//   • Maps        — opens Google Maps directions between the two PINs
+//                  for a visual sanity-check.
+//
+// We removed the haversine auto-compute (and pincodes/pin_distances
+// tables) entirely — too rough for Western Ghats routes. Manual lookup
+// once per route is the reliable path.
+
+const NIC_DISTANCE_URL = 'https://ewaybillgst.gov.in/Others/P2PDistance.aspx';
+
+function openNicDistance(fromPin, toPin){
+  // The NIC page doesn't accept query params — it's a captcha-gated
+  // form. We open the page in a new tab and show a toast reminding the
+  // user which two PINs to enter. Copy/paste from there into our box.
+  window.open(NIC_DISTANCE_URL, '_blank', 'noopener');
+  toast(`Enter ${fromPin} → ${toPin} on the NIC page`);
 }
 
-// Mirror the main auction selector into a section-local dropdown so the
-// PIN Distances panes can scope their data without forcing the user to
-// pick again. Re-runs when the source list changes (auction added).
-function syncPinDistAuctionSelect(targetId){
-  const sel=document.getElementById(targetId);
-  const main=document.getElementById('tally-auction');
-  if(!sel||!main)return;
-  // Always rebuild — auctions list may have changed since last open
-  const want=Array.from(main.options).map(o=>`<option value="${esc(o.value)}">${esc(o.textContent)}</option>`).join('');
-  const allowBlank=targetId==='pinDist-missing-auction';
-  const options=(allowBlank?'<option value="">— All auctions —</option>':'')+want;
-  if(sel.innerHTML!==options)sel.innerHTML=options;
-  if(main.value)sel.value=main.value;
-}
-
-async function loadKnownPins(){
-  const list=document.getElementById('pinDist-known-list');
-  const cnt=document.getElementById('pinDist-known-count');
-  list.innerHTML='<div style="padding:14px;color:var(--text3);font-size:12px;text-align:center">Loading…</div>';
-  try{
-    const r=await fetch(B+'/api/pincodes',{headers:{'Authorization':'Bearer '+T}});
-    if(!r.ok){list.innerHTML='<div style="padding:14px;color:#C62828;font-size:12px;text-align:center">Failed to load</div>';return}
-    const data=await r.json();
-    if(cnt)cnt.textContent=`${data.count} known PIN${data.count===1?'':'s'}`;
-    if(data.count===0){list.innerHTML='<div style="padding:14px;color:var(--text3);font-size:12px;text-align:center">No PINs yet — add some via the Add tab.</div>';return}
-    let lastState='';let html='';
-    for(const p of data.pincodes){
-      if(p.state!==lastState){
-        html+=`<div style="padding:6px 12px;background:var(--bg);font-size:11px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px;border-top:1px solid var(--border)">${esc(p.state||'(no state)')}</div>`;
-        lastState=p.state;
-      }
-      const safePin=String(p.pin).replace(/'/g,"\\'");
-      html+=`<div style="padding:7px 12px;border-bottom:1px solid var(--border);background:#fff;display:flex;align-items:center;gap:8px;font-size:12px">
-        <div style="font-family:monospace;font-weight:700;color:var(--green);min-width:60px">${esc(p.pin)}</div>
-        <div style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.place||'')}</div>
-        <div style="font-family:monospace;font-size:11px;color:var(--text3);white-space:nowrap">${p.lat.toFixed(4)}, ${p.lon.toFixed(4)}</div>
-        <span style="font-size:10px;color:var(--text3);background:var(--bg);padding:1px 6px;border-radius:8px">${esc(p.source||'')}</span>
-        <button class="btn-sm" onclick="editPin('${safePin}',${p.lat},${p.lon},'${esc(p.place||'').replace(/'/g,"\\'")}','${esc(p.state||'').replace(/'/g,"\\'")}')" style="padding:3px 8px;font-size:10px">Edit</button>
-      </div>`;
-    }
-    list.innerHTML=html;
-    list.dataset.loaded='1';
-  }catch(e){list.innerHTML=`<div style="padding:14px;color:#C62828;font-size:12px;text-align:center">${esc(e.message)}</div>`}
-}
-
-function editPin(pin,lat,lon,place,state){
-  pinDistTab('add',document.querySelector('.tally-section #tally-sec-pin-distances .tally-viewbar .btn-sm:last-child')||document.querySelector('[onclick*="pinDistTab(\'add\'"]'));
-  document.getElementById('pinAdd-pin').value=pin;
-  document.getElementById('pinAdd-lat').value=lat;
-  document.getElementById('pinAdd-lon').value=lon;
-  document.getElementById('pinAdd-place').value=place;
-  document.getElementById('pinAdd-state').value=state;
-  document.getElementById('pinAdd-pin').focus();
-}
-
-async function loadMissingPins(){
-  const list=document.getElementById('pinDist-missing-list');
-  const cnt=document.getElementById('pinDist-missing-count');
-  const aid=document.getElementById('pinDist-missing-auction')?.value||'';
-  list.innerHTML='<div style="padding:14px;color:var(--text3);font-size:12px;text-align:center">Loading…</div>';
-  try{
-    const url=B+'/api/pincodes/missing'+(aid?`?auctionId=${aid}`:'');
-    const r=await fetch(url,{headers:{'Authorization':'Bearer '+T}});
-    if(!r.ok){list.innerHTML='<div style="padding:14px;color:#C62828;font-size:12px;text-align:center">Failed to load</div>';return}
-    const data=await r.json();
-    if(cnt)cnt.textContent=`${data.count} missing`;
-    if(data.count===0){list.innerHTML='<div style="padding:14px;color:var(--green);font-size:12px;text-align:center">✓ All PINs in this scope have coordinates.</div>';return}
-    let html='';
-    for(const m of data.missing){
-      const safePin=String(m.pin).replace(/'/g,"\\'");
-      const safePlace=esc(m.place||'').replace(/'/g,"\\'");
-      const safeState=esc(m.state||'').replace(/'/g,"\\'");
-      html+=`<div style="padding:7px 12px;border-bottom:1px solid var(--border);background:#fff;display:flex;align-items:center;gap:8px;font-size:12px">
-        <div style="font-family:monospace;font-weight:700;color:#B45309;min-width:60px">${esc(m.pin)}</div>
-        <div style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(m.place||'(unknown)')} <span style="color:var(--text3);font-size:11px">· ${esc(m.state||'')}</span></div>
-        <span style="font-size:10px;color:var(--text3);background:var(--bg);padding:1px 6px;border-radius:8px">${esc(m.kind||'')}</span>
-        <button class="btn-sm" onclick="editPin('${safePin}','','','${safePlace}','${safeState}')" style="padding:3px 8px;font-size:10px">Add coords</button>
-      </div>`;
-    }
-    list.innerHTML=html;
-    list.dataset.loaded='1';
-  }catch(e){list.innerHTML=`<div style="padding:14px;color:#C62828;font-size:12px;text-align:center">${esc(e.message)}</div>`}
-}
-
-async function loadCachedDistances(){
-  const list=document.getElementById('pinDist-cache-list');
-  const cnt=document.getElementById('pinDist-cache-count');
-  list.innerHTML='<div style="padding:14px;color:var(--text3);font-size:12px;text-align:center">Loading…</div>';
-  try{
-    const r=await fetch(B+'/api/pin-distances',{headers:{'Authorization':'Bearer '+T}});
-    if(!r.ok){list.innerHTML='<div style="padding:14px;color:#C62828;font-size:12px;text-align:center">Failed to load</div>';return}
-    const data=await r.json();
-    if(cnt)cnt.textContent=`${data.count} cached`;
-    if(data.count===0){list.innerHTML='<div style="padding:14px;color:var(--text3);font-size:12px;text-align:center">No cached distances yet — generate an ISP sales voucher to populate.</div>';return}
-    let html='';
-    for(const d of data.distances){
-      html+=`<div style="padding:7px 12px;border-bottom:1px solid var(--border);background:#fff;display:flex;align-items:center;gap:8px;font-size:12px">
-        <div style="font-family:monospace;color:var(--text)">${esc(d.from_pin)} → ${esc(d.to_pin)}</div>
-        <div style="flex:1"></div>
-        <div style="font-weight:700;color:var(--green);font-family:monospace">${d.road_km} km</div>
-        <span style="font-size:10px;color:var(--text3);background:var(--bg);padding:1px 6px;border-radius:8px">${esc(d.source||'')}</span>
-      </div>`;
-    }
-    list.innerHTML=html;
-    list.dataset.loaded='1';
-  }catch(e){list.innerHTML=`<div style="padding:14px;color:#C62828;font-size:12px;text-align:center">${esc(e.message)}</div>`}
-}
-
-async function clearDistanceCache(){
-  if(!confirm('Clear all cached PIN distances? They will be recomputed next time vouchers are exported.'))return;
-  try{
-    const r=await fetch(B+'/api/pin-distances',{method:'DELETE',headers:{'Authorization':'Bearer '+T}});
-    if(!r.ok){toast('Failed to clear cache');return}
-    const data=await r.json();
-    toast(`Cleared ${data.cleared} cached distance${data.cleared===1?'':'s'}`);
-    loadCachedDistances();
-  }catch(e){toast(e.message)}
+function openMapsDistance(fromPin, toPin){
+  // Google Maps directions URL: /dir/origin/destination — using PIN
+  // codes works because Maps geocodes them to area centroids.
+  const url = `https://www.google.com/maps/dir/${encodeURIComponent(fromPin+', India')}/${encodeURIComponent(toPin+', India')}`;
+  window.open(url, '_blank', 'noopener');
 }
 
 async function loadInvoiceDistances(){
-  const list=document.getElementById('pinDist-inv-list');
-  const cnt=document.getElementById('pinDist-inv-count');
-  const aid=document.getElementById('pinDist-inv-auction')?.value;
+  const list=document.getElementById('dist-inv-list');
+  const cnt=document.getElementById('dist-inv-count');
+  // Mirror the main auction selector if our local one is empty/stale.
+  const sel=document.getElementById('dist-inv-auction');
+  const main=document.getElementById('tally-auction');
+  if(sel&&main){
+    const want=Array.from(main.options).map(o=>`<option value="${esc(o.value)}">${esc(o.textContent)}</option>`).join('');
+    if(sel.innerHTML!==want)sel.innerHTML=want;
+    if(main.value&&!sel.value)sel.value=main.value;
+  }
+  const aid=sel?.value;
   if(!aid){
     list.innerHTML='<div style="padding:14px;color:var(--text3);font-size:12px;text-align:center">Pick an auction first.</div>';
     return;
@@ -8055,25 +7874,45 @@ async function loadInvoiceDistances(){
     const data=await r.json();
     if(cnt)cnt.textContent=`${data.count} ISP invoice${data.count===1?'':'s'}`;
     if(data.count===0){list.innerHTML='<div style="padding:14px;color:var(--text3);font-size:12px;text-align:center">No ISP invoices in this auction.</div>';return}
-    let html='<div style="display:grid;grid-template-columns:60px 1fr 70px 110px;gap:0;font-size:12px">';
+
+    // Dispatch PIN comes from cfg (sister/ASP location). Without it, the
+    // lookup buttons can't open with a meaningful from-PIN — fall back
+    // to the buyer PIN alone in the URL hint.
+    const fromPin = (window._sdata?.tally?.find(f=>f.key==='tally_dispatch_pin')?.value)
+                  || (window._sdata?.sister?.find(f=>f.key==='s_pin')?.value)
+                  || '';
+
+    let html='<div style="display:grid;grid-template-columns:60px 1fr 80px 220px;gap:0;font-size:12px">';
     // Header
-    html+=`<div style="padding:6px 8px;background:var(--bg);font-weight:700;font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--border)">Inv#</div>`;
-    html+=`<div style="padding:6px 8px;background:var(--bg);font-weight:700;font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--border)">Buyer · PIN</div>`;
-    html+=`<div style="padding:6px 8px;background:var(--bg);font-weight:700;font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--border);text-align:right">Saved km</div>`;
-    html+=`<div style="padding:6px 8px;background:var(--bg);font-weight:700;font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--border);text-align:center">Edit</div>`;
+    const h='padding:6px 8px;background:var(--bg);font-weight:700;font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--border)';
+    html+=`<div style="${h}">Inv#</div>`;
+    html+=`<div style="${h}">Buyer · PIN</div>`;
+    html+=`<div style="${h};text-align:right">Saved km</div>`;
+    html+=`<div style="${h};text-align:center">Lookup &amp; Edit</div>`;
     for(const inv of data.invoices){
       const km=inv.distance_km==null?'':String(inv.distance_km);
-      html+=`<div style="padding:7px 8px;border-bottom:1px solid var(--border);background:#fff;font-family:monospace;font-weight:700;color:var(--spice-cardamom-dk)">${esc(inv.invo)}</div>`;
-      html+=`<div style="padding:7px 8px;border-bottom:1px solid var(--border);background:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(inv.buyer1||inv.buyer)} <span style="color:var(--text3);font-family:monospace">${esc(inv.buyer_pin||'(no pin)')}</span></div>`;
-      html+=`<div style="padding:7px 8px;border-bottom:1px solid var(--border);background:#fff;text-align:right;font-family:monospace;color:${km?'var(--green)':'var(--text3)'}">${km||'—'}</div>`;
-      html+=`<div style="padding:5px 8px;border-bottom:1px solid var(--border);background:#fff;text-align:center;display:flex;gap:4px;align-items:center">
+      const buyerPin=String(inv.buyer_pin||'').trim();
+      const cellBg='padding:7px 8px;border-bottom:1px solid var(--border);background:#fff';
+      html+=`<div style="${cellBg};font-family:monospace;font-weight:700;color:var(--spice-cardamom-dk)">${esc(inv.invo)}</div>`;
+      html+=`<div style="${cellBg};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(inv.buyer1||inv.buyer)} <span style="color:var(--text3);font-family:monospace">${esc(buyerPin||'(no pin)')}</span></div>`;
+      html+=`<div style="${cellBg};text-align:right;font-family:monospace;color:${km?'var(--green)':'var(--text3)'}">${km||'—'}</div>`;
+      // Quick-link buttons — disabled when buyer PIN is missing
+      const lookupDisabled=!buyerPin||!fromPin;
+      const nicBtn=lookupDisabled
+        ? `<button class="btn-sm" disabled title="Need both dispatch PIN (Settings) and buyer PIN" style="padding:3px 7px;font-size:10px;opacity:.4;cursor:not-allowed">NIC</button>`
+        : `<button class="btn-sm" onclick="openNicDistance('${esc(fromPin)}','${esc(buyerPin)}')" title="Open NIC Pin-to-Pin Distance Search in new tab" style="padding:3px 7px;font-size:10px;background:var(--green);color:#fff;border-color:var(--green)">NIC</button>`;
+      const mapsBtn=lookupDisabled
+        ? `<button class="btn-sm" disabled title="Need both dispatch PIN (Settings) and buyer PIN" style="padding:3px 7px;font-size:10px;opacity:.4;cursor:not-allowed">Maps</button>`
+        : `<button class="btn-sm" onclick="openMapsDistance('${esc(fromPin)}','${esc(buyerPin)}')" title="Open Google Maps directions in new tab" style="padding:3px 7px;font-size:10px">Maps</button>`;
+      html+=`<div style="padding:5px 8px;border-bottom:1px solid var(--border);background:#fff;text-align:center;display:flex;gap:4px;align-items:center;justify-content:flex-end">
+        ${nicBtn}
+        ${mapsBtn}
         <input type="number" min="0" max="5000" value="${esc(km)}" id="invDist-${inv.id}" style="width:60px;padding:3px 5px;border:1px solid var(--border);border-radius:3px;font-size:12px;font-family:monospace;text-align:right">
         <button class="btn-sm" onclick="saveInvoiceDistance(${inv.id})" style="padding:3px 7px;font-size:10px">Save</button>
       </div>`;
     }
     html+='</div>';
     list.innerHTML=html;
-    list.dataset.loaded='1';
   }catch(e){list.innerHTML=`<div style="padding:14px;color:#C62828;font-size:12px;text-align:center">${esc(e.message)}</div>`}
 }
 
@@ -8090,56 +7929,8 @@ async function saveInvoiceDistance(id){
     const data=await r.json();
     if(!r.ok){toast(data.error||'Save failed');return}
     toast(v===''?`Cleared distance for invoice ${id}`:`Saved ${v} km for invoice ${id}`);
-    // Refresh just the saved column visually without a full reload
     inp.style.borderColor='var(--green)';
     setTimeout(()=>{inp.style.borderColor='var(--border)'},800);
-  }catch(e){toast(e.message)}
-}
-
-async function addPincode(){
-  const pin=document.getElementById('pinAdd-pin').value.trim();
-  const lat=document.getElementById('pinAdd-lat').value.trim();
-  const lon=document.getElementById('pinAdd-lon').value.trim();
-  const place=document.getElementById('pinAdd-place').value.trim();
-  const state=document.getElementById('pinAdd-state').value.trim();
-  if(!/^\d{6}$/.test(pin)){alert('PIN must be 6 digits');return}
-  if(!lat||!lon){alert('Latitude and longitude are required');return}
-  try{
-    const r=await fetch(B+'/api/pincodes',{
-      method:'POST',
-      headers:{'Authorization':'Bearer '+T,'Content-Type':'application/json'},
-      body:JSON.stringify({pin,lat:Number(lat),lon:Number(lon),place,state}),
-    });
-    const data=await r.json();
-    if(!r.ok){toast(data.error||'Save failed');return}
-    toast(`Saved PIN ${pin}`+(data.cacheCleared?` (cleared ${data.cacheCleared} cached distance${data.cacheCleared===1?'':'s'})`:''));
-    // Clear inputs and reload Known list
-    ['pinAdd-pin','pinAdd-lat','pinAdd-lon','pinAdd-place','pinAdd-state'].forEach(id=>document.getElementById(id).value='');
-    document.getElementById('pinDist-known-list').dataset.loaded='';
-    document.getElementById('pinDist-missing-list').dataset.loaded='';
-  }catch(e){toast(e.message)}
-}
-
-async function importPincodes(){
-  const text=document.getElementById('pinImport-text').value;
-  if(!text.trim()){alert('Paste some CSV first');return}
-  try{
-    const r=await fetch(B+'/api/pincodes/import-text',{
-      method:'POST',
-      headers:{'Authorization':'Bearer '+T,'Content-Type':'application/json'},
-      body:JSON.stringify({text}),
-    });
-    const data=await r.json();
-    if(!r.ok){toast(data.error||'Import failed');return}
-    let msg=`Imported ${data.added} PIN${data.added===1?'':'s'}`;
-    if(data.errors&&data.errors.length)msg+=` · ${data.errors.length} error${data.errors.length===1?'':'s'}`;
-    toast(msg);
-    if(data.errors&&data.errors.length){
-      const list=data.errors.slice(0,8).map(e=>`Line ${e.line}: ${e.error}`).join('\n');
-      alert(`Import errors:\n\n${list}${data.errors.length>8?`\n…and ${data.errors.length-8} more`:''}`);
-    }
-    document.getElementById('pinImport-text').value='';
-    document.getElementById('pinDist-known-list').dataset.loaded='';
   }catch(e){toast(e.message)}
 }
 

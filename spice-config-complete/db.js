@@ -190,36 +190,6 @@ async function initDb() {
     created_at TEXT DEFAULT (datetime('now','localtime'))
   )`);
 
-  // ── PINCODES (geocoded India PIN data — for e-way bill DISTANCE) ──
-  // Each row maps a 6-digit PIN to a (lat, lon) coordinate so we can
-  // compute road distances between dispatch and consignee for the
-  // <DISTANCE> field in ISP sales vouchers. The table is seeded with
-  // a small starter set on first run; users can grow it via the
-  // Settings → Tally → PIN Distances panel.
-  wrapped.exec(`CREATE TABLE IF NOT EXISTS pincodes (
-    pin TEXT PRIMARY KEY,
-    lat REAL NOT NULL,
-    lon REAL NOT NULL,
-    place TEXT DEFAULT '',
-    state TEXT DEFAULT '',
-    source TEXT DEFAULT 'manual',
-    updated_at TEXT DEFAULT (datetime('now','localtime'))
-  )`);
-
-  // ── PIN DISTANCES (cache: from→to → road_km) ──────────────────
-  // Distances are deterministic given two PINs, so we cache them to
-  // avoid re-running the haversine + multiplier on every voucher.
-  // Cache entries can be invalidated by deleting the row (admin UI).
-  // road_km is stored as INTEGER (e-way bill rounds to whole km anyway).
-  wrapped.exec(`CREATE TABLE IF NOT EXISTS pin_distances (
-    from_pin TEXT NOT NULL,
-    to_pin TEXT NOT NULL,
-    road_km INTEGER NOT NULL,
-    source TEXT DEFAULT 'haversine',
-    updated_at TEXT DEFAULT (datetime('now','localtime')),
-    PRIMARY KEY (from_pin, to_pin)
-  )`);
-
   // ── AUCTIONS (trade sessions) ──────────────────────────────
   wrapped.exec(`CREATE TABLE IF NOT EXISTS auctions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -451,12 +421,19 @@ async function initDb() {
     'ALTER TABLE lots ADD COLUMN asp_pqty REAL DEFAULT 0',
     'ALTER TABLE lots ADD COLUMN asp_prate REAL DEFAULT 0',
     'ALTER TABLE lots ADD COLUMN asp_puramt REAL DEFAULT 0',
-    // Distance for e-way bill <DISTANCE> field — populated lazily by the
-    // ISP sales voucher generator (auto-computed from dispatch PIN +
-    // consignee PIN via haversine × road_multiplier, cached in
-    // pin_distances). Manual override: write any non-NULL value here and
-    // the generator will use it instead of recomputing.
+    // Distance for e-way bill <DISTANCE> field on ISP sales vouchers.
+    // Populated manually per-invoice from the To Tally → 🗺️ E-way Bill
+    // Distance UI: user looks up the value on NIC's Pin-to-Pin Distance
+    // Search page (or Google Maps), pastes it here, clicks Save. Value
+    // is then emitted verbatim on the next voucher regen.
     'ALTER TABLE invoices ADD COLUMN distance_km INTEGER',
+    // Drop legacy pincodes/pin_distances tables that supported the old
+    // haversine auto-compute path. We replaced that with the manual-
+    // override workflow (above), so these tables are now dead weight.
+    // IF EXISTS makes this idempotent — fresh DBs have nothing to drop;
+    // upgraded DBs shed the orphan tables on next restart.
+    'DROP TABLE IF EXISTS pin_distances',
+    'DROP TABLE IF EXISTS pincodes',
   ];
   for (const m of migrations) {
     try { wrapped.exec(m); console.log('Migration applied:', m); }
@@ -530,64 +507,6 @@ async function initDb() {
     wrapped.run('INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)', ['admin', hash, 'admin']);
     console.log('Default admin created (admin / admin123)');
   }
-
-  // ── PINCODE SEED ──────────────────────────────────────────────
-  // Seed the pincodes table with a small starter set covering ASP's
-  // dispatch town (Nedumkandam, Kerala) and the major Tamil Nadu auction
-  // / buyer towns. Coordinates are well-known town centroids; close
-  // enough for road-distance estimation (haversine result × 1.3).
-  // Idempotent — uses INSERT OR IGNORE so existing/edited rows are kept.
-  // Users can grow the table further via Settings → PIN Distances.
-  try {
-    const pinRow = wrapped.get('SELECT COUNT(*) as cnt FROM pincodes');
-    if (!pinRow || pinRow.cnt === 0) {
-      const seed = [
-        // Kerala — Idukki district (ASP dispatch + cardamom belt)
-        { pin: '685553', lat: 9.8350,  lon: 77.1486, place: 'NEDUMKANDAM',         state: 'Kerala' },
-        { pin: '685561', lat: 9.7934,  lon: 77.1572, place: 'KUMILY',              state: 'Kerala' },
-        { pin: '685509', lat: 9.7350,  lon: 77.1400, place: 'KATTAPPANA',          state: 'Kerala' },
-        { pin: '685602', lat: 9.5333,  lon: 77.0667, place: 'MUNNAR',              state: 'Kerala' },
-        { pin: '685515', lat: 9.7000,  lon: 77.1167, place: 'ELAPPARA',            state: 'Kerala' },
-        { pin: '685531', lat: 9.7500,  lon: 77.0833, place: 'UPPUTHARA',           state: 'Kerala' },
-        { pin: '685581', lat: 9.6833,  lon: 77.0500, place: 'IDUKKI',              state: 'Kerala' },
-        { pin: '685613', lat: 9.5500,  lon: 76.9333, place: 'ADIMALI',             state: 'Kerala' },
-        // Tamil Nadu — Theni / Bodinayakanur (ISP company seat, primary auction)
-        { pin: '625513', lat: 10.0103, lon: 77.3517, place: 'BODINAYAKANUR',       state: 'Tamil Nadu' },
-        { pin: '625531', lat: 10.0269, lon: 77.4811, place: 'THENI',               state: 'Tamil Nadu' },
-        { pin: '625582', lat: 9.9333,  lon: 77.4833, place: 'THENI ALLINAGARAM',   state: 'Tamil Nadu' },
-        { pin: '625515', lat: 10.0500, lon: 77.3000, place: 'CUMBUM',              state: 'Tamil Nadu' },
-        { pin: '625516', lat: 9.9667,  lon: 77.2167, place: 'GUDALUR',             state: 'Tamil Nadu' },
-        { pin: '625534', lat: 9.8833,  lon: 77.4833, place: 'PERIYAKULAM',         state: 'Tamil Nadu' },
-        { pin: '625503', lat: 10.0833, lon: 77.5333, place: 'CHINNAMANUR',         state: 'Tamil Nadu' },
-        // Tamil Nadu — Madurai region (common buyer base)
-        { pin: '625001', lat: 9.9252,  lon: 78.1198, place: 'MADURAI',             state: 'Tamil Nadu' },
-        { pin: '625020', lat: 9.9252,  lon: 78.1198, place: 'MADURAI',             state: 'Tamil Nadu' },
-        // Tamil Nadu — Tiruchirappalli / Karur (other buyer regions)
-        { pin: '620001', lat: 10.7905, lon: 78.7047, place: 'TIRUCHIRAPPALLI',     state: 'Tamil Nadu' },
-        { pin: '639001', lat: 10.9577, lon: 78.0809, place: 'KARUR',               state: 'Tamil Nadu' },
-        // Tamil Nadu — Coimbatore / Tiruppur (export buyers)
-        { pin: '641001', lat: 11.0168, lon: 76.9558, place: 'COIMBATORE',          state: 'Tamil Nadu' },
-        { pin: '641604', lat: 11.1085, lon: 77.3411, place: 'TIRUPPUR',            state: 'Tamil Nadu' },
-        // Tamil Nadu — Chennai (export, large buyers)
-        { pin: '600001', lat: 13.0827, lon: 80.2707, place: 'CHENNAI',             state: 'Tamil Nadu' },
-        { pin: '600040', lat: 13.0827, lon: 80.2707, place: 'CHENNAI',             state: 'Tamil Nadu' },
-        // Karnataka — Bangalore (export buyers)
-        { pin: '560001', lat: 12.9716, lon: 77.5946, place: 'BANGALORE',           state: 'Karnataka' },
-        // Maharashtra — Mumbai (export buyers)
-        { pin: '400001', lat: 18.9388, lon: 72.8354, place: 'MUMBAI',              state: 'Maharashtra' },
-      ];
-      const ins = wrapped.prepare(
-        `INSERT OR IGNORE INTO pincodes (pin, lat, lon, place, state, source)
-         VALUES (?, ?, ?, ?, ?, 'seed')`
-      );
-      let n = 0;
-      for (const p of seed) {
-        const r = ins.run(p.pin, p.lat, p.lon, p.place, p.state);
-        if (r.changes > 0) n++;
-      }
-      if (n > 0) console.log(`Seeded ${n} starter pincodes (Kerala + Tamil Nadu auction towns)`);
-    }
-  } catch (e) { /* table may not exist yet on first migration — fine */ }
 
   console.log('Database ready at', DB_PATH, '(better-sqlite3, WAL mode)');
   return wrapped;
