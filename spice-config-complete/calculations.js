@@ -594,9 +594,19 @@ function getBankPaymentData(db, auctionId, cfg) {
  */
 function getTDSReturnData(db, fromDate, toDate, orderBy) {
   const order = orderBy === 'party' ? 'name' : 'date, invo';
+  // PAN extraction. The gstin column holds either:
+  //   "GSTIN.32AAHCE4551A1Z8" (21 chars, with prefix — most common)
+  //   "32AAHCE4551A1Z8"       (15 chars, bare GSTIN)
+  // Strip the optional "GSTIN." prefix first, then take chars 3-12 of
+  // the bare GSTIN to get the 10-char PAN ("AAHCE4551A").
   return db.all(
-    `SELECT invo as invoice, date, name, 
-      SUBSTR(gstin, 3, 10) as pan,
+    `SELECT invo as invoice, date, name,
+      SUBSTR(
+        CASE WHEN UPPER(SUBSTR(COALESCE(gstin,''), 1, 6)) = 'GSTIN.'
+             THEN SUBSTR(gstin, 7)
+             ELSE COALESCE(gstin,'') END,
+        3, 10
+      ) as pan,
       amount as assess_value, tds
     FROM purchases
     WHERE date BETWEEN ? AND ? AND tds > 0
