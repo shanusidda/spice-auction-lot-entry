@@ -241,6 +241,12 @@ function generSalesIspXML(rows, cfg, opts = {}) {
   const HSN_Card     = cfgGet(cfg, 'tally_hsn_cardamom',  '09083120');
   const HSN_Gunny    = cfgGet(cfg, 'tally_hsn_gunny',     '63051040');
   const GunnyRate    = cfgNum(cfg, 'tally_gunny_rate',     165);
+  // Service ledgers (intra-state ISP only — reference uses fully-spelled
+  // names with the rate baked in; user can override in Settings)
+  const LDR_Transport  = cfgGet(cfg, 'tally_transport', 'Transport Rs.2.50/per Kg');
+  const LDR_Insurance  = cfgGet(cfg, 'tally_insurance', 'Insurance Rs.0.75/per Thousand');
+  const SAC_Transport  = cfgGet(cfg, 'tally_hsn_transport', '996791');
+  const SAC_Insurance  = cfgGet(cfg, 'tally_hsn_insurance', '997136');
 
   // Dispatch-from (sister company by default — ASP)
   const d_company    = cfgGet(cfg, 'tally_dispatch_company', cfgGet(cfg, 's_company', cfgGet(cfg, 's_short_name', '')));
@@ -273,7 +279,7 @@ function generSalesIspXML(rows, cfg, opts = {}) {
     const taxNm       = `${sale}${separator}${invoNo}`;
     const voucherNum  = `${invPrefix}${taxNm}/${season}`;
     const aspVoucherRef = row.aspInvo
-      ? `${ainvPrefix}${sale}${separator}${String(row.aspInvo).trim()}/${season}`
+      ? `${ainvPrefix}I${separator}${String(row.aspInvo).trim()}/${season}`
       : '';
 
     const rates       = rateDetails(cfgNum(cfg, 'tally_gst_rate', 5));
@@ -435,6 +441,56 @@ ${TAGS.DEEMYES}
 <AMOUNT>${-totalRound}</AMOUNT>
 </BILLALLOCATIONS.LIST>
 </LEDGERENTRIES.LIST>`;
+
+    // Transport + Insurance — only in intra-state ISP vouchers (reference
+    // omits both for inter-state and export, matching calculations.js
+    // hideTI flag). Emitted before the tax ledgers; each carries its own
+    // RATEDETAILS.LIST (CGST/SGST/Cess) since they're separately taxable.
+    const wantTI = isIntra && !isExport;
+    const transportAmt = r2(row.transportAmt || 0);
+    const insuranceAmt = r2(row.insuranceAmt || 0);
+    if (wantTI && transportAmt > 0) {
+      xml += `
+<LEDGERENTRIES.LIST>
+<LEDGERNAME>${xe(LDR_Transport)}</LEDGERNAME>
+<GSTONINEVRDLIGIBLEITC>Applicable</GSTONINEVRDLIGIBLEITC>
+<GSTOVRDNTAXABILITY>Taxable</GSTOVRDNTAXABILITY>
+<GSTSOURCETYPE>Ledger</GSTSOURCETYPE>
+<GSTLEDGERSOURCE>${xe(LDR_Transport)}</GSTLEDGERSOURCE>
+<GSTOVRDNTYPEOFSUPPLY>Services</GSTOVRDNTYPEOFSUPPLY>
+<GSTRATEINFERAPPLICABILITY>As per Masters/Company</GSTRATEINFERAPPLICABILITY>
+<GSTHSNNAME>${xe(SAC_Transport)}</GSTHSNNAME>
+<GSTHSNDESCRIPTION>${xe(LDR_Transport)}</GSTHSNDESCRIPTION>
+<GSTHSNINFERAPPLICABILITY>As per Masters/Company</GSTHSNINFERAPPLICABILITY>
+${TAGS.DEEMNO}
+<AMOUNT>${transportAmt}</AMOUNT>
+<VATEXPAMOUNT>${transportAmt}</VATEXPAMOUNT>
+${rates.cgst}
+${rates.sgst}
+${rates.cess}
+</LEDGERENTRIES.LIST>`;
+    }
+    if (wantTI && insuranceAmt > 0) {
+      xml += `
+<LEDGERENTRIES.LIST>
+<LEDGERNAME>${xe(LDR_Insurance)}</LEDGERNAME>
+<GSTONINEVRDLIGIBLEITC>Applicable</GSTONINEVRDLIGIBLEITC>
+<GSTOVRDNTAXABILITY>Taxable</GSTOVRDNTAXABILITY>
+<GSTSOURCETYPE>Ledger</GSTSOURCETYPE>
+<GSTLEDGERSOURCE>${xe(LDR_Insurance)}</GSTLEDGERSOURCE>
+<GSTOVRDNTYPEOFSUPPLY>Services</GSTOVRDNTYPEOFSUPPLY>
+<GSTRATEINFERAPPLICABILITY>As per Masters/Company</GSTRATEINFERAPPLICABILITY>
+<GSTHSNNAME>${xe(SAC_Insurance)}</GSTHSNNAME>
+<GSTHSNDESCRIPTION>${xe(LDR_Insurance)}</GSTHSNDESCRIPTION>
+<GSTHSNINFERAPPLICABILITY>As per Masters/Company</GSTHSNINFERAPPLICABILITY>
+${TAGS.DEEMNO}
+<AMOUNT>${insuranceAmt}</AMOUNT>
+<VATEXPAMOUNT>${insuranceAmt}</VATEXPAMOUNT>
+${rates.cgst}
+${rates.sgst}
+${rates.cess}
+</LEDGERENTRIES.LIST>`;
+    }
 
     // Tax ledgers
     if (isExport) {
@@ -1730,11 +1786,14 @@ const ISP_STATE_SQL = `(UPPER(COALESCE(i.state,'')) = 'TAMIL NADU' OR UPPER(COAL
 const ASP_STATE_SQL = `UPPER(COALESCE(i.state,'')) = 'KERALA'`;
 
 /**
- * Pull ISP sales (state = TAMIL NADU) for an auction, group by buyer,
- * attach lots and matching ASP invoice ref. Used by Sales (ISP) export.
+ * Pull ISP sales (state = TAMIL NADU) for an auction. The `invoices`
+ * table stores ONE summary row per buyer per auction (the writer in
+ * server.js inserts the buyer aggregate; per-lot detail lives in the
+ * `lots` table). So we read each invoice row directly, then fetch the
+ * matching lots separately.
  *
- * For each lot row we also attach `aspInvo` from `lots.asp_invo` so the
- * generator can emit BASICORDERREF pointing to the ASP voucher.
+ * Output shape (per row): one voucher per (buyer, sale-type, ISP invo).
+ * `aspInvo` is the matching ASP invoice number (for BASICORDERREF).
  */
 function buildSalesIspRows(db, auctionId, cfg) {
   const stmt = db.prepare(`
@@ -1746,92 +1805,78 @@ function buildSalesIspRows(db, auctionId, cfg) {
   `);
   const raw = stmt.all(auctionId);
 
-  // For each (buyer, ISP invo) pair, look up the lot rows so we can:
-  //   1. emit per-lot inventory entries (using the SALES rate from invoices)
-  //   2. surface the corresponding asp_invo (first non-empty wins)
+  // Per-lot details for ISP voucher inventory entries. ISP voucher uses
+  // the SALES rate (lots.price / lots.amount), not the planter rate.
   const lotsStmt = db.prepare(`
-    SELECT lot_no AS lot, bags AS bag, asp_invo
+    SELECT lot_no AS lot, bags AS bag, qty, price AS rate, amount, asp_invo
     FROM lots
     WHERE auction_id = ? AND buyer = ? AND invo = ?
-    ORDER BY lot_no
+    ORDER BY CAST(lot_no AS INTEGER), lot_no
   `);
 
-  const grouped = {};
+  const out = [];
   for (const r of raw) {
-    const partyKey = `${r.buyer}|${r.gstin}|${r.sale || 'L'}`;
-    if (!grouped[partyKey]) {
-      grouped[partyKey] = {
-        ano: r.ano,
-        date: r.date,
-        sale: r.sale,
-        invo: r.invo,
-        aspInvo: '',
-        buyer: r.buyer,
-        partyName: r.buyer1 || r.buyer || '',
-        address: [r.add1, r.add2].filter(Boolean).join(', '),
-        place: r.place || r.buyer_pla || '',
-        pin: r.buyer_pin || '',
-        partyGstin: r.gstin || '',
-        lots: [],
-        gunnyBags: 0,
-        amounttot: 0,
-        gunnyAmt: 0,
-        cgst: 0, sgst: 0, igst: 0, tcsamt: 0,
-        total: 0,
-      };
-    }
-    const g = grouped[partyKey];
+    const lotRows = lotsStmt.all(auctionId, r.buyer, String(r.invo));
+    // Pick the first non-empty asp_invo from the matching lots — used by
+    // generSalesIspXML to build BASICORDERREF (the matching ASP voucher).
+    const aspInvoRow = lotRows.find(l => l.asp_invo && String(l.asp_invo).trim());
+    const aspInvo = aspInvoRow ? String(aspInvoRow.asp_invo).trim() : '';
 
-    // Pull bag count from lots table for this invoice (more reliable
-    // than the invoices.bag aggregate, which is per-buyer not per-lot)
-    const lotRows = lotsStmt.all(auctionId, r.buyer, r.invo);
-    // Find a bag count for this specific lot
-    const lotMatch = lotRows.find(l => String(l.lot) === String(r.lot));
-    const bagCount = lotMatch ? Number(lotMatch.bag || 0) : Number(r.bag || 0);
-    // Capture aspInvo (first non-empty across all matching lots)
-    if (!g.aspInvo) {
-      const withAsp = lotRows.find(l => l.asp_invo && String(l.asp_invo).trim());
-      if (withAsp) g.aspInvo = String(withAsp.asp_invo).trim();
-    }
+    // Total bags/qty for the gunny inventory line. Use lot sums when
+    // available; fall back to invoice aggregate.
+    const gunnyBags = lotRows.length
+      ? lotRows.reduce((s, l) => s + Number(l.bag || 0), 0)
+      : Number(r.bag || 0);
 
-    g.lots.push({
-      lot: r.lot,
-      bag: bagCount,
-      qty: r.qty,
-      rate: r.price,
-      amount: r.amount,
+    out.push({
+      ano: r.ano,
+      date: r.date,
+      sale: r.sale,
+      invo: r.invo,
+      aspInvo,
+      buyer: r.buyer,
+      partyName: r.buyer1 || r.buyer || '',
+      address: [r.add1, r.add2].filter(Boolean).join(', '),
+      place: r.place || r.buyer_pla || '',
+      pin: r.buyer_pin || '',
+      partyGstin: r.gstin || '',
+      lots: lotRows.map(l => ({
+        lot: l.lot,
+        bag: Number(l.bag || 0),
+        qty: Number(l.qty || 0),
+        rate: Number(l.rate || 0),
+        amount: Number(l.amount || 0),
+      })),
+      // Aggregates straight from the (single) invoice row — already
+      // pre-summed by the invoice writer in server.js.
+      amounttot: r2(r.amount || 0),
+      gunnyBags,
+      gunnyAmt: r2(r.gunny || 0),
+      transportAmt: r2(r.pava_hc || 0),
+      insuranceAmt: r2(r.ins || 0),
+      cgst: r2(r.cgst || 0),
+      sgst: r2(r.sgst || 0),
+      igst: r2(r.igst || 0),
+      tcsamt: r2(r.tcs || 0),
+      total: r2(r.tot || 0),
+      totalRounded: r0(r.tot || 0),
     });
-    g.gunnyBags += bagCount;
-    g.amounttot += Number(r.amount || 0);
-    g.gunnyAmt  += Number(r.gunny || 0);
-    g.cgst      += Number(r.cgst || 0);
-    g.sgst      += Number(r.sgst || 0);
-    g.igst      += Number(r.igst || 0);
-    g.tcsamt    += Number(r.tcs || 0);
-    g.total     += Number(r.tot || 0);
-  }
-
-  const out = Object.values(grouped);
-  for (const g of out) {
-    g.amounttot = r2(g.amounttot);
-    g.gunnyAmt  = r2(g.gunnyAmt);
-    g.cgst = r2(g.cgst); g.sgst = r2(g.sgst); g.igst = r2(g.igst);
-    g.tcsamt = r2(g.tcsamt);
-    g.total = r2(g.total);
-    g.totalRounded = r0(g.total);
   }
   return out;
 }
 
 /**
- * Pull ASP sales (state = KERALA) for an auction. Each ASP voucher
- * represents an ASP→ISP internal transfer: ASP is selling its lot
- * inventory to the sister company (ISP). The buyer is therefore always
- * ISP itself, so we read the ISP party fields from cfg (tn_address1,
- * tn_address2, tn_gstin, tn_branch).
+ * Pull ASP sales (state = KERALA) for an auction. Each ASP voucher is
+ * an internal ASP→ISP transfer: ASP sells its lot inventory to the
+ * sister company (ISP) at the asp-side planter rate. The buyer is
+ * always ISP itself, so we read the ISP party fields from cfg
+ * (tn_address1, tn_address2, tn_gstin, tn_branch).
  *
- * Lot rates/amounts come from `lots.asp_prate` / `lots.asp_puramt` (the
- * ASP-side planter calc). Bag counts come from the lots table.
+ * Lot rates/amounts come from `lots.asp_prate` / `lots.asp_puramt`
+ * (the ASP-side planter calc). Bag counts come from the lots table.
+ *
+ * GST is recomputed on (cardamom + gunny) only — ASP vouchers never
+ * carry transport/insurance (matches calculations.js isASP branch).
  */
 function buildSalesAspRows(db, auctionId, cfg) {
   const stmt = db.prepare(`
@@ -1842,125 +1887,82 @@ function buildSalesAspRows(db, auctionId, cfg) {
   `);
   const raw = stmt.all(auctionId);
 
-  // Read ASP-side per-lot data. asp_puramt > 0 means dual-storage was
-  // populated; legacy rows (asp_puramt = 0) fall back to the active
-  // puramt/prate fields. asp_invo links back to the invoice.
+  // ASP-side per-lot data. Prefer the dual-storage asp_* columns; fall
+  // back to legacy (puramt/prate/pqty) for rows that pre-date the
+  // dual-storage migration.
   const lotsStmt = db.prepare(`
-    SELECT lot_no AS lot, bags AS bag, qty,
+    SELECT lot_no AS lot, bags AS bag,
            CASE WHEN asp_puramt > 0 THEN asp_pqty   ELSE pqty   END AS asp_qty,
            CASE WHEN asp_puramt > 0 THEN asp_prate  ELSE prate  END AS asp_rate,
-           CASE WHEN asp_puramt > 0 THEN asp_puramt ELSE puramt END AS asp_amount,
-           bilamt
+           CASE WHEN asp_puramt > 0 THEN asp_puramt ELSE puramt END AS asp_amount
     FROM lots
     WHERE auction_id = ? AND buyer = ? AND asp_invo = ?
-    ORDER BY lot_no
+    ORDER BY CAST(lot_no AS INTEGER), lot_no
   `);
 
   // ISP party identity — the ASP voucher's customer is always ISP.
-  // Pull from the home-company / address-tn config.
   const ispPartyName = cfgGet(cfg, 'tally_company_name', cfgGet(cfg, 'short_name', 'IDEAL SPICES PRIVATE LIMITED'));
   const ispAddr1     = cfgGet(cfg, 'tn_address1', '');
   const ispAddr2     = cfgGet(cfg, 'tn_address2', '');
-  // Address line 2 in tn_address2 contains city/state/code/mobile in one
-  // string; pick out just the place portion (everything before the comma)
-  // so the second ADDRESS line in the XML is short like "BODINAYAKANUR".
   const ispBranch    = cfgGet(cfg, 'tn_branch', cfgGet(cfg, 'br1', ''));
   const ispGstin     = cfgGet(cfg, 'tn_gstin', '');
-  // ISP PIN — extract from tn_address2 if present (e.g. "...THENI-625582 TAMIL NADU...")
   const pinMatch     = String(ispAddr2).match(/-(\d{6})/);
   const ispPin       = cfgGet(cfg, 'tn_pin', pinMatch ? pinMatch[1] : '');
 
-  const grouped = {};
-  for (const r of raw) {
-    const partyKey = `${r.buyer}|${r.invo}`;
-    if (!grouped[partyKey]) {
-      grouped[partyKey] = {
-        ano: r.ano,
-        date: r.date,
-        sale: r.sale,
-        invo: r.invo,
-        buyer: r.buyer,
-        // ASP voucher's customer is always ISP, regardless of the
-        // ultimate downstream buyer.
-        ispPartyName,
-        ispAddress: ispAddr1,
-        ispPlace: ispBranch,
-        ispPin,
-        ispGstin,
-        lots: [],
-        gunnyBags: 0,
-        amounttot: 0,
-        gunnyAmt: 0,
-        cgst: 0, sgst: 0, igst: 0,
-        total: 0,
-      };
-    }
-    const g = grouped[partyKey];
-
-    // Pull asp-side lot data for this invoice
-    const lotRows = lotsStmt.all(auctionId, r.buyer, r.invo);
-    const lotMatch = lotRows.find(l => String(l.lot) === String(r.lot));
-    if (lotMatch) {
-      const aspQty    = Number(lotMatch.asp_qty || lotMatch.qty || r.qty || 0);
-      const aspRate   = Number(lotMatch.asp_rate || 0);
-      const aspAmount = Number(lotMatch.asp_amount || lotMatch.bilamt || 0);
-      g.lots.push({
-        lot: r.lot,
-        bag: Number(lotMatch.bag || r.bag || 0),
-        qty: aspQty,
-        rate: aspRate,
-        amount: aspAmount,
-      });
-      g.gunnyBags += Number(lotMatch.bag || r.bag || 0);
-      g.amounttot += aspAmount;
-    } else {
-      // Fallback: no lot row found; use invoice numbers (legacy)
-      g.lots.push({
-        lot: r.lot,
-        bag: Number(r.bag || 0),
-        qty: Number(r.qty || 0),
-        rate: Number(r.price || 0),
-        amount: Number(r.amount || 0),
-      });
-      g.gunnyBags += Number(r.bag || 0);
-      g.amounttot += Number(r.amount || 0);
-    }
-    g.gunnyAmt += Number(r.gunny || 0);
-    g.cgst     += Number(r.cgst || 0);
-    g.sgst     += Number(r.sgst || 0);
-    g.igst     += Number(r.igst || 0);
-  }
-
-  // Compute the ASP voucher total from scratch — it's the sum of
-  // asp-side lot amounts + gunny + (i)gst on (cardamom + gunny).
-  // ASP→ISP transfer is always inter-state Kerala→Tamil Nadu, so IGST
-  // applies. We recompute GST here because invoices.cgst/sgst/igst hold
-  // the ISP-side GST (computed against ISP rates), not the ASP-side.
   const gstRate = cfgNum(cfg, 'tally_gst_rate', 5);
   const gunnyRate = cfgNum(cfg, 'tally_gunny_rate', 165);
   const aspIntraCode = String(cfgGet(cfg, 'tally_state_code_amazing', '32'));
 
-  const out = Object.values(grouped);
-  for (const g of out) {
-    g.amounttot = r2(g.amounttot);
-    const gunnyBaseAmt = r2(g.gunnyBags * gunnyRate);
-    g.gunnyAmt = gunnyBaseAmt;
+  const out = [];
+  for (const r of raw) {
+    const lotRows = lotsStmt.all(auctionId, r.buyer, String(r.invo));
+    const lots = lotRows.map(l => ({
+      lot: l.lot,
+      bag: Number(l.bag || 0),
+      qty: Number(l.asp_qty || 0),
+      rate: Number(l.asp_rate || 0),
+      amount: Number(l.asp_amount || 0),
+    }));
+    const cardAmt = lots.reduce((s, l) => s + l.amount, 0);
+    const gunnyBags = lots.length
+      ? lots.reduce((s, l) => s + l.bag, 0)
+      : Number(r.bag || 0);
+    const gunnyAmt = r2(gunnyBags * gunnyRate);
+    const taxableTotal = r2(r2(cardAmt) + gunnyAmt);
 
-    const taxableTotal = r2(g.amounttot + g.gunnyAmt);
-    const isIntra = String(g.ispGstin || '').slice(0, 2) === aspIntraCode;
+    // ASP→ISP is intra-state when ASP and ISP share the GSTIN state
+    // code (rare; default config has ASP=32 Kerala, ISP=33 TN, so it's
+    // always inter-state). Recompute fresh because the invoice row's
+    // cgst/sgst/igst was computed for the ISP-side rates.
+    const isIntra = String(ispGstin || '').slice(0, 2) === aspIntraCode;
+    let cgst = 0, sgst = 0, igst = 0;
     if (isIntra) {
       const half = r2(taxableTotal * (gstRate / 2) / 100);
-      g.cgst = half;
-      g.sgst = half;
-      g.igst = 0;
+      cgst = half; sgst = half;
     } else {
-      g.cgst = 0;
-      g.sgst = 0;
-      g.igst = r2(taxableTotal * gstRate / 100);
+      igst = r2(taxableTotal * gstRate / 100);
     }
+    const total = r2(taxableTotal + cgst + sgst + igst);
 
-    g.total = r2(taxableTotal + g.cgst + g.sgst + g.igst);
-    g.totalRounded = r0(g.total);
+    out.push({
+      ano: r.ano,
+      date: r.date,
+      sale: r.sale,
+      invo: r.invo,
+      buyer: r.buyer,
+      ispPartyName,
+      ispAddress: ispAddr1,
+      ispPlace: ispBranch,
+      ispPin,
+      ispGstin,
+      lots,
+      amounttot: r2(cardAmt),
+      gunnyBags,
+      gunnyAmt,
+      cgst, sgst, igst,
+      total,
+      totalRounded: r0(total),
+    });
   }
   return out;
 }
