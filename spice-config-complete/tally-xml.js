@@ -1184,17 +1184,11 @@ function generRDPurchaseXML(rows, cfg, opts = {}) {
     const state      = xe(findState(partyGstin));
     const isIntra    = String(partyGstin).slice(0, 2) === String(intra);
     const rates      = rateDetails(cfgNum(cfg, 'gst_goods', 5));
-    // Voucher number / reference = <tradeno>/<lotno>/<season>. Each
-    // voucher groups every lot for a dealer in this trade, but the
-    // voucher number itself is keyed off the FIRST (lowest) lot — Tally
-    // requires a unique voucher number per voucher and this matches the
-    // existing per-lot bill-allocation naming below.
-    const firstLot   = (Array.isArray(row.lots) && row.lots.length)
-      ? String(row.lots[0].lot || '').trim()
-      : '';
-    const voucherRef = firstLot
-      ? `${row.ano}/${firstLot}/${season}`
-      : `${ainvPrefix}P-${taxNm}/${season}`;  // fallback when no lots
+    // Voucher number / reference = <tradeno>/<purchase-inv-no>/<season>.
+    // The purchase-inv-no comes from `purchases.invo` (the dealer's
+    // own invoice number entered when the purchase was recorded). Per-lot
+    // bill allocations stay in their own <ano>/<lot>/<season> format.
+    const voucherRef = `${row.ano}/${taxNm}/${season}`;
 
     const startVoucher = `<VOUCHER VCHTYPE="Purchase" ACTION="Create" OBJVIEW="Invoice Voucher View">`;
     const total       = r2(row.total);
