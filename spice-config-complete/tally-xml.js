@@ -1295,6 +1295,23 @@ ${rates.cess}
 </ALLINVENTORYENTRIES.LIST>`;
     }
 
+    // Bill allocations split into "goods" + "GST" line items so Tally
+    // can age them separately in receivables/payables. Two cases:
+    //   • detailed   → one allocation per lot for goods (billAlloc1)
+    //                  + one GST allocation = sum(taxes) − TDS
+    //   • aggregate  → single goods allocation = bilamttot
+    //                  + one GST allocation = sum(taxes) − TDS
+    // The total of all allocations = the party ledger AMOUNT. TDS is
+    // absorbed in the GST allocation (matches the original VBA macro).
+    const gstSum     = cgst + sgst + igst;
+    const gstAllocAmt = tlyrnd ? r0(gstSum) - tdsamt : r2(gstSum) - tdsamt;
+    const gstAlloc   = `
+<BILLALLOCATIONS.LIST>
+<NAME>${xe(`${row.ano}/GST/${season}`)}</NAME>
+<BILLTYPE>New Ref</BILLTYPE>
+<AMOUNT>${r2(gstAllocAmt)}</AMOUNT>
+</BILLALLOCATIONS.LIST>`;
+
     xml += `\n${startVoucher}
 <ADDRESS.LIST TYPE="String">
 <ADDRESS>${address}</ADDRESS>
@@ -1337,7 +1354,7 @@ ${TAGS.DEEMNO}
 <NAME>${xe(`${row.ano}/${taxNm}/${season}`)}</NAME>
 <BILLTYPE>New Ref</BILLTYPE>
 <AMOUNT>${tlyrnd ? r0(bilamttot) : bilamttot}</AMOUNT>
-</BILLALLOCATIONS.LIST>`}
+</BILLALLOCATIONS.LIST>`}${gstAlloc}
 </LEDGERENTRIES.LIST>`;
 
     // Tax ledgers
