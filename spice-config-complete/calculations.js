@@ -212,18 +212,36 @@ function calculateLot(lot, cfg) {
 }
 
 /**
- * Calculate TDS under Section 194Q
- * Threshold: ₹50,00,000 per financial year
+ * Calculate TDS under Section 194Q (TDS on Purchase of Goods).
+ *
+ * Per Section 194Q, a buyer whose turnover exceeds ₹10 cr in the prior FY
+ * must deduct TDS at 0.1% of the purchase amount in EXCESS of ₹50 lakh
+ * paid to a single seller in the current FY. Once the threshold is crossed,
+ * TDS applies to every subsequent rupee bought from that seller for the
+ * rest of the year.
+ *
+ * Inputs (must all be on the SAME basis — either all incl-GST or all
+ *   excl-GST; the caller is responsible for keeping units consistent):
+ *   purchaseAmount  — current trade's purchase amount (this voucher)
+ *   priorPurchases  — sum of all prior purchases from the same seller in
+ *                      the current FY (excluding this trade)
+ *   cfg.tds_threshold     — usually 5000000 (₹50 L); configurable
+ *   cfg.tds_purchase_rate — usually 0.1 (%); configurable, fall-back to
+ *                            tcs_tds for back-compat with older configs
+ *
+ * Returns: TDS amount in rupees (rounded up to nearest paisa).
  */
 function calculateTDS(purchaseAmount, priorPurchases, cfg) {
-  const threshold = 5000000; // ₹50 lakhs
-  const tdsRate = cfg.tcs_tds || 0.1;
-  
+  const threshold = Number(cfg.tds_threshold) || 5000000;
+  // Prefer the dedicated TDS-on-purchase rate; fall back to the legacy
+  // shared tcs_tds setting if the new key isn't configured yet.
+  const tdsRate = Number(cfg.tds_purchase_rate) || Number(cfg.tcs_tds) || 0.1;
+
   if (priorPurchases > threshold) {
-    // Already crossed threshold — TDS on full amount
+    // Already crossed threshold this FY — TDS on the full new purchase
     return Math.ceil(purchaseAmount * tdsRate / 100);
   } else if ((priorPurchases + purchaseAmount) > threshold) {
-    // Crosses threshold this time — TDS on excess
+    // This trade crosses the threshold — TDS only on the portion above
     const excess = priorPurchases + purchaseAmount - threshold;
     return Math.ceil(excess * tdsRate / 100);
   }
@@ -231,12 +249,14 @@ function calculateTDS(purchaseAmount, priorPurchases, cfg) {
 }
 
 /**
- * Calculate TCS for sales invoice
+ * Calculate TCS under Section 206C(1H) — TCS on Sale of Goods.
+ * Threshold logic mirrors TDS-on-purchase: TCS applies to amounts in
+ * EXCESS of ₹50 lakh per buyer per FY, then to every subsequent rupee.
  */
 function calculateTCS(invoiceAmount, priorSales, cfg) {
-  const threshold = 5000000;
-  const tcsRate = cfg.tcs_tds || 0.1;
-  
+  const threshold = Number(cfg.tds_threshold) || 5000000;
+  const tcsRate = Number(cfg.tcs_tds) || 0.1;
+
   if (priorSales > threshold) {
     return Math.ceil(invoiceAmount * tcsRate / 100);
   } else if ((priorSales + invoiceAmount) > threshold) {
@@ -433,18 +453,28 @@ function buildPurchaseInvoice(db, auctionId, sellerName, cfg) {
   const roundDiff = Math.round(totalBeforeRound) - totalBeforeRound;
   const grandTotal = Math.round(totalBeforeRound);
 
-  // TDS calculation
-  // The purchases table stores the bare GSTIN under `gstin`, so we strip the
-  // "GSTIN." prefix from cr before comparing. gstinBare() handles both
-  // prefixed ("GSTIN.32...") and bare ("32...") inputs.
-  const sellerGstinBare = (() => {
-    if (!firstLot.cr) return '';
-    const s = String(firstLot.cr).trim().toUpperCase();
-    return s.startsWith('GSTIN.') ? s.substring(6) : s;
-  })();
+  // ── TDS calculation (Section 194Q) ──
+  //
+  // 1) GSTIN format compatibility: the purchases table may have rows with
+  //    gstin in either form ("GSTIN.32AAA..." or bare "32AAA..."). We
+  //    derive both candidates from the current lot's cr and match either.
+  //
+  // 2) Amount basis must match: this trade's amount and the running prior
+  //    total must be on the SAME basis (both with-GST or both excl-GST),
+  //    otherwise the threshold check is inconsistent. The `purchases.total`
+  //    column = puramt + GST = grand total (with GST). So:
+  //      • flag_wgst=true  → prior=SUM(total), current=grandTotal       ✓
+  //      • flag_wgst=false → prior=SUM(amount), current=totalPuramt    ✓
+  //    (`purchases.amount` is stored as the pre-GST puramt subtotal.)
+  const cr = String(firstLot.cr || '').trim();
+  const gstinPrefixed = cr.toUpperCase().startsWith('GSTIN.') ? cr : ('GSTIN.' + cr);
+  const gstinBare     = cr.toUpperCase().startsWith('GSTIN.') ? cr.substring(6) : cr;
+  const priorAmountCol = cfg.flag_wgst ? 'total' : 'amount';
   const priorPurchases = db.get(
-    `SELECT COALESCE(SUM(total),0) as total FROM purchases WHERE gstin = ? AND date >= ?`,
-    [sellerGstinBare, cfg.season_start || '2026-04-01']
+    `SELECT COALESCE(SUM(${priorAmountCol}),0) as total
+       FROM purchases
+      WHERE (gstin = ? OR gstin = ?) AND date >= ?`,
+    [gstinPrefixed, gstinBare, cfg.season_start || '2026-04-01']
   );
   const tdsAmount = cfg.flag_tds_purchase 
     ? calculateTDS(cfg.flag_wgst ? grandTotal : totalPuramt, priorPurchases ? priorPurchases.total : 0, cfg)
