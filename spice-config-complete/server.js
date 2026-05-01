@@ -9,7 +9,6 @@ const { initDb, getDb } = require('./db');
 const { initCompanySettings, CATEGORIES, getAllSettings, updateSettings, getSettingsFlat, getGSTRates, getAllPresets, setActivePresetCode, savePreset, getActivePresetCode } = require('./company-config');
 const { calculateLot, buildSalesInvoice, buildPurchaseInvoice, buildAgriBill, buildDebitNote, listAgriSellers, getPaymentSummary, getBankPaymentData, getTDSReturnData, getSalesJournal, getPurchaseJournal } = require('./calculations');
 const { generatePurchaseInvoicePDF, generateCropReceiptPDF, generateAgriBillPDF, generateSalesInvoicePDF, generateSalesInvoicesBatchPDF, generatePurchaseInvoicesBatchPDF, generateAgriBillsBatchPDF } = require('./invoice-pdf');
-const { generateDebitNotePDF } = require('./debit-note-pdf');
 const { generateDebitNoteBatchPDF } = require('./debit-note-print');
 const { EXPORT_TYPES } = require('./exports');
 const { exportPdf: exportAnyPdf } = require('./exports-pdf');
@@ -3354,117 +3353,6 @@ app.get('/api/tally/export/:type/:auctionId', requireExport, (req, res) => {
     res.send(xml);
   } catch (e) {
     console.error('tally export error:', e);
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// ── Debit Note PDF (printable per-buyer per-lot discount notes) ──
-//
-// Generates a multi-page PDF mirroring the traditional dot-matrix
-// printout: one page per buyer (multi-page when a buyer has > 15 lots),
-// listing every lot sold to that buyer along with the per-lot discount.
-// The data is sourced from `debit_notes` (one row per buyer per auction
-// date — gives us the GRAND TOTAL) joined with `lots` (per-lot details
-// where `lots.refund > 0`).
-app.get('/api/tally/debit-note-pdf/:auctionId', requireExport, async (req, res) => {
-  try {
-    const db = getDb();
-    const cfg = getSettingsFlat(db);
-    const auctionId = Number(req.params.auctionId);
-    const auction = db.get('SELECT id, ano, date FROM auctions WHERE id = ?', [auctionId]);
-    if (!auction) return res.status(404).json({ error: 'Auction not found' });
-
-    // Pull all debit-note buyers for this auction's date (debit_notes
-    // has no auction_id — we filter by date which uniquely identifies
-    // an auction in this domain).
-    const dnRows = db.all(
-      'SELECT name, amount, total FROM debit_notes WHERE date = ? ORDER BY name',
-      [auction.date]
-    );
-    if (dnRows.length === 0) {
-      return res.status(404).json({ error: `No debit notes found for auction ${auctionId} (${auction.date})` });
-    }
-
-    // Build per-buyer per-lot data
-    const buyers = [];
-    for (const dn of dnRows) {
-      // Lookup buyer master record. `debit_notes.name` typically holds
-      // the long form (buyer1) but may also hold the short code; try
-      // both lookups for robustness.
-      let buyerMaster = db.get(
-        'SELECT * FROM buyers WHERE buyer1 = ? OR buyer = ? LIMIT 1',
-        [dn.name, dn.name]
-      );
-      if (!buyerMaster) buyerMaster = {};
-
-      // Pull lots for this buyer in this auction. Match on either the
-      // short `buyer` code or the long `buyer1` name — `lots.buyer`
-      // typically holds the short code but legacy data may vary.
-      const lotRows = db.all(
-        `SELECT lot_no AS lot, qty, price AS rate, amount AS value, refund AS discount
-         FROM lots
-         WHERE auction_id = ?
-           AND (buyer = ? OR buyer1 = ? OR buyer = ? OR buyer1 = ?)
-           AND COALESCE(refund, 0) > 0
-         ORDER BY id`,
-        [auctionId, buyerMaster.buyer || '', buyerMaster.buyer1 || '', dn.name, dn.name]
-      );
-
-      buyers.push({
-        name: buyerMaster.buyer1 || dn.name,
-        // Two-line address composed from add1 + pla (the source layout
-        // shows a single short address line; we concat with comma).
-        address: [buyerMaster.add1, buyerMaster.pla].filter(Boolean).join(' '),
-        gstin: buyerMaster.gstin || '',
-        pan: buyerMaster.pan || '',
-        state: buyerMaster.state || '',
-        stateCode: buyerMaster.st_code || '',
-        lots: lotRows,
-        // Use the rounded total from debit_notes (the source PDF shows
-        // rounded paise — e.g. 82,332.00 not 82,332.40 — so the running
-        // sum from lots may differ by a few rupees from the stored total
-        // depending on how rounding was applied at entry time).
-        grandTotal: Number(dn.total || dn.amount || 0),
-      });
-    }
-
-    // Date format for the PDF header (DD/MM/YYYY)
-    const formatDate = (iso) => {
-      if (!iso) return '';
-      const d = new Date(iso);
-      if (isNaN(d.getTime())) return iso;
-      const pad = (n) => String(n).padStart(2, '0');
-      return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
-    };
-
-    // Season suffix in the source format "/26-27"
-    const seasonShort = String(cfg.season_short || cfg.tally_season || '').trim();
-    const noteSeasonSuffix = seasonShort ? `/${seasonShort}` : '/26-27';
-
-    // Resolve "our" identity — for the debit note flow this is the ASP/
-    // sister company (the entity that issued goods on credit and is now
-    // refunding discount). Fall back to ISP cfg if sister isn't set.
-    const ourGstin = cfg.s_gstin || cfg.gstin || '';
-    const ourPan = ourGstin ? String(ourGstin).slice(2, 12) : (cfg.pan || '');
-    const header = {
-      ourName: cfg.s_company || cfg.s_short_name || cfg.tally_company_name || cfg.short_name || '',
-      ourPlace: cfg.s_place || cfg.tally_dispatch_place || '',
-      ourGstin,
-      ourPan,
-      ourState: cfg.s_state || cfg.tally_dispatch_state || '',
-      ourStateCode: ourGstin ? String(ourGstin).slice(0, 2) : '',
-      date: formatDate(auction.date),
-      noteSeasonSuffix,
-      hsn: cfg.tally_hsn_cardamom || '09083120',
-    };
-
-    const buf = await generateDebitNotePDF(buyers, header, cfg);
-    const filename = `DebitNote_${auctionId}.pdf`;
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    res.send(buf);
-  } catch (e) {
-    console.error('debit note PDF error:', e);
     res.status(500).json({ error: e.message });
   }
 });
