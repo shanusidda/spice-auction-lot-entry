@@ -3128,25 +3128,68 @@ app.put('/api/route-distances', requireExport, (req, res) => {
       [k1, k2, v]
     );
 
-    // How many invoices now resolve via this route? Count buyers whose
-    // PIN matches the non-dispatch side of the route, then count their
-    // ISP invoices that don't already have a manual override.
+    // Saving a route is the user's signal that "this distance applies to
+    // every invoice between these PINs." Clear any legacy per-invoice
+    // overrides on matching invoices so the route value actually wins —
+    // otherwise leftover invoices.distance_km values from earlier saves
+    // would shadow the route forever. (Per-invoice overrides have higher
+    // priority by design; if we ever add a UI to set a true per-invoice
+    // override, this clearing step would need to be opt-in.)
     const dispatchPin = getDispatchPin(db);
     const otherPin = k1 === dispatchPin ? k2 : (k2 === dispatchPin ? k1 : null);
+    let clearedOverrides = 0;
+    if (otherPin) {
+      const r = db.run(
+        `UPDATE invoices SET distance_km = NULL
+         WHERE id IN (
+           SELECT i.id FROM invoices i
+           LEFT JOIN buyers b ON b.buyer = i.buyer
+           WHERE UPPER(COALESCE(i.state,'')) = 'TAMIL NADU'
+             AND b.pin = ?
+             AND i.distance_km IS NOT NULL
+         )`,
+        [otherPin]
+      );
+      clearedOverrides = r.changes || 0;
+    }
+
+    // How many invoices now resolve via this route? Now that we cleared
+    // the legacy overrides, every invoice with the matching buyer PIN
+    // counts (not just the ones that were already NULL).
     let appliedCount = 0;
     if (otherPin) {
       const r = db.get(
         `SELECT COUNT(*) AS n FROM invoices i
          LEFT JOIN buyers b ON b.buyer = i.buyer
          WHERE UPPER(COALESCE(i.state,'')) = 'TAMIL NADU'
-           AND b.pin = ?
-           AND i.distance_km IS NULL`,
+           AND b.pin = ?`,
         [otherPin]
       );
       appliedCount = r ? r.n : 0;
     }
 
-    res.json({ ok: true, from_pin: k1, to_pin: k2, km: v, appliedCount });
+    res.json({ ok: true, from_pin: k1, to_pin: k2, km: v, appliedCount, clearedOverrides });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Bulk-clear all per-invoice distance overrides. Used to wipe legacy
+// invoices.distance_km values from before the route-table refactor —
+// after running this, every ISP invoice resolves via the route table
+// (or stays blank if no route exists). Confirmed via the UI before
+// hitting this; no body needed.
+//
+// Path is under /api/distance-overrides (not /api/invoices/distance-
+// overrides) to avoid Express matching it against the earlier-defined
+// app.delete('/api/invoices/:id') route, which treats 'distance-
+// overrides' as an :id and returns 'Invoice not found'.
+app.delete('/api/distance-overrides', requireExport, (req, res) => {
+  try {
+    const r = getDb().run(
+      `UPDATE invoices SET distance_km = NULL
+       WHERE distance_km IS NOT NULL
+         AND UPPER(COALESCE(state,'')) = 'TAMIL NADU'`
+    );
+    res.json({ ok: true, cleared: r.changes });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

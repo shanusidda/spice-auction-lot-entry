@@ -2321,7 +2321,8 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
             <button class="btn btn-a" onclick="loadInvoiceDistances()" style="padding:6px 12px;font-size:12px">Refresh</button>
             <label style="font-size:11px;color:var(--text2);font-weight:600">Auction:</label>
             <select id="dist-inv-auction" style="padding:5px;border:1px solid var(--border);border-radius:4px;font-size:12px"></select>
-            <span id="dist-inv-count" style="font-size:11px;color:var(--text3);margin-left:auto"></span>
+            <span id="dist-inv-count" style="font-size:11px;color:var(--text3)"></span>
+            <button class="btn" onclick="clearAllDistanceOverrides()" title="Wipe all per-invoice manual distances so every ISP invoice resolves via the route table" style="padding:6px 12px;font-size:11px;background:#FEF3C7;color:#B45309;border:1px solid #F59E0B;margin-left:auto">Clear all overrides</button>
           </div>
           <div id="dist-inv-list" style="max-height:420px;overflow:auto;border:1px solid var(--border);border-radius:6px;background:var(--bg)">
             <div style="padding:14px;color:var(--text3);font-size:12px;text-align:center">Pick an auction and click <strong>Refresh</strong>.</div>
@@ -7979,11 +7980,11 @@ async function saveRouteDistance(fromPin, toPin, invoiceId){
       // Falls back to a simple confirmation if appliedCount is missing
       // (e.g. older server build that doesn't compute it).
       const n=Number(data.appliedCount);
-      if(Number.isFinite(n) && n>0){
-        toast(`Saved ${v} km for ${fromPin}↔${toPin} — applies to ${n} invoice${n===1?'':'s'}`);
-      } else {
-        toast(`Saved ${v} km for ${fromPin}↔${toPin}`);
-      }
+      const c=Number(data.clearedOverrides);
+      let msg=`Saved ${v} km for ${fromPin}↔${toPin}`;
+      if(Number.isFinite(n) && n>0) msg += ` — applies to ${n} invoice${n===1?'':'s'}`;
+      if(Number.isFinite(c) && c>0) msg += ` (cleared ${c} legacy override${c===1?'':'s'})`;
+      toast(msg);
     }
     inp.style.borderColor='var(--green)';
     // Reload after a short delay so the user sees their input flash green
@@ -8001,6 +8002,27 @@ async function saveRouteDistance(fromPin, toPin, invoiceId){
     toast(e.message);
     inp.style.borderColor='#C62828';
   }
+}
+
+// One-click cleanup: wipe every per-invoice distance override (legacy
+// values from before the route-table refactor). After this, every ISP
+// invoice resolves via the route table — or stays blank if no route is
+// saved for its PIN pair. Confirmed before firing because the action
+// touches potentially every ISP invoice in the system.
+async function clearAllDistanceOverrides(){
+  if(!confirm('Wipe ALL per-invoice distance overrides?\n\nEvery ISP invoice will revert to its route value (or blank if no route is saved for its buyer PIN).\n\nThis cannot be undone.'))return;
+  try{
+    const r=await fetch(B+'/api/distance-overrides',{
+      method:'DELETE',
+      headers:{'Authorization':'Bearer '+T},
+    });
+    let data={};try{data=await r.json()}catch(_){}
+    if(!r.ok){toast(data.error||`Clear failed (HTTP ${r.status})`);return}
+    const n=Number(data.cleared||0);
+    toast(n>0?`Cleared ${n} per-invoice override${n===1?'':'s'}`:'Nothing to clear');
+    // Reload so all rows now show their route-resolved values (or blank)
+    setTimeout(()=>loadInvoiceDistances(),300);
+  }catch(e){toast(e.message)}
 }
 
 function updateJournalSaleVisibility(){
