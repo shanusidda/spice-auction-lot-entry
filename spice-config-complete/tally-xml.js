@@ -2554,13 +2554,15 @@ function buildURDPurchaseRows(db, auctionId, cfg) {
  * Pull debit notes for an auction.
  */
 function buildDebitNoteRows(db, auctionId, cfg) {
-  // debit_notes table has no auction_id; filter by date range of auction
-  const a = db.prepare('SELECT date FROM auctions WHERE id = ?').get(auctionId);
+  // Match debit_notes by `ano` (auction number) — the same column the
+  // auction itself uses. Legacy debit notes have `date` set to creation
+  // timestamp, not auction date, so date-based lookups miss them.
+  const a = db.prepare('SELECT ano FROM auctions WHERE id = ?').get(auctionId);
   if (!a) return [];
   const stmt = db.prepare(`
-    SELECT * FROM debit_notes WHERE date = ? ORDER BY id
+    SELECT * FROM debit_notes WHERE ano = ? ORDER BY id
   `);
-  const raw = stmt.all(a.date);
+  const raw = stmt.all(a.ano);
   return raw.map((d) => ({
     ano: d.ano,
     date: d.date,

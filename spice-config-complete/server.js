@@ -2612,10 +2612,17 @@ app.post('/api/debit-notes/generate', requireInvoiceWrite, (req, res) => {
   
   const note = buildDebitNote(db, invoiceNo, saleType, parseFloat(discount), cfg);
   if (!note) return res.status(404).json({ error: `Invoice ${invoiceNo} (${saleType}) not found` });
-  
+
+  // Use the invoice's date (= auction date) as the debit note's date.
+  // This is what every downstream consumer assumes — the PDF generator
+  // and XML builder both join debit_notes back to auctions via this
+  // column. Falls back to today only if the invoice somehow has no
+  // date stored (rare; legacy data).
+  const noteDate = note.invoice.date || new Date().toISOString().slice(0, 10);
+
   db.run(`INSERT INTO debit_notes (ano,date,state,name,note_no,amount,cgst,sgst,igst,total)
     VALUES (?,?,?,?,?,?,?,?,?,?)`,
-    [note.invoice.ano, new Date().toISOString().slice(0,10), note.invoice.state||'',
+    [note.invoice.ano, noteDate, note.invoice.state||'',
      note.invoice.buyer1||note.invoice.buyer, String(noteNo),
      note.amount, note.cgst, note.sgst, note.igst, note.total]);
   
@@ -3385,16 +3392,21 @@ app.get('/api/tally/debit-note-print/:auctionId', requireExport, async (req, res
     const auc = db.get('SELECT * FROM auctions WHERE id = ?', [auctionId]);
     if (!auc) return res.status(404).json({ error: 'Auction not found' });
 
-    // Pull all debit notes for this auction's date. The schema stores
-    // summary totals only — we'll join to lots ourselves below.
+    // Pull all debit notes for this auction. We match on `ano` (the
+    // auction number) — the same column the auction itself uses — rather
+    // than `date`, because legacy debit notes have `date` set to the
+    // creation timestamp instead of the auction date. Going forward both
+    // routes (ano + date) would work; matching by ano survives the
+    // legacy data without needing a migration.
     const notes = db.all(
-      'SELECT * FROM debit_notes WHERE date = ? ORDER BY name',
-      [auc.date]
+      'SELECT * FROM debit_notes WHERE ano = ? ORDER BY name',
+      [auc.ano]
     );
     if (!notes.length) return res.status(404).json({ error: `No debit notes found for auction ${auctionId}` });
 
     // For each note, fetch the buyer's lots in this auction. Match on
-    // buyer1 first (proper buyer name), fall back to buyer (the code).
+    // buyer1 (proper buyer name) first; the short `buyer` code is also
+    // tried in case `debit_notes.name` was inserted with the code form.
     // Filter amount > 0 to drop refunded/zero lots.
     const lotsStmt = db.prepare(`
       SELECT lot_no, qty, price, amount
@@ -3403,8 +3415,11 @@ app.get('/api/tally/debit-note-print/:auctionId', requireExport, async (req, res
         AND (buyer1 = ? OR buyer = ?)
       ORDER BY CAST(lot_no AS INTEGER), lot_no
     `);
+    // Buyers table: `buyer1` = long company name, `buyer` = short code.
+    // No `name` column exists. Look up by either, since debit_notes.name
+    // could hold either form historically.
     const buyerStmt = db.prepare(
-      'SELECT name, add1, add2, pla, gstin FROM buyers WHERE buyer1 = ? OR name = ? LIMIT 1'
+      'SELECT buyer1, add1, add2, pla, gstin FROM buyers WHERE buyer1 = ? OR buyer = ? LIMIT 1'
     );
 
     const buyers = notes.map(n => {
