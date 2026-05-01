@@ -2291,9 +2291,10 @@ body[data-dark="1"] .dt-scroll tbody tr:hover{background:#334155}
               </div>
             </div>
             <div id="tally-preview-debit_note" style="font-size:11px;color:var(--text3);min-height:18px;margin:6px 0"></div>
-            <div style="display:flex;gap:6px;margin-top:8px">
-              <button class="btn btn-a" onclick="tallyPreview('debit_note')" style="flex:1;padding:7px;font-size:12px">Preview</button>
-              <button class="btn btn-g" onclick="tallyDownload('debit_note')" style="flex:1;padding:7px;font-size:12px">Download XML</button>
+            <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+              <button class="btn btn-a" onclick="tallyPreview('debit_note')" style="flex:1;min-width:80px;padding:7px;font-size:12px">Preview</button>
+              <button class="btn btn-g" onclick="tallyDownload('debit_note')" style="flex:1;min-width:80px;padding:7px;font-size:12px">XML</button>
+              <button class="btn btn-g" onclick="downloadDebitNotePDF()" title="Per-buyer printable debit notes — one page per buyer, multi-page when needed" style="flex:1;min-width:80px;padding:7px;font-size:12px;background:#7B1FA2">PDF</button>
             </div>
           </div>
         </div>
@@ -7579,6 +7580,30 @@ async function tallyDownload(type){
     a.download=`Tally_${label.replace(/\s/g,'')}_${aid}.xml`;a.click();
     setTimeout(()=>URL.revokeObjectURL(a.href),5000);
     toast(`Downloaded Tally ${label} XML`);
+  });
+}
+
+// Per-buyer printable debit-note PDF — opens in a new tab. The endpoint
+// pulls debit_notes for the auction's date, splits each note's discount
+// across the buyer's lots proportionally to lot.amount, and renders one
+// page per buyer (continuation pages with C/D + B/F when lots overflow).
+async function downloadDebitNotePDF(){
+  const aid=document.getElementById('tally-auction')?.value;
+  if(!aid){alert('Select an auction first');return}
+  await withOverlay('Generating debit-note PDF…', async () => {
+    const r=await fetch(B+`/api/tally/debit-note-print/${aid}`,{headers:{'Authorization':'Bearer '+T}});
+    if(!r.ok){
+      let msg='PDF generation failed';
+      try{const e=await r.json();if(e.error)msg=e.error}catch(x){}
+      toast(msg);return;
+    }
+    const blob=await r.blob();
+    const url=URL.createObjectURL(blob);
+    // Open in a new tab so the user can preview/print/save from the
+    // browser's PDF viewer. Cleaner than auto-downloading.
+    window.open(url, '_blank');
+    setTimeout(()=>URL.revokeObjectURL(url),60000);
+    toast('Debit-note PDF opened');
   });
 }
 
