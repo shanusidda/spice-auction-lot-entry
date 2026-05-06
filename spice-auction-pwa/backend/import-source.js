@@ -17,8 +17,8 @@ async function importSource(filePath, db) {
   let count = 0;
   for (const t of rows) {
     db.run(
-      `INSERT INTO traders (name, cr, pan, tel, aadhar, padd, ppla, pin, pstate, pst_code, ifsc, acctnum)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO traders (name, cr, pan, tel, aadhar, padd, ppla, pin, pstate, pst_code, ifsc, acctnum, whatsapp, email)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         String(t.NAME || '').trim(),
         String(t.CR || '').trim(),
@@ -32,6 +32,8 @@ async function importSource(filePath, db) {
         String(t.PST_CODE || '').trim(),
         String(t.IFSC || '').trim(),
         String(t.ACCTNUM || '').trim(),
+        String(t.WHATSAPP || '').trim().replace(/\.0$/, ''),
+        String(t.EMAIL || '').trim(),
       ]
     );
     count++;

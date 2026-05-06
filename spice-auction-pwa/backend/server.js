@@ -404,13 +404,15 @@ app.get('/api/traders', requireAuth, (req, res) => {
   }
 
   const traders = db.all(
-    `SELECT * FROM traders WHERE 
-      name LIKE ? COLLATE NOCASE OR 
-      tel LIKE ? COLLATE NOCASE OR 
+    `SELECT * FROM traders WHERE
+      name LIKE ? COLLATE NOCASE OR
+      tel LIKE ? COLLATE NOCASE OR
       cr LIKE ? COLLATE NOCASE OR
-      pan LIKE ? COLLATE NOCASE
+      pan LIKE ? COLLATE NOCASE OR
+      whatsapp LIKE ? COLLATE NOCASE OR
+      email LIKE ? COLLATE NOCASE
     ORDER BY name ASC`,
-    [`%${query}%`, `%${query}%`, `%${query}%`, `%${query}%`]
+    [`%${query}%`, `%${query}%`, `%${query}%`, `%${query}%`, `%${query}%`, `%${query}%`]
   );
   res.json({ traders: maskTraders(traders), total: traders.length });
 });
@@ -424,20 +426,25 @@ app.get('/api/traders/:id', requireAuth, (req, res) => {
 
 /**
  * POST /api/traders — Add a new trader/seller
- * Body: { name, cr, pan, tel, aadhar, padd, ppla, pin, pstate, pst_code, ifsc, acctnum }
+ * Body: { name, cr, pan, tel, aadhar, padd, ppla, pin, pstate, pst_code, ifsc, acctnum, whatsapp, email }
  */
 app.post('/api/traders', requireAuth, (req, res) => {
   const db = getDb();
-  const { name, cr, pan, tel, aadhar, padd, ppla, pin, pstate, pst_code, ifsc, acctnum } = req.body;
+  const { name, cr, pan, tel, aadhar, padd, ppla, pin, pstate, pst_code, ifsc, acctnum, whatsapp, email } = req.body;
 
   if (!name || !name.trim()) {
     return res.status(400).json({ error: 'Seller name is required' });
   }
 
+  const emailClean = (email || '').trim();
+  if (emailClean && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailClean)) {
+    return res.status(400).json({ error: 'Invalid email format' });
+  }
+
   const result = db.run(
-    `INSERT INTO traders (name, cr, pan, tel, aadhar, padd, ppla, pin, pstate, pst_code, ifsc, acctnum)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [name.trim().toUpperCase(), cr||'', pan||'', tel||'', aadhar||'', padd||'', ppla||'', pin||'', pstate||'', pst_code||'', ifsc||'', acctnum||'']
+    `INSERT INTO traders (name, cr, pan, tel, aadhar, padd, ppla, pin, pstate, pst_code, ifsc, acctnum, whatsapp, email)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [name.trim().toUpperCase(), cr||'', pan||'', tel||'', aadhar||'', padd||'', ppla||'', pin||'', pstate||'', pst_code||'', ifsc||'', acctnum||'', (whatsapp||'').trim(), emailClean]
   );
 
   const trader = db.get('SELECT * FROM traders WHERE id = ?', [result.lastInsertRowid]);
@@ -471,11 +478,19 @@ app.get('/api/traders/:id/last-lot', requireAuth, (req, res) => {
 app.put('/api/traders/:id', requireAuth, (req, res) => {
   const db = getDb();
   const id = parseInt(req.params.id);
-  const { acctnum, ifsc } = req.body;
+  const { acctnum, ifsc, whatsapp, email } = req.body;
   const trader = db.get('SELECT * FROM traders WHERE id = ?', [id]);
   if (!trader) return res.status(404).json({ error: 'Trader not found' });
   if (acctnum !== undefined) db.run('UPDATE traders SET acctnum = ? WHERE id = ?', [acctnum, id]);
   if (ifsc !== undefined) db.run('UPDATE traders SET ifsc = ? WHERE id = ?', [ifsc, id]);
+  if (whatsapp !== undefined) db.run('UPDATE traders SET whatsapp = ? WHERE id = ?', [String(whatsapp).trim(), id]);
+  if (email !== undefined) {
+    const emailClean = String(email).trim();
+    if (emailClean && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailClean)) {
+      return res.status(400).json({ error: 'Invalid email format' });
+    }
+    db.run('UPDATE traders SET email = ? WHERE id = ?', [emailClean, id]);
+  }
   const updated = db.get('SELECT * FROM traders WHERE id = ?', [id]);
   scheduleSyncSource();
   res.json({ trader: updated });
@@ -520,6 +535,7 @@ async function syncSourceFile() {
       { header: 'PPLA', key: 'ppla', width: 20 }, { header: 'PIN', key: 'pin', width: 10 },
       { header: 'PSTATE', key: 'pstate', width: 14 }, { header: 'PST_CODE', key: 'pst_code', width: 10 },
       { header: 'IFSC', key: 'ifsc', width: 14 }, { header: 'ACCTNUM', key: 'acctnum', width: 20 },
+      { header: 'WHATSAPP', key: 'whatsapp', width: 16 }, { header: 'EMAIL', key: 'email', width: 28 },
     ];
     sheet.getRow(1).font = { bold: true };
     traders.forEach(t => sheet.addRow(t));
@@ -671,18 +687,29 @@ app.post('/api/auctions/:id/allocations', requireAdmin, (req, res) => {
     }
   }
 
-  // Check if removing any existing allocation would delete lots
-  const existing = db.all('SELECT * FROM lot_allocations WHERE auction_id = ?', [auctionId]);
-  for (const ex of existing) {
-    const kept = allocations.find(a => a.id === ex.id);
-    if (!kept) {
-      // This allocation is being removed — check for lots in its range
-      const lots = db.all('SELECT lot_no FROM lots WHERE auction_id = ?', [auctionId]);
-      const lotsInRange = lots.filter(l => isLotInRange(l.lot_no, ex.start_lot, ex.end_lot));
-      if (lotsInRange.length > 0) {
-        return res.status(400).json({ error: `Cannot remove ${ex.branch} (${ex.start_lot}-${ex.end_lot}): ${lotsInRange.length} lots already entered` });
-      }
-    }
+  // Coverage-based validation: every already-booked lot must still be covered
+  // by an allocation for its own branch in the new allocation set. (We can't
+  // match by id because the frontend doesn't round-trip the id field, so an
+  // id-based "kept" check would flag every row as removed.)
+  const bookedLots = db.all('SELECT lot_no, branch FROM lots WHERE auction_id = ?', [auctionId]);
+  // Group orphaned (no-longer-covered) booked lots by their existing allocation range
+  // so the error message points to the specific row the user effectively removed.
+  const orphaned = bookedLots.filter(l => !allocations.some(a =>
+    a.branch === l.branch && isLotInRange(l.lot_no, a.start_lot, a.end_lot)
+  ));
+  if (orphaned.length > 0) {
+    const existing = db.all('SELECT * FROM lot_allocations WHERE auction_id = ?', [auctionId]);
+    const offendingRange = existing.find(ex =>
+      orphaned.some(l => l.branch === ex.branch && isLotInRange(l.lot_no, ex.start_lot, ex.end_lot))
+    );
+    const sample = orphaned.slice(0, 5).map(l => l.lot_no).join(', ');
+    const detail = offendingRange
+      ? `${offendingRange.branch} (${offendingRange.start_lot}-${offendingRange.end_lot})`
+      : `${orphaned[0].branch}`;
+    return res.status(400).json({
+      error: `Cannot remove ${detail}: ${orphaned.length} lot(s) already entered (${sample}${orphaned.length > 5 ? '…' : ''})`,
+      orphaned_lots: orphaned.map(l => l.lot_no)
+    });
   }
 
   // Clear and re-insert
@@ -754,16 +781,25 @@ app.post('/api/auctions/:id/reassign-lots', requireAdmin, (req, res) => {
     if (!inRange) return res.status(400).json({ error: `Lot ${lotNo} is not allocated to ${from_branch}` });
   }
 
-  // Check none of the lots are used
-  const usedLots = db.all('SELECT lot_no FROM lots WHERE auction_id = ?', [auctionId]).map(l => l.lot_no);
-  const usedSet = new Set(usedLots);
+  // Check none of the lots in the range are already booked (entered).
+  // Compare by parsed prefix+num (NOT padded string) so "49" and "049" match correctly.
+  const lotKey = (prefix, num) => `${(prefix || '').toUpperCase()}:${num}`;
+  const allLots = db.all('SELECT id, lot_no, branch FROM lots WHERE auction_id = ?', [auctionId]);
+  const usedByKey = new Map(); // key → { lot_no, branch, id }
+  for (const l of allLots) {
+    const p = parseLotNo(l.lot_no);
+    if (p) usedByKey.set(lotKey(p.prefix, p.num), l);
+  }
   const usedInRange = [];
   for (let n = s.num; n <= e.num; n++) {
-    const lotNo = buildLotNo(s.prefix, n, s.padLen);
-    if (usedSet.has(lotNo)) usedInRange.push(lotNo);
+    const hit = usedByKey.get(lotKey(s.prefix, n));
+    if (hit) usedInRange.push(hit.lot_no);
   }
   if (usedInRange.length > 0) {
-    return res.status(400).json({ error: `Cannot reassign — ${usedInRange.length} lot(s) already used: ${usedInRange.slice(0, 5).join(', ')}${usedInRange.length > 5 ? '...' : ''}` });
+    return res.status(409).json({
+      error: `Cannot reassign — ${usedInRange.length} lot(s) already booked: ${usedInRange.slice(0, 8).join(', ')}${usedInRange.length > 8 ? '…' : ''}`,
+      booked_lots: usedInRange
+    });
   }
 
   // Perform reassignment:
@@ -1158,16 +1194,17 @@ app.get('/api/lots/print-all-sellers/:auctionId', requireAuth, (req, res) => {
     sellerGroups[key].push(l);
   });
   const groups = Object.values(sellerGroups);
+  const r = pickReceiptRenderer(req.query.format);
 
   const PDFDocument = require('pdfkit');
-  const doc = new PDFDocument({ size: [340, 550], margin: 20 });
+  const doc = new PDFDocument({ size: r.pageSize, margin: r.compact ? 10 : 20 });
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `inline; filename="All_Sellers_Receipt.pdf"`);
   doc.pipe(res);
 
   groups.forEach((group, idx) => {
     if (idx > 0) doc.addPage();
-    renderSellerReceipt(doc, group, cfg);
+    r.render(doc, group, cfg);
   });
 
   doc.end();
@@ -1230,7 +1267,17 @@ app.put('/api/lots/:id', requireAuth, (req, res) => {
     FROM lots l LEFT JOIN traders t ON t.id = l.trader_id WHERE l.id = ?
   `, [lotId]);
 
-  auditLog(req.user.username, 'edit', 'lot', lotId, {lot_no: updated.lot_no, trader: updated.trader_name, qty: updated.qty});
+  // Build diff of changed fields for audit log (before vs after)
+  const diffFields = ['lot_no','trader_id','branch','grade','bags','litre','qty','bank_id','gross_weight','sample_weight','moisture'];
+  const diff = {};
+  diffFields.forEach(k => {
+    const after = updated[k];
+    const before = lot[k];
+    const a = (after == null ? '' : String(after));
+    const b = (before == null ? '' : String(before));
+    if (a !== b) diff[k] = { from: before, to: after };
+  });
+  auditLog(req.user.username, 'edit', 'lot', lotId, {lot_no: updated.lot_no, trader: updated.trader_name, qty: updated.qty, changes: diff});
 
   res.json({ lot: updated });
 });
@@ -1378,15 +1425,16 @@ app.get('/api/lots/:id/receipt', requireAuth, (req, res) => {
   if (!lot) return res.status(404).json({ error: 'Lot not found' });
 
   const cfg = getReceiptConfig(db);
+  const r = pickReceiptRenderer(req.query.format);
 
   const PDFDocument = require('pdfkit');
-  const doc = new PDFDocument({ size: [340, 550], margin: 20 });
+  const doc = new PDFDocument({ size: r.pageSize, margin: r.compact ? 10 : 20 });
 
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `inline; filename="Lot_${lot.lot_no}_Receipt.pdf"`);
   doc.pipe(res);
 
-  renderSellerReceipt(doc, [lot], cfg);
+  r.render(doc, [lot], cfg);
   doc.end();
 });
 
@@ -1444,25 +1492,25 @@ function renderSellerReceipt(doc, sellerLots, cfg) {
   doc.moveDown(0.3);
   doc.moveTo(m, doc.y).lineTo(m + w, doc.y).lineWidth(0.5).stroke(); doc.moveDown(0.3);
 
-  // Build columns dynamically
-  const cols = [30, 30, 30, 30, 48, 40, 48];
-  const hdrs = [lb('lot_no','Lot#'), lb('grade','Gr'), lb('bags','Bags'), lb('litre_wt','Ltr'), lb('net_wt','Net'), lb('sample_wt','Smp'), lb('gross_wt','Gross')];
+  // Build columns dynamically (Grade + Litre removed)
+  const cols = [50, 46, 64, 50, 60];
+  const hdrs = [lb('lot_no','Lot#'), lb('bags','Bags'), lb('net_wt','Net'), lb('sample_wt','Smp'), lb('gross_wt','Gross')];
   if (cfg.showMoisture) { cols.push(38); hdrs.push(lb('moisture','Mst%')); }
 
   const hdrY = doc.y;
-  doc.font('Helvetica-Bold').fontSize(6.5);
+  doc.font('Helvetica-Bold').fontSize(7.5);
   let cx = m;
   hdrs.forEach((h, i) => { doc.text(h, cx, hdrY, { width: cols[i], align: 'center' }); cx += cols[i]; });
   doc.y = hdrY + 11;
   doc.moveTo(m, doc.y).lineTo(m + w, doc.y).lineWidth(0.3).stroke(); doc.moveDown(0.2);
 
-  doc.font('Helvetica').fontSize(7.5);
+  doc.font('Helvetica').fontSize(8);
   let totalQty = 0, totalGross = 0, totalBags = 0, totalSample = 0;
   sellerLots.forEach(l => {
     const ry = doc.y;
     cx = m;
     const sw = Number(l.sample_weight) || cfg.sampleWeight || 0;
-    const rowData = [l.lot_no, l.grade || '', l.bags, l.litre, Number(l.qty).toFixed(3), sw ? sw.toFixed(3) : '', l.gross_weight != null ? Number(l.gross_weight).toFixed(3) : ''];
+    const rowData = [l.lot_no, l.bags, Number(l.qty).toFixed(3), sw ? sw.toFixed(3) : '', l.gross_weight != null ? Number(l.gross_weight).toFixed(3) : ''];
     if (cfg.showMoisture) rowData.push(l.moisture ? Number(l.moisture).toFixed(1) : '');
     rowData.forEach((v, i) => { doc.text(String(v), cx, ry, { width: cols[i], align: 'center' }); cx += cols[i]; });
     doc.y = ry + 13;
@@ -1486,6 +1534,124 @@ function renderSellerReceipt(doc, sellerLots, cfg) {
     doc.moveDown(0.2);
   }
   doc.fillColor('#000').font('Helvetica-Bold').fontSize(10).text('** THANK YOU **', m, doc.y, { width: w, align: 'center' });
+}
+
+// ── COMPACT RECEIPT (~2.5" × 3.5" / 180×252pt) ──────────────
+function addReceiptHeaderCompact(doc, appTitle, branch, dateFmt, tradeNo) {
+  const w = 160, m = 10;
+  const logoPath = getLogoPath();
+  if (logoPath) {
+    try {
+      doc.image(logoPath, (180 - 28) / 2, doc.y, { width: 28, height: 28 });
+      doc.y += 30;
+    } catch (e) {}
+  }
+  doc.font('Helvetica-Bold').fontSize(10).text(appTitle, m, doc.y, { width: w, align: 'center' });
+  doc.fontSize(7.5).text(branch + ' BRANCH', m, doc.y, { width: w, align: 'center' });
+  doc.moveDown(0.2);
+  doc.moveTo(m, doc.y).lineTo(m + w, doc.y).lineWidth(0.4).stroke(); doc.moveDown(0.2);
+  doc.font('Helvetica').fontSize(7);
+  const y = doc.y;
+  doc.text('Date: ' + dateFmt, m, y, { width: w / 2 });
+  doc.text('Trade #' + tradeNo, m + w / 2, y, { width: w / 2, align: 'right' });
+  doc.y = y + 10;
+  doc.moveTo(m, doc.y).lineTo(m + w, doc.y).dash(2,{space:2}).lineWidth(0.4).stroke().undash();
+  doc.moveDown(0.2);
+}
+
+function renderSellerReceiptCompact(doc, sellerLots, cfg) {
+  const w = 160, m = 10;
+  const lot = sellerLots[0];
+  const dateFmt = lot.date ? lot.date.split('-').reverse().join('/') : '';
+  const L = cfg.labels || {};
+  const lb = (key, def) => L[key] || def;
+
+  addReceiptHeaderCompact(doc, cfg.appTitle, lot.branch, dateFmt, lot.ano);
+
+  const lw = 32;
+  const maskedAcct = maskAcctForReceipt(lot.acctnum, cfg.acctMask);
+  const sellerFields = [
+    [lb('seller','Seller'), lot.trader_name],
+    [lb('place','Place'), [lot.ppla, lot.pin].filter(Boolean).join(', ')],
+    [lb('acct_no','A/C'), maskedAcct || '--NIL--'],
+    [lb('ifsc','IFSC'), lot.ifsc || '--NIL--'],
+  ];
+  doc.fontSize(7);
+  sellerFields.forEach(([label, value]) => {
+    if (!value) return;
+    const y = doc.y;
+    doc.font('Helvetica-Bold').text(label, m, y, { width: lw });
+    doc.font('Helvetica').text(String(value), m + lw, y, { width: w - lw });
+    if (doc.y < y + 10) doc.y = y + 10;
+  });
+
+  doc.moveDown(0.2);
+  doc.moveTo(m, doc.y).lineTo(m + w, doc.y).lineWidth(0.4).stroke(); doc.moveDown(0.2);
+
+  // Lot table: Lot, Bags, Net, Gross (Grade + Litre removed)
+  const cols = [28, 28, 50, 54];
+  const hdrs = [lb('lot_no','Lot#'), lb('bags','Bags'), lb('net_wt','Net'), lb('gross_wt','Gross')];
+
+  const hdrY = doc.y;
+  doc.font('Helvetica-Bold').fontSize(6.5);
+  let cx = m;
+  hdrs.forEach((h, i) => { doc.text(h, cx, hdrY, { width: cols[i], align: 'center' }); cx += cols[i]; });
+  doc.y = hdrY + 9;
+  doc.moveTo(m, doc.y).lineTo(m + w, doc.y).lineWidth(0.3).stroke(); doc.moveDown(0.15);
+
+  doc.font('Helvetica').fontSize(7);
+  let totalQty = 0, totalGross = 0, totalBags = 0;
+  sellerLots.forEach(l => {
+    const ry = doc.y;
+    cx = m;
+    const rowData = [
+      l.lot_no,
+      l.bags,
+      Number(l.qty).toFixed(3),
+      l.gross_weight != null ? Number(l.gross_weight).toFixed(3) : ''
+    ];
+    rowData.forEach((v, i) => { doc.text(String(v), cx, ry, { width: cols[i], align: 'center' }); cx += cols[i]; });
+    doc.y = ry + 11;
+    totalQty += Number(l.qty) || 0;
+    totalGross += Number(l.gross_weight) || 0;
+    totalBags += Number(l.bags) || 0;
+  });
+
+  doc.moveTo(m, doc.y).lineTo(m + w, doc.y).lineWidth(0.4).stroke(); doc.moveDown(0.15);
+
+  // 2-row summary (no sample wt): row 1 = headers, row 2 = values
+  const sumCols = [40, 40, 40, 40];
+  const sumHdrs = ['Lots', lb('bags','Bags'), lb('net_wt','Net'), lb('gross_wt','Gross')];
+  const sumVals = [
+    String(sellerLots.length),
+    String(totalBags),
+    totalQty.toFixed(3),
+    totalGross ? totalGross.toFixed(3) : '-'
+  ];
+  const sHdrY = doc.y;
+  doc.font('Helvetica-Bold').fontSize(6.5);
+  let sx = m;
+  sumHdrs.forEach((h, i) => { doc.text(h, sx, sHdrY, { width: sumCols[i], align: 'center' }); sx += sumCols[i]; });
+  doc.y = sHdrY + 9;
+  const sValY = doc.y;
+  doc.font('Helvetica-Bold').fontSize(8.5);
+  sx = m;
+  sumVals.forEach((v, i) => { doc.text(v, sx, sValY, { width: sumCols[i], align: 'center' }); sx += sumCols[i]; });
+  doc.y = sValY + 12;
+
+  doc.moveTo(m, doc.y).lineTo(m + w, doc.y).lineWidth(0.4).stroke(); doc.moveDown(0.2);
+
+  if (cfg.showUser) {
+    doc.font('Helvetica').fontSize(6).fillColor('#888').text('Entered by: ' + (lot.user_id || ''), m, doc.y, { width: w });
+    doc.moveDown(0.15);
+  }
+  doc.fillColor('#000').font('Helvetica-Bold').fontSize(9).text('** THANK YOU **', m, doc.y, { width: w, align: 'center' });
+}
+
+function pickReceiptRenderer(fmt) {
+  return fmt === 'compact'
+    ? { render: renderSellerReceiptCompact, pageSize: [180, 252], compact: true }
+    : { render: renderSellerReceipt, pageSize: [340, 550], compact: false };
 }
 
 // Helper to load receipt config
@@ -1523,6 +1689,7 @@ function handlePrintBatch(ids, req, res) {
   if (!ids || !ids.length) return res.status(400).json({ error: 'No lot IDs provided' });
 
   const cfg = getReceiptConfig(db);
+  const r = pickReceiptRenderer(req.query.format || (req.body && req.body.format));
 
   const lots = ids.map(id => db.get(`
     SELECT l.*, a.ano, a.date, a.crop_type,
@@ -1547,14 +1714,14 @@ function handlePrintBatch(ids, req, res) {
   const groups = Object.values(sellerGroups);
 
   const PDFDocument = require('pdfkit');
-  const doc = new PDFDocument({ size: [340, 550], margin: 20 });
+  const doc = new PDFDocument({ size: r.pageSize, margin: r.compact ? 10 : 20 });
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `inline; filename="Lots_Receipt_${lots.length}.pdf"`);
   doc.pipe(res);
 
   groups.forEach((group, idx) => {
     if (idx > 0) doc.addPage();
-    renderSellerReceipt(doc, group, cfg);
+    r.render(doc, group, cfg);
   });
 
   doc.end();
@@ -1587,15 +1754,22 @@ function handlePrintSeller(trader_id, auction_id, req, res) {
   if (!lots.length) return res.status(404).json({ error: 'No lots found' });
 
   const cfg = getReceiptConfig(db);
+  const fmt = (req.query && req.query.format) || (req.body && req.body.format);
+  const r = pickReceiptRenderer(fmt);
 
   const PDFDocument = require('pdfkit');
-  const pageH = Math.min(200 + lots.length * 18 + 80, 800);
-  const doc = new PDFDocument({ size: [340, pageH], margin: 20 });
+  let pageSize;
+  if (r.compact) {
+    pageSize = [180, Math.min(160 + lots.length * 12 + 60, 700)];
+  } else {
+    pageSize = [340, Math.min(200 + lots.length * 18 + 80, 800)];
+  }
+  const doc = new PDFDocument({ size: pageSize, margin: r.compact ? 10 : 20 });
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `inline; filename="Seller_${lots[0].trader_name}_Receipt.pdf"`);
   doc.pipe(res);
 
-  renderSellerReceipt(doc, lots, cfg);
+  r.render(doc, lots, cfg);
   doc.end();
 }
 
@@ -1630,6 +1804,7 @@ app.get('/api/export-source/:format', requireAdmin, async (req, res) => {
         { header: 'PPLA', key: 'ppla', width: 20 }, { header: 'PIN', key: 'pin', width: 10 },
         { header: 'PSTATE', key: 'pstate', width: 14 }, { header: 'PST_CODE', key: 'pst_code', width: 10 },
         { header: 'IFSC', key: 'ifsc', width: 18 }, { header: 'ACCTNUM', key: 'acctnum', width: 24 },
+        { header: 'WHATSAPP', key: 'whatsapp', width: 16 }, { header: 'EMAIL', key: 'email', width: 28 },
       ];
       sheet.getRow(1).font = { bold: true };
 
@@ -1671,11 +1846,13 @@ app.get('/api/export-source/:format', requireAdmin, async (req, res) => {
         { name: 'PPLA', type: 'C', size: 30 }, { name: 'PIN', type: 'C', size: 10 },
         { name: 'PSTATE', type: 'C', size: 20 }, { name: 'PST_CODE', type: 'C', size: 10 },
         { name: 'IFSC', type: 'C', size: 14 }, { name: 'ACCTNUM', type: 'C', size: 20 },
+        { name: 'WHATSAPP', type: 'C', size: 20 }, { name: 'EMAIL', type: 'C', size: 60 },
       ]);
       await dbf.appendRecords(traders.map(t => ({
         NAME:t.name||'',CR:t.cr||'',PAN:t.pan||'',TEL:t.tel||'',AADHAR:t.aadhar||'',
         PADD:t.padd||'',PPLA:t.ppla||'',PIN:t.pin||'',PSTATE:t.pstate||'',
         PST_CODE:t.pst_code||'',IFSC:t.ifsc||'',ACCTNUM:t.acctnum||'',
+        WHATSAPP:t.whatsapp||'',EMAIL:t.email||'',
       })));
       res.download(filePath, 'SOURCE.dbf', () => { try{require('fs').unlinkSync(filePath)}catch(e){} });
     } else {
@@ -2066,18 +2243,46 @@ const CERT_PATH = path.join(CERT_DIR, 'server.crt');
 const KEY_PATH = path.join(CERT_DIR, 'server.key');
 
 /**
- * Auto-generate self-signed certificate if none exists
+ * Ensure TLS certs exist. Prefers mkcert (locally-trusted, no browser warning)
+ * and falls back to a self-signed openssl cert.
  */
 function ensureCerts() {
   const fs = require('fs');
   if (fs.existsSync(CERT_PATH) && fs.existsSync(KEY_PATH)) return true;
 
-  console.log('  Generating self-signed SSL certificate...');
+  fs.mkdirSync(CERT_DIR, { recursive: true });
+  const { execSync } = require('child_process');
+  const os = require('os');
+
+  // Hostnames the cert should cover. mkcert can list multiple SANs.
+  const hosts = ['localhost', '127.0.0.1', '::1'];
   try {
-    fs.mkdirSync(CERT_DIR, { recursive: true });
-    const { execSync } = require('child_process');
+    const interfaces = os.networkInterfaces();
+    for (const name of Object.keys(interfaces)) {
+      for (const iface of interfaces[name]) {
+        if (iface.family === 'IPv4' && !iface.internal) hosts.push(iface.address);
+      }
+    }
+  } catch (e) {}
+
+  // 1) mkcert — produces a cert signed by a local CA the OS already trusts.
+  try {
+    execSync('mkcert -version', { stdio: 'ignore' });
+    console.log('  Generating locally-trusted SSL certificate via mkcert...');
+    execSync(`mkcert -install`, { stdio: 'ignore' });
+    execSync(`mkcert -key-file "${KEY_PATH}" -cert-file "${CERT_PATH}" ${hosts.join(' ')}`, { stdio: 'ignore' });
+    console.log('  ✅ mkcert certificate installed — browsers will trust it.');
+    return true;
+  } catch (e) {
+    // mkcert not available or failed — fall through to openssl.
+  }
+
+  // 2) Self-signed fallback. Browser will warn "Not Secure" until trusted manually.
+  console.log('  mkcert not found. Generating self-signed SSL certificate...');
+  console.log('  ℹ️  For a no-warning setup install mkcert: `brew install mkcert nss`');
+  try {
     execSync(`openssl req -x509 -newkey rsa:2048 -keyout "${KEY_PATH}" -out "${CERT_PATH}" -days 365 -nodes -subj "/CN=SpiceAuction/O=Auction/C=IN" 2>/dev/null`);
-    console.log('  SSL certificate generated!');
+    console.log('  Self-signed SSL certificate generated (browser will show "Not Secure").');
     return true;
   } catch (e) {
     console.log('  Could not generate SSL cert (openssl not found). Running HTTP only.');
@@ -2130,11 +2335,7 @@ async function start() {
   const traderCount = db.get('SELECT COUNT(*) as cnt FROM traders').cnt;
   const userCount = db.get('SELECT COUNT(*) as cnt FROM users').cnt;
 
-  // Start HTTP
-  const http = require('http');
-  http.createServer(app).listen(PORT, '0.0.0.0');
-
-  // Start HTTPS if certs available
+  // Try HTTPS first
   let httpsRunning = false;
   const hasCerts = ensureCerts();
   if (hasCerts) {
@@ -2145,11 +2346,35 @@ async function start() {
         key: fs.readFileSync(KEY_PATH),
         cert: fs.readFileSync(CERT_PATH),
       };
+      // Optional HSTS — only enable when a trusted cert is in use, since
+      // with a self-signed cert HSTS can lock users out if the cert is regenerated.
+      if (process.env.HSTS_ENABLE === '1') {
+        app.use((req, res, next) => {
+          if (req.secure) res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+          next();
+        });
+      }
       https.createServer(sslOptions, app).listen(HTTPS_PORT, '0.0.0.0');
       httpsRunning = true;
     } catch (e) {
       console.log('  HTTPS failed to start:', e.message);
     }
+  }
+
+  const http = require('http');
+  if (httpsRunning) {
+    // Force every plain-HTTP request to HTTPS so traffic is always encrypted.
+    http.createServer((req, res) => {
+      const host = (req.headers.host || '').split(':')[0];
+      const target = 'https://' + host + ':' + HTTPS_PORT + req.url;
+      res.writeHead(301, { Location: target });
+      res.end();
+    }).listen(PORT, '0.0.0.0');
+  } else {
+    // No TLS available — fall back to serving the app over HTTP so the user
+    // isn't locked out (e.g., openssl not installed). Traffic is NOT encrypted.
+    console.log('  ⚠️  HTTPS unavailable — serving HTTP only (traffic NOT encrypted)');
+    http.createServer(app).listen(PORT, '0.0.0.0');
   }
 
   console.log('');
@@ -2166,17 +2391,23 @@ async function start() {
   for (const name of Object.keys(interfaces)) {
     for (const iface of interfaces[name]) {
       if (iface.family === 'IPv4' && !iface.internal) {
-        console.log(`  Mobile app (HTTP):   http://${iface.address}:${PORT}/app`);
         if (httpsRunning) {
           console.log(`  Mobile app (HTTPS):  https://${iface.address}:${HTTPS_PORT}/app`);
+          console.log(`  Admin dashboard:     https://${iface.address}:${HTTPS_PORT}/admin`);
+          console.log(`  (HTTP port ${PORT} → 301 redirect to HTTPS)`);
+        } else {
+          console.log(`  Mobile app (HTTP):   http://${iface.address}:${PORT}/app`);
+          console.log(`  Admin dashboard:     http://${iface.address}:${PORT}/admin`);
         }
-        console.log(`  Admin dashboard:     http://${iface.address}:${PORT}/admin`);
         console.log('');
       }
     }
   }
-  console.log(`  Local:               http://localhost:${PORT}`);
-  if (httpsRunning) console.log(`  Local (HTTPS):       https://localhost:${HTTPS_PORT}`);
+  if (httpsRunning) {
+    console.log(`  Local (HTTPS):       https://localhost:${HTTPS_PORT}`);
+  } else {
+    console.log(`  Local:               http://localhost:${PORT}`);
+  }
   console.log('');
   console.log('  Default admin:       admin / admin123');
   console.log('');

@@ -167,7 +167,8 @@ async function initDb() {
       name TEXT NOT NULL,
       cr TEXT, pan TEXT, tel TEXT, aadhar TEXT,
       padd TEXT, ppla TEXT, pin TEXT, pstate TEXT,
-      pst_code TEXT, ifsc TEXT, acctnum TEXT
+      pst_code TEXT, ifsc TEXT, acctnum TEXT,
+      whatsapp TEXT, email TEXT
     );
     CREATE TABLE IF NOT EXISTS auctions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -270,6 +271,8 @@ async function initDb() {
   try { db.run("ALTER TABLE lots ADD COLUMN sample_weight REAL DEFAULT 0"); } catch(e) {}
   try { db.run("ALTER TABLE lots ADD COLUMN moisture REAL"); } catch(e) {}
   try { db.run("ALTER TABLE trader_banks ADD COLUMN holder_name TEXT DEFAULT ''"); } catch(e) {}
+  try { db.run("ALTER TABLE traders ADD COLUMN whatsapp TEXT DEFAULT ''"); } catch(e) {}
+  try { db.run("ALTER TABLE traders ADD COLUMN email TEXT DEFAULT ''"); } catch(e) {}
 
   // Migrate existing bank details from traders to trader_banks
   try {
