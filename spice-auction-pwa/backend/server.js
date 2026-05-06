@@ -11,6 +11,21 @@ const { importSource } = require('./import-source');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Behind a TLS-terminating proxy (Railway / Render / Fly / nginx / Cloudflare etc.)
+// the platform handles HTTPS at the edge and forwards plain HTTP to us. In that
+// mode we must NOT start our own TLS listener and must NOT 301-redirect to an
+// unreachable internal HTTPS port — we just trust X-Forwarded-Proto.
+//
+// Auto-detect common PaaS env vars; allow explicit override via TRUST_PROXY=1
+// or disable via TRUST_PROXY=0.
+const BEHIND_PROXY = (() => {
+  if (process.env.TRUST_PROXY === '1') return true;
+  if (process.env.TRUST_PROXY === '0') return false;
+  return !!(process.env.RAILWAY_ENVIRONMENT || process.env.RENDER || process.env.FLY_APP_NAME ||
+           process.env.DYNO || process.env.VERCEL || process.env.K_SERVICE);
+})();
+if (BEHIND_PROXY) app.set('trust proxy', true);
+
 const upload = multer({ dest: path.join(__dirname, 'data', 'uploads') });
 
 app.use(cors());
@@ -2335,46 +2350,58 @@ async function start() {
   const traderCount = db.get('SELECT COUNT(*) as cnt FROM traders').cnt;
   const userCount = db.get('SELECT COUNT(*) as cnt FROM users').cnt;
 
-  // Try HTTPS first
-  let httpsRunning = false;
-  const hasCerts = ensureCerts();
-  if (hasCerts) {
-    try {
-      const https = require('https');
-      const fs = require('fs');
-      const sslOptions = {
-        key: fs.readFileSync(KEY_PATH),
-        cert: fs.readFileSync(CERT_PATH),
-      };
-      // Optional HSTS — only enable when a trusted cert is in use, since
-      // with a self-signed cert HSTS can lock users out if the cert is regenerated.
-      if (process.env.HSTS_ENABLE === '1') {
-        app.use((req, res, next) => {
-          if (req.secure) res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
-          next();
-        });
-      }
-      https.createServer(sslOptions, app).listen(HTTPS_PORT, '0.0.0.0');
-      httpsRunning = true;
-    } catch (e) {
-      console.log('  HTTPS failed to start:', e.message);
-    }
-  }
-
   const http = require('http');
-  if (httpsRunning) {
-    // Force every plain-HTTP request to HTTPS so traffic is always encrypted.
-    http.createServer((req, res) => {
-      const host = (req.headers.host || '').split(':')[0];
-      const target = 'https://' + host + ':' + HTTPS_PORT + req.url;
-      res.writeHead(301, { Location: target });
-      res.end();
-    }).listen(PORT, '0.0.0.0');
-  } else {
-    // No TLS available — fall back to serving the app over HTTP so the user
-    // isn't locked out (e.g., openssl not installed). Traffic is NOT encrypted.
-    console.log('  ⚠️  HTTPS unavailable — serving HTTP only (traffic NOT encrypted)');
+  let httpsRunning = false;
+
+  if (BEHIND_PROXY) {
+    // Hosted/PaaS deployment: platform terminates TLS at the edge and forwards
+    // plain HTTP to us. Serve HTTP directly — do NOT spin up our own HTTPS
+    // listener, and do NOT 301-redirect (the redirect target would be an
+    // unreachable internal port).
+    console.log('  ⚙  Behind TLS-terminating proxy — serving HTTP only on PORT (proxy handles HTTPS)');
+    if (process.env.HSTS_ENABLE === '1') {
+      app.use((req, res, next) => {
+        if (req.secure) res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+        next();
+      });
+    }
     http.createServer(app).listen(PORT, '0.0.0.0');
+  } else {
+    // Local / self-hosted: try HTTPS first, fall back to HTTP-only with redirect.
+    const hasCerts = ensureCerts();
+    if (hasCerts) {
+      try {
+        const https = require('https');
+        const fs = require('fs');
+        const sslOptions = {
+          key: fs.readFileSync(KEY_PATH),
+          cert: fs.readFileSync(CERT_PATH),
+        };
+        if (process.env.HSTS_ENABLE === '1') {
+          app.use((req, res, next) => {
+            if (req.secure) res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+            next();
+          });
+        }
+        https.createServer(sslOptions, app).listen(HTTPS_PORT, '0.0.0.0');
+        httpsRunning = true;
+      } catch (e) {
+        console.log('  HTTPS failed to start:', e.message);
+      }
+    }
+
+    if (httpsRunning) {
+      // Force every plain-HTTP request to HTTPS so traffic is always encrypted.
+      http.createServer((req, res) => {
+        const host = (req.headers.host || '').split(':')[0];
+        const target = 'https://' + host + ':' + HTTPS_PORT + req.url;
+        res.writeHead(301, { Location: target });
+        res.end();
+      }).listen(PORT, '0.0.0.0');
+    } else {
+      console.log('  ⚠️  HTTPS unavailable — serving HTTP only (traffic NOT encrypted)');
+      http.createServer(app).listen(PORT, '0.0.0.0');
+    }
   }
 
   console.log('');
@@ -2383,30 +2410,33 @@ async function start() {
   console.log('='.repeat(55));
   console.log(`  HTTP Port:   ${PORT}`);
   if (httpsRunning) console.log(`  HTTPS Port:  ${HTTPS_PORT}`);
+  if (BEHIND_PROXY) console.log(`  Mode:        behind TLS proxy (platform handles HTTPS)`);
   console.log(`  Traders:     ${traderCount} loaded`);
   console.log(`  Users:       ${userCount} registered`);
   console.log('');
 
-  const interfaces = os.networkInterfaces();
-  for (const name of Object.keys(interfaces)) {
-    for (const iface of interfaces[name]) {
-      if (iface.family === 'IPv4' && !iface.internal) {
-        if (httpsRunning) {
-          console.log(`  Mobile app (HTTPS):  https://${iface.address}:${HTTPS_PORT}/app`);
-          console.log(`  Admin dashboard:     https://${iface.address}:${HTTPS_PORT}/admin`);
-          console.log(`  (HTTP port ${PORT} → 301 redirect to HTTPS)`);
-        } else {
-          console.log(`  Mobile app (HTTP):   http://${iface.address}:${PORT}/app`);
-          console.log(`  Admin dashboard:     http://${iface.address}:${PORT}/admin`);
+  if (BEHIND_PROXY) {
+    console.log(`  App is reachable at the platform-supplied public URL.`);
+    console.log(`  Local container:     http://localhost:${PORT}`);
+  } else {
+    const interfaces = os.networkInterfaces();
+    for (const name of Object.keys(interfaces)) {
+      for (const iface of interfaces[name]) {
+        if (iface.family === 'IPv4' && !iface.internal) {
+          if (httpsRunning) {
+            console.log(`  Mobile app (HTTPS):  https://${iface.address}:${HTTPS_PORT}/app`);
+            console.log(`  Admin dashboard:     https://${iface.address}:${HTTPS_PORT}/admin`);
+            console.log(`  (HTTP port ${PORT} → 301 redirect to HTTPS)`);
+          } else {
+            console.log(`  Mobile app (HTTP):   http://${iface.address}:${PORT}/app`);
+            console.log(`  Admin dashboard:     http://${iface.address}:${PORT}/admin`);
+          }
+          console.log('');
         }
-        console.log('');
       }
     }
-  }
-  if (httpsRunning) {
-    console.log(`  Local (HTTPS):       https://localhost:${HTTPS_PORT}`);
-  } else {
-    console.log(`  Local:               http://localhost:${PORT}`);
+    if (httpsRunning) console.log(`  Local (HTTPS):       https://localhost:${HTTPS_PORT}`);
+    else console.log(`  Local:               http://localhost:${PORT}`);
   }
   console.log('');
   console.log('  Default admin:       admin / admin123');
