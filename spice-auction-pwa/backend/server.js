@@ -1207,6 +1207,7 @@ app.get('/api/lots/print-all-sellers/:auctionId', requireAuth, (req, res) => {
   if (!lots.length) return res.status(404).json({ error: 'No lots found' });
 
   const cfg = getReceiptConfig(db);
+  if (branch) cfg.branch = branch;
 
   const sellerGroups = {};
   lots.forEach(l => {
@@ -1445,7 +1446,15 @@ app.get('/api/lots/:id/receipt', requireAuth, (req, res) => {
   `, [parseInt(req.params.id)]);
   if (!lot) return res.status(404).json({ error: 'Lot not found' });
 
+  // If a branch is specified, the lot must belong to that branch — prevents
+  // printing a receipt that displays the wrong branch in the header.
+  const branch = req.query && req.query.branch;
+  if (branch && lot.branch !== branch) {
+    return res.status(404).json({ error: `Lot ${lot.lot_no} is not in ${branch}` });
+  }
+
   const cfg = getReceiptConfig(db);
+  if (branch) cfg.branch = branch;
   const r = pickReceiptRenderer(req.query.format);
 
   const PDFDocument = require('pdfkit');
@@ -1489,8 +1498,12 @@ function renderSellerReceipt(doc, sellerLots, cfg) {
   const dateFmt = lot.date ? lot.date.split('-').reverse().join('/') : '';
   const L = cfg.labels || {};
   const lb = (key, def) => L[key] || def;
+  // Prefer the request-supplied branch (caller's logged-in branch) over the
+  // first lot's branch — covers the case where a seller has bookings across
+  // multiple branches but the receipt is only for the current branch.
+  const headerBranch = cfg.branch || lot.branch;
 
-  addReceiptHeader(doc, cfg.appTitle, lot.branch, dateFmt, lot.ano);
+  addReceiptHeader(doc, cfg.appTitle, headerBranch, dateFmt, lot.ano);
 
   const lw = 70;
   const maskedAcct = maskAcctForReceipt(lot.acctnum, cfg.acctMask);
@@ -1586,8 +1599,9 @@ function renderSellerReceiptCompact(doc, sellerLots, cfg) {
   const dateFmt = lot.date ? lot.date.split('-').reverse().join('/') : '';
   const L = cfg.labels || {};
   const lb = (key, def) => L[key] || def;
+  const headerBranch = cfg.branch || lot.branch;
 
-  addReceiptHeaderCompact(doc, cfg.appTitle, lot.branch, dateFmt, lot.ano);
+  addReceiptHeaderCompact(doc, cfg.appTitle, headerBranch, dateFmt, lot.ano);
 
   const lw = 32;
   const maskedAcct = maskAcctForReceipt(lot.acctnum, cfg.acctMask);
@@ -1711,8 +1725,10 @@ function handlePrintBatch(ids, req, res) {
 
   const cfg = getReceiptConfig(db);
   const r = pickReceiptRenderer(req.query.format || (req.body && req.body.format));
+  const branch = (req.query && req.query.branch) || (req.body && req.body.branch) || '';
+  if (branch) cfg.branch = branch;
 
-  const lots = ids.map(id => db.get(`
+  let lots = ids.map(id => db.get(`
     SELECT l.*, a.ano, a.date, a.crop_type,
       COALESCE(t.name,'Unknown') as trader_name, COALESCE(t.cr,'') as cr,
       COALESCE(t.ppla,'') as ppla, COALESCE(t.pin,'') as pin,
@@ -1723,7 +1739,10 @@ function handlePrintBatch(ids, req, res) {
     WHERE l.id = ?
   `, [parseInt(id)])).filter(Boolean);
 
-  if (!lots.length) return res.status(404).json({ error: 'No lots found' });
+  // Drop any lots that don't belong to the caller's branch.
+  if (branch) lots = lots.filter(l => l.branch === branch);
+
+  if (!lots.length) return res.status(404).json({ error: branch ? `No lots in ${branch}` : 'No lots found' });
 
   // Group lots by seller
   const sellerGroups = {};
@@ -1762,6 +1781,12 @@ function handlePrintSeller(trader_id, auction_id, req, res) {
   const db = getDb();
   if (!trader_id || !auction_id) return res.status(400).json({ error: 'trader_id and auction_id required' });
 
+  // Branch scoping: receipt must only contain lots booked in the caller's branch.
+  const branch = (req.query && req.query.branch) || (req.body && req.body.branch) || '';
+  const params = [auction_id, trader_id];
+  let where = 'l.auction_id = ? AND l.trader_id = ?';
+  if (branch) { where += ' AND l.branch = ?'; params.push(branch); }
+
   const lots = db.all(`
     SELECT l.*, a.ano, a.date, a.crop_type,
       COALESCE(t.name,'Unknown') as trader_name, COALESCE(t.cr,'') as cr,
@@ -1769,12 +1794,13 @@ function handlePrintSeller(trader_id, auction_id, req, res) {
       COALESCE((SELECT tb.acctnum FROM trader_banks tb WHERE tb.id=l.bank_id),(SELECT tb.acctnum FROM trader_banks tb WHERE tb.trader_id=t.id ORDER BY tb.is_default DESC,tb.id ASC LIMIT 1),t.acctnum,'') as acctnum,
       COALESCE((SELECT tb.ifsc FROM trader_banks tb WHERE tb.id=l.bank_id),(SELECT tb.ifsc FROM trader_banks tb WHERE tb.trader_id=t.id ORDER BY tb.is_default DESC,tb.id ASC LIMIT 1),t.ifsc,'') as ifsc
     FROM lots l JOIN auctions a ON a.id = l.auction_id LEFT JOIN traders t ON t.id = l.trader_id
-    WHERE l.auction_id = ? AND l.trader_id = ? ORDER BY l.lot_no
-  `, [auction_id, trader_id]);
+    WHERE ${where} ORDER BY l.lot_no
+  `, params);
 
-  if (!lots.length) return res.status(404).json({ error: 'No lots found' });
+  if (!lots.length) return res.status(404).json({ error: branch ? `No lots for this seller in ${branch}` : 'No lots found' });
 
   const cfg = getReceiptConfig(db);
+  if (branch) cfg.branch = branch;
   const fmt = (req.query && req.query.format) || (req.body && req.body.format);
   const r = pickReceiptRenderer(fmt);
 
@@ -2369,12 +2395,26 @@ async function start() {
     // listener, and do NOT 301-redirect (the redirect target would be an
     // unreachable internal port).
     console.log('  ⚙  Behind TLS-terminating proxy — serving HTTP only on PORT (proxy handles HTTPS)');
-    if (process.env.HSTS_ENABLE === '1') {
+    // HSTS by default in proxy mode: the platform's cert is trusted, so once a
+    // browser has seen this header it will skip the slow HTTP→HTTPS upgrade
+    // round-trip on subsequent paste-without-https visits. Disable with HSTS_ENABLE=0.
+    if (process.env.HSTS_ENABLE !== '0') {
       app.use((req, res, next) => {
+        // req.secure is honored because we set 'trust proxy' above, so this
+        // reflects the real client-facing scheme (X-Forwarded-Proto).
         if (req.secure) res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
         next();
       });
     }
+    // Belt-and-braces: if a request still comes in over plain HTTP (X-Forwarded-Proto: http),
+    // 301 it to HTTPS at the same host so the next request is fast.
+    app.use((req, res, next) => {
+      if (req.headers['x-forwarded-proto'] === 'http') {
+        const host = req.headers.host;
+        if (host) return res.redirect(301, 'https://' + host + req.originalUrl);
+      }
+      next();
+    });
     http.createServer(app).listen(PORT, '0.0.0.0');
   } else {
     // Local / self-hosted: try HTTPS first, fall back to HTTP-only with redirect.

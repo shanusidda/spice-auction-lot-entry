@@ -731,7 +731,8 @@ function applyPrintFmtLabel(){var el=document.getElementById('pf-label');if(el)e
 function togglePrintFormat(){localStorage.setItem('sa_print_format',printFmt()==='compact'?'full':'compact');applyPrintFmtLabel();toast('Print format: '+(printFmt()==='compact'?'Compact':'Full'),false)}
 applyPrintFmtLabel();
 async function printSellerLots(traderId){
-  printAndClose(B+'/api/lots/print-seller?trader_id='+traderId+'&auction_id='+aid+'&token='+token+'&format='+printFmt());
+  // Branch-scoped: only include lots from the currently logged-in branch.
+  printAndClose(B+'/api/lots/print-seller?trader_id='+traderId+'&auction_id='+aid+'&branch='+encodeURIComponent(br)+'&token='+token+'&format='+printFmt());
 }
 
 function editRecentLot(lotId){
@@ -1018,14 +1019,14 @@ list.innerHTML=lots.map(l=>{const g=String(l.grade||''),q=Number(l.qty).toFixed(
 
 function updateMySelCount(){const checked=document.querySelectorAll('.ml-cb:checked').length;const bar=document.getElementById('ml-actions');const cnt=document.getElementById('ml-sel-count');const hasLots=allMyLots&&allMyLots.length>0;bar.style.display=hasLots?'flex':'none';cnt.textContent=checked>0?checked+' selected':''}
 
-async function printSelectedMyLots(){var ids=Array.from(document.querySelectorAll('.ml-cb:checked')).map(cb=>parseInt(cb.value));if(!ids.length){toast('Select lots to print',true);return}printAndClose(B+'/api/lots/print-batch?ids='+ids.join(',')+'&token='+token+'&format='+printFmt())}
+async function printSelectedMyLots(){var ids=Array.from(document.querySelectorAll('.ml-cb:checked')).map(cb=>parseInt(cb.value));if(!ids.length){toast('Select lots to print',true);return}printAndClose(B+'/api/lots/print-batch?ids='+ids.join(',')+'&branch='+encodeURIComponent(br)+'&token='+token+'&format='+printFmt())}
 
 async function printAllBySellerUser(){
   if(!aid){toast('No trade selected',true);return}
   printAndClose(B+'/api/lots/print-all-sellers/'+aid+'?branch='+encodeURIComponent(br)+'&token='+token+'&format='+printFmt());
 }
 
-function printLot(id){printAndClose(B+'/api/lots/'+id+'/receipt?token='+token+'&format='+printFmt())}
+function printLot(id){printAndClose(B+'/api/lots/'+id+'/receipt?branch='+encodeURIComponent(br)+'&token='+token+'&format='+printFmt())}
 
 var editBanks=[],editTraderId=null;
 var editLotBankId=null;
